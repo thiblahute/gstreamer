@@ -825,8 +825,9 @@ gst_single_queue_flush (GstMultiQueue * mq, GstSingleQueue * sq, gboolean flush,
     result = gst_pad_pause_task (sq->srcpad);
     sq->sink_tainted = sq->src_tainted = TRUE;
   } else {
-    GST_MULTI_QUEUE_MUTEX_LOCK (mq);
     gst_single_queue_flush_queue (sq, full);
+
+    GST_MULTI_QUEUE_MUTEX_LOCK (mq);
     gst_segment_init (&sq->sink_segment, GST_FORMAT_TIME);
     gst_segment_init (&sq->src_segment, GST_FORMAT_TIME);
     sq->has_src_segment = FALSE;
@@ -857,6 +858,7 @@ gst_single_queue_flush (GstMultiQueue * mq, GstSingleQueue * sq, gboolean flush,
   return result;
 }
 
+/* WITH LOCK TAKEN */
 static void
 update_buffering (GstMultiQueue * mq, GstSingleQueue * sq)
 {
@@ -905,10 +907,22 @@ update_buffering (GstMultiQueue * mq, GstSingleQueue * sq)
       /* else keep last value we posted */
       mq->percent = percent;
   } else {
+    GList *iter;
+
     if (percent < mq->low_percent) {
       mq->buffering = TRUE;
       mq->percent = percent;
       post = TRUE;
+    }
+
+    for (iter = mq->queues; iter; iter = g_list_next (iter)) {
+      GstSingleQueue *oq = (GstSingleQueue *) iter->data;
+
+      if (gst_data_queue_is_full (oq->queue)) {
+        post = FALSE;
+
+        break;
+      }
     }
   }
   if (post) {
@@ -1665,7 +1679,9 @@ gst_multi_queue_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
     case GST_EVENT_EOS:
       sq->is_eos = TRUE;
       /* EOS affects the buffering state */
+      GST_MULTI_QUEUE_MUTEX_LOCK (mq);
       update_buffering (mq, sq);
+      GST_MULTI_QUEUE_MUTEX_UNLOCK (mq);
       single_queue_overrun_cb (sq->queue, sq);
       break;
     case GST_EVENT_SEGMENT:
@@ -2132,7 +2148,9 @@ gst_single_queue_flush_queue (GstSingleQueue * sq, gboolean full)
   if (was_flushing)
     gst_data_queue_set_flushing (sq->queue, TRUE);
 
+  GST_MULTI_QUEUE_MUTEX_LOCK (sq->mqueue);
   update_buffering (sq->mqueue, sq);
+  GST_MULTI_QUEUE_MUTEX_UNLOCK (sq->mqueue);
 }
 
 static void
