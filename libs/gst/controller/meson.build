@@ -5,11 +5,12 @@ gst_controller_sources = [
   'gstinterpolationcontrolsource.c',
   'gsttriggercontrolsource.c',
   'gstlfocontrolsource.c',
+  gstenum_h,
 ]
 
 gstcontroller = shared_library('gstcontroller-@0@'.format(apiversion),
   gst_controller_sources,
-  c_args : '-DHAVE_CONFIG_H',
+  c_args : ['-DHAVE_CONFIG_H', '-Wno-pedantic'],
   include_directories : [configinc, libsinc],
   install : true,
   version : gst_version,

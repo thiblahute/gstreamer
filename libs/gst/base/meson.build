@@ -12,7 +12,8 @@ gst_base_sources = [
   'gstflowcombiner.c',
   'gstpushsrc.c',
   'gstqueuearray.c',
-  'gsttypefindhelper.c'
+  'gsttypefindhelper.c',
+  gstenum_h,
 ]
 
 gst_base = shared_library('gstbase-@0@'.format(apiversion),
@@ -20,7 +21,7 @@ gst_base = shared_library('gstbase-@0@'.format(apiversion),
   # This header needs to be generated before building this
   # target can begin
   gstenum_h,
-  c_args : '-DHAVE_CONFIG_H',
+  c_args : ['-DHAVE_CONFIG_H', '-Wno-pedantic'],
   include_directories : [configinc, libsinc],
   version : gst_version,
   soversion : soversion,
