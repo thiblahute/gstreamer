@@ -177,3 +177,4 @@ libgst = shared_library('gst-1.0', gst_sources, gst_trace_sources,
   install : true,
   dependencies : glib_dep,
 )
+
