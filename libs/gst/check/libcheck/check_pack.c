@@ -28,7 +28,8 @@
 #include <unistd.h>
 #endif
 
-#include "_stdint.h"
+// FIXME, 
+#include <stdint.h>
 
 #include "check.h"
 #include "check_error.h"
