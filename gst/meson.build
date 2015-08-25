@@ -169,6 +169,12 @@ gst_c_args = ['-DHAVE_CONFIG_H',
   '-DGST_DISABLE_DEPRECATED',
 ]
 
+if host_machine.system() == 'windows'
+    link_args = ['-lws2_32']
+else
+    link_args = []
+endif
+
 # Make it possible to build both static and shared versions
 # at the same time. By default use shared for unit tests etc.
 # This choice is arbitrary.
@@ -181,6 +187,7 @@ if libtype != 'shared'
       include_directories('parse')],
     install : true,
     link_with : printf_lib_static,
+    link_args: link_args,
     dependencies : [gobject_dep, gmodule_dep, glib_dep, math_dep],
   )
   libgst = libgst_static
@@ -196,6 +203,7 @@ if libtype != 'static'
       # HACK, change include paths in .y and .l in final version.
       include_directories('parse')],
     link_with : printf_lib_shared,
+    link_args: link_args,
     install : true,
     dependencies : [gobject_dep, gmodule_dep, glib_dep, math_dep],
   )

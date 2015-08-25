@@ -1,8 +1,8 @@
 project('gstreamer-core', 'c', 'cpp')
 
 # Get things pedantic clean and then remove this.
-add_global_arguments('-Wno-pedantic', language : 'c')
-add_global_arguments('-Wno-pedantic', language : 'cpp')
+add_global_arguments(language : 'c')
+add_global_arguments(language : 'cpp')
 
 if build_machine.system() == 'linux'
   add_global_arguments('-std=gnu99', language: 'c')
@@ -152,11 +152,22 @@ privinc = include_directories('gst')
 glib_dep = dependency('glib-2.0', version : '>=2.32.0')
 gobject_dep = dependency('gobject-2.0')
 gmodule_dep = dependency('gmodule-2.0')
-gio_dep = [dependency('gio-2.0'), dependency('gio-unix-2.0')]
+if target_machine.system() == 'windows'
+    gio_dep = dependency('gio-2.0')
+else
+    gio_dep = [dependency('gio-2.0'), dependency('gio-unix-2.0')]
+endif
+
 mathlib = find_library('m', required : false)
 flex = find_program('flex')
 bison = find_program('bison')
-gir = find_program('g-ir-scanner', required : false)
+if meson.is_cross_build()
+    # FIXME: Find a cleaner solution!
+    gir = find_program('nowaythisexists', required : false)
+else
+    gir = find_program('g-ir-scanner', required : false)
+endif
+
 gnome = import('gnome')
 
 math_dep = find_library('m', required : false)
