@@ -42,21 +42,14 @@
 GST_DEBUG_CATEGORY_EXTERN (tracer_debug);
 #define GST_CAT_DEFAULT tracer_debug
 
-struct _GstTracerRecord
+struct _GstTracerRecordPrivate
 {
-  GstObject parent;
-
   GstStructure *spec;
   gchar *format;
 };
 
-struct _GstTracerRecordClass
-{
-  GstObjectClass parent_class;
-};
-
 #define gst_tracer_record_parent_class parent_class
-G_DEFINE_TYPE (GstTracerRecord, gst_tracer_record, GST_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_PRIVATE (GstTracerRecord, gst_tracer_record, GST_TYPE_OBJECT);
 
 static gboolean
 build_field_template (GQuark field_id, const GValue * value, gpointer user_data)
@@ -99,7 +92,7 @@ build_field_template (GQuark field_id, const GValue * value, gpointer user_data)
 static void
 gst_tracer_record_build_format (GstTracerRecord * self)
 {
-  GstStructure *structure = self->spec;
+  GstStructure *structure = self->priv->spec;
   GString *s;
   gchar *name = (gchar *) g_quark_to_string (structure->name);
   gchar *p;
@@ -120,8 +113,8 @@ gst_tracer_record_build_format (GstTracerRecord * self)
   gst_structure_foreach (structure, build_field_template, s);
   g_string_append_c (s, ';');
 
-  self->format = g_string_free (s, FALSE);
-  GST_DEBUG ("new format string: %s", self->format);
+  self->priv->format = g_string_free (s, FALSE);
+  GST_DEBUG ("new format string: %s", self->priv->format);
   g_free (name);
 }
 
@@ -130,12 +123,12 @@ gst_tracer_record_dispose (GObject * object)
 {
   GstTracerRecord *self = GST_TRACER_RECORD (object);
 
-  if (self->spec) {
-    gst_structure_free (self->spec);
-    self->spec = NULL;
+  if (self->priv->spec) {
+    gst_structure_free (self->priv->spec);
+    self->priv->spec = NULL;
   }
-  g_free (self->format);
-  self->format = NULL;
+  g_free (self->priv->format);
+  self->priv->format = NULL;
 }
 
 static void
@@ -149,6 +142,7 @@ gst_tracer_record_class_init (GstTracerRecordClass * klass)
 static void
 gst_tracer_record_init (GstTracerRecord * self)
 {
+  self->priv = gst_tracer_record_get_instance_private (self);
 }
 
 /**
@@ -220,7 +214,7 @@ gst_tracer_record_new (const gchar * name, const gchar * firstfield, ...)
   va_end (varargs);
 
   self = g_object_newv (GST_TYPE_TRACER_RECORD, 0, NULL);
-  self->spec = structure;
+  self->priv->spec = structure;
   gst_tracer_record_build_format (self);
 
   return self;
@@ -260,7 +254,7 @@ gst_tracer_record_log (GstTracerRecord * self, ...)
   va_start (var_args, self);
   if (G_LIKELY (GST_LEVEL_TRACE <= _gst_debug_min)) {
     gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_TRACE, "", "", 0, NULL,
-        self->format, var_args);
+        self->priv->format, var_args);
   }
   va_end (var_args);
 }
