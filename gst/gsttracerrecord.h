@@ -28,6 +28,27 @@ G_BEGIN_DECLS
 
 typedef struct _GstTracerRecord GstTracerRecord;
 typedef struct _GstTracerRecordClass GstTracerRecordClass;
+typedef struct _GstTracerRecordPrivate GstTracerRecordPrivate;
+
+struct _GstTracerRecord
+{
+  GstObject parent;
+
+  GstTracerRecordPrivate *priv;
+
+  /*< private >*/
+  /* Padding for API extension */
+  gpointer _gst_reserved[GST_PADDING];
+};
+
+struct _GstTracerRecordClass
+{
+  GstObjectClass parent_class;
+
+  /*< private >*/
+  /* Padding for API extension */
+  gpointer _gst_reserved[GST_PADDING];
+};
 
 #define GST_TYPE_TRACER_RECORD            (gst_tracer_record_get_type())
 #define GST_TRACER_RECORD(obj)            (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_TRACER_RECORD,GstTracerRecord))
