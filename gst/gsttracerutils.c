@@ -38,6 +38,10 @@
 #include "gsttracerfactory.h"
 #include "gsttracerutils.h"
 
+#ifdef HAVE_BABELTRACE
+#include <gst/gsttracerctfrecord.h>
+#endif
+
 #ifndef GST_DISABLE_GST_TRACER_HOOKS
 
 /* tracer quarks */
@@ -155,6 +159,10 @@ _priv_gst_tracing_deinit (void)
   g_list_free (h_list);
   g_hash_table_destroy (_priv_tracers);
   _priv_tracers = NULL;
+
+#ifdef HAVE_BABELTRACE
+  gst_tracer_ctf_record_deinit ();
+#endif
 }
 
 static void

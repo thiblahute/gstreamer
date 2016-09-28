@@ -19,6 +19,7 @@
  * Free Software Foundation, Inc., 51 Franklin St, Fifth Floor,
  * Boston, MA 02110-1301, USA.
  */
+#include "config.h"
 
 #include <gst/check/gstcheck.h>
 #include <gst/gsttracerrecord.h>
@@ -149,6 +150,56 @@ GST_START_TEST (serialize_static_record)
 
 GST_END_TEST;
 
+#ifdef HAVE_BABELTRACE
+#include <gst/gsttracerctfrecord.h>
+GST_START_TEST (serialize_ctf_message)
+{
+  GstTracerRecord *tr, *tr1;
+  gchar *tracedir = g_strdup("gstctftraces");
+
+  cleanup ();
+  GST_ERROR("TRACEDIR: %s\n", tracedir);
+  g_setenv ("GST_TRACE_FILE", tracedir, TRUE);
+  g_setenv ("GST_TRACE_FORMAT", "ctf", TRUE);
+  g_free (tracedir);
+
+  /* *INDENT-OFF* */
+  tr = gst_tracer_record_new ("test.class",
+      "teststr", GST_TYPE_STRUCTURE, gst_structure_new ("value",
+          "type", G_TYPE_GTYPE, G_TYPE_STRING,
+          NULL),
+      "testint", GST_TYPE_STRUCTURE, gst_structure_new ("value",
+          "type", G_TYPE_GTYPE, G_TYPE_INT,
+          NULL),
+      NULL);
+  tr1 = gst_tracer_record_new ("test1.class",
+      "testint", GST_TYPE_STRUCTURE, gst_structure_new ("value",
+          "type", G_TYPE_GTYPE, G_TYPE_INT, NULL),
+      "testuint64", GST_TYPE_STRUCTURE, gst_structure_new ("value",
+          "type", G_TYPE_GTYPE, G_TYPE_UINT64, NULL),
+      "testfloat", GST_TYPE_STRUCTURE, gst_structure_new ("value",
+          "type", G_TYPE_GTYPE, G_TYPE_FLOAT, NULL),
+      "testboolean", GST_TYPE_STRUCTURE, gst_structure_new ("value",
+          "type", G_TYPE_GTYPE, G_TYPE_BOOLEAN, NULL),
+      "testenum", GST_TYPE_STRUCTURE, gst_structure_new ("value",
+          "type", G_TYPE_GTYPE, GST_TYPE_PAD_DIRECTION, NULL),
+      "testflags", GST_TYPE_STRUCTURE, gst_structure_new ("value",
+          "type", G_TYPE_GTYPE, GST_TYPE_PAD_LINK_CHECK, NULL),
+      NULL);
+  /* *INDENT-ON* */
+
+  fail_unless (GST_IS_TRACER_CTF_RECORD (tr));
+  gst_tracer_record_log (tr, "nothing", 22, NULL);
+  gst_tracer_record_log (tr1, -18, 50, (gdouble) 2.55, FALSE, GST_PAD_SRC,
+          GST_PAD_LINK_CHECK_CAPS, NULL);
+
+  gst_object_unref (tr);
+  gst_object_unref (tr1);
+  setup ();
+}
+GST_END_TEST;
+#endif
+
 
 static Suite *
 gst_tracer_record_suite (void)
@@ -160,6 +211,10 @@ gst_tracer_record_suite (void)
   tcase_add_checked_fixture (tc_chain, setup, cleanup);
   tcase_add_test (tc_chain, serialize_message_logging);
   tcase_add_test (tc_chain, serialize_static_record);
+
+#ifdef HAVE_BABELTRACE
+  tcase_add_test (tc_chain, serialize_ctf_message);
+#endif
 
   /* FIXME: add more tests, e.g. enums, pointer types and optional fields */
 
