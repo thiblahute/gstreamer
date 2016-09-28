@@ -72,6 +72,10 @@ gst_sources = [
   'gstparse.c',
 ]
 
+if babeltrace_dep.found()
+    gst_sources += ['gsttracerctfrecord.c']
+endif
+
 gst_headers = [
   'gst.h',
   'glib-compat.h',
@@ -200,7 +204,7 @@ if libtype != 'shared'
       include_directories('parse')],
     install : true,
     link_with : printf_lib,
-    dependencies : [gobject_dep, gmodule_dep, glib_dep, mathlib] + platform_deps,
+    dependencies : [gobject_dep, gmodule_dep, glib_dep, mathlib, babeltrace_dep] + platform_deps,
   )
   libgst = libgst_static
 endif
@@ -219,7 +223,7 @@ if libtype != 'static'
       include_directories('parse')],
     link_with : printf_lib,
     install : true,
-    dependencies : [gobject_dep, gmodule_dep, glib_dep, mathlib] + platform_deps,
+    dependencies : [gobject_dep, gmodule_dep, glib_dep, mathlib, babeltrace_dep] + platform_deps,
     vs_module_defs: vs_module_defs_dir + 'libgstreamer.def',
   )
   libgst = libgst_shared
@@ -251,7 +255,7 @@ endif
 
 gst_dep = declare_dependency(link_with : libgst,
   include_directories : gst_incdirs,
-  dependencies : [glib_dep, gobject_dep, gmodule_dep],
+  dependencies : [glib_dep, gobject_dep, gmodule_dep, babeltrace_dep],
   # Everything that uses libgst needs this built to compile
   sources : gst_gen_sources,
 )

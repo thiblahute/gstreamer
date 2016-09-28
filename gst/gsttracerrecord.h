@@ -45,6 +45,8 @@ struct _GstTracerRecordClass
 {
   GstObjectClass parent_class;
 
+  gboolean (*build_format) (GstTracerRecord * self, GstStructure *structure);
+  void (*log) (GstTracerRecord * self, va_list var_args);
   /*< private >*/
   /* Padding for API extension */
   gpointer _gst_reserved[GST_PADDING];

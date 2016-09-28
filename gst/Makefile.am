@@ -42,6 +42,11 @@ built_source_make = gstenumtypes.c
 EXTRA_libgstreamer_@GST_API_VERSION@_la_SOURCES = \
 	gstregistrybinary.c
 
+if HAVE_BABELTRACE
+CTF_RECORD_SRC = gsttracerctfrecord.c
+else
+CTF_RECORD_SRC =
+endif
 
 # temporarily not used
 #	glib-compat.c
@@ -118,6 +123,7 @@ libgstreamer_@GST_API_VERSION@_la_SOURCES = \
 	gstutils.c		\
 	gstvalue.c		\
 	gstparse.c		\
+	$(CTF_RECORD_SRC)	\
 	$(GST_REGISTRY_SRC)
 
 # do not put files in the distribution that are generated
@@ -140,6 +146,7 @@ libgstreamer_@GST_API_VERSION@_la_CFLAGS =		\
 	-DGST_API_VERSION=\""$(GST_API_VERSION)"\" 	\
 	-DGST_DISABLE_DEPRECATED			\
 	$(VALGRIND_CFLAGS)				\
+	$(BABELTRACE_CTF_CFLAGS)		\
 	$(GST_ALL_CFLAGS)
 
 libgstreamer_@GST_API_VERSION@_la_LIBADD =		\
@@ -148,6 +155,7 @@ libgstreamer_@GST_API_VERSION@_la_LIBADD =		\
 	$(GST_ALL_LIBS)					\
 	$(WIN32_LIBS)					\
 	$(SOCKET_LIBS)					\
+	$(BABELTRACE_CTF_LIBS)			\
 	$(LIBM)
 
 libgstreamer_@GST_API_VERSION@_la_LDFLAGS =		\

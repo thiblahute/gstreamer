@@ -39,6 +39,10 @@
 #include "gstvalue.h"
 #include <gobject/gvaluecollector.h>
 
+#ifdef HAVE_BABELTRACE
+#include <gst/gsttracerctfrecord.h>
+#endif
+
 GST_DEBUG_CATEGORY_EXTERN (tracer_debug);
 #define GST_CAT_DEFAULT tracer_debug
 
@@ -89,20 +93,28 @@ build_field_template (GQuark field_id, const GValue * value, gpointer user_data)
   return res;
 }
 
-static void
-gst_tracer_record_build_format (GstTracerRecord * self)
+static gboolean
+gst_tracer_record_build_format (GstTracerRecord * self,
+    GstStructure * structure)
 {
-  GstStructure *structure = self->priv->spec;
-  GString *s;
-  gchar *name = (gchar *) g_quark_to_string (structure->name);
-  gchar *p;
-
-  g_return_if_fail (g_str_has_suffix (name, ".class"));
+  g_return_val_if_fail (g_str_has_suffix ((gchar *) g_quark_to_string (structure->name),
+              ".class"), FALSE);
 
   /* announce the format */
   GST_TRACE ("%" GST_PTR_FORMAT, structure);
 
+  return GST_TRACER_RECORD_GET_CLASS (self)->build_format (self, structure);
+}
+
+static gboolean
+_gst_tracer_record_build_format (GstTracerRecord * self, GstStructure *structure)
+{
+  GString *s;
+  gchar *name = (gchar *) g_quark_to_string (structure->name);
+  gchar *p;
+
   /* cut off '.class' suffix */
+  self->priv->spec = structure;
   name = g_strdup (name);
   p = strrchr (name, '.');
   g_assert (p != NULL);
@@ -116,6 +128,28 @@ gst_tracer_record_build_format (GstTracerRecord * self)
   self->priv->format = g_string_free (s, FALSE);
   GST_DEBUG ("new format string: %s", self->priv->format);
   g_free (name);
+
+  return TRUE;
+}
+
+static void
+_gst_tracer_record_log (GstTracerRecord *self, va_list var_args)
+{
+  /*
+   * does it make sense to use the {file, line, func} from the tracer hook?
+   * a)
+   * - we'd need to pass them in the macros to gst_tracer_dispatch()
+   * - and each tracer needs to grab them from the va_list and pass them here
+   * b)
+   * - we create a context in dispatch, pass that to the tracer
+   * - and the tracer will pass that here
+   * ideally we also use *our* ts instead of the one that
+   * gst_debug_log_default() will pick
+   */
+  if (G_LIKELY (GST_LEVEL_TRACE <= _gst_debug_min)) {
+    gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_TRACE, "", "", 0, NULL,
+        self->priv->format, var_args);
+  }
 }
 
 static void
@@ -137,6 +171,8 @@ gst_tracer_record_class_init (GstTracerRecordClass * klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
 
   gobject_class->dispose = gst_tracer_record_dispose;
+  klass->build_format = _gst_tracer_record_build_format;
+  klass->log = _gst_tracer_record_log;
 }
 
 static void
@@ -147,6 +183,8 @@ gst_tracer_record_init (GstTracerRecord * self)
 
 /**
  * gst_tracer_record_new:
+ * @source_name: The name of the 'source' of the recordings that
+ * will happen with this record.
  * @name: name of new record, must end on ".class".
  * @firstfield: name of first field to set
  * @...: additional arguments
@@ -213,9 +251,13 @@ gst_tracer_record_new (const gchar * name, const gchar * firstfield, ...)
   }
   va_end (varargs);
 
-  self = g_object_newv (GST_TYPE_TRACER_RECORD, 0, NULL);
-  self->priv->spec = structure;
-  gst_tracer_record_build_format (self);
+#ifdef HAVE_BABELTRACE
+  if (!g_strcmp0 (g_getenv ("GST_TRACE_FORMAT"), "ctf"))
+    self = g_object_newv (GST_TYPE_TRACER_CTF_RECORD, 0, NULL);
+  else
+#endif
+    self = g_object_newv (GST_TYPE_TRACER_RECORD, 0, NULL);
+  gst_tracer_record_build_format (self, structure);
 
   return self;
 }
@@ -239,23 +281,8 @@ gst_tracer_record_log (GstTracerRecord * self, ...)
 {
   va_list var_args;
 
-  /*
-   * does it make sense to use the {file, line, func} from the tracer hook?
-   * a)
-   * - we'd need to pass them in the macros to gst_tracer_dispatch()
-   * - and each tracer needs to grab them from the va_list and pass them here
-   * b)
-   * - we create a context in dispatch, pass that to the tracer
-   * - and the tracer will pass that here
-   * ideally we also use *our* ts instead of the one that
-   * gst_debug_log_default() will pick
-   */
-
   va_start (var_args, self);
-  if (G_LIKELY (GST_LEVEL_TRACE <= _gst_debug_min)) {
-    gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_TRACE, "", "", 0, NULL,
-        self->priv->format, var_args);
-  }
+  GST_TRACER_RECORD_GET_CLASS (self)->log (self, var_args);
   va_end (var_args);
 }
 #endif

@@ -260,6 +260,11 @@ if cc.has_function('strsignal', prefix : '#include <string.h>')
   cdata.set('HAVE_DECL_STRSIGNAL', 1)
 endif
 
+babeltrace_dep = dependency('babeltrace-ctf', required : false)
+if babeltrace_dep.found()
+  cdata.set('HAVE_BABELTRACE', 1)
+endif
+
 configure_file(input : 'config.h.meson',
   output : 'config.h',
   configuration : cdata)

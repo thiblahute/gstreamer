@@ -826,8 +826,12 @@ if test "x$BUILD_EXAMPLES" = "xyes"; then
 fi
 AM_CONDITIONAL(HAVE_GTK, test "x$HAVE_GTK" = "xyes")
 
-dnl libunwind is optionally used by the leaks tracer
-PKG_CHECK_MODULES(UNWIND, libunwind, HAVE_UNWIND=yes, HAVE_UNWIND=no)
+PKG_CHECK_MODULES(BABELTRACE_CTF, babeltrace-ctf >= 2.0, HAVE_BABELTRACE=yes, HAVE_BABELTRACE=no)
+if test "x$HAVE_BABELTRACE" = "xyes"; then
+  AC_DEFINE(HAVE_BABELTRACE, 1, [babeltrace-ctf available])
+fi
+AM_CONDITIONAL(HAVE_BABELTRACE, test "x$HAVE_BABELTRACE" = "xyes")
+
 
 dnl Check for backtrace() from libc
 AC_CHECK_FUNC(backtrace, [
@@ -836,6 +840,8 @@ AC_CHECK_FUNC(backtrace, [
   ], [], [])
 ])
 
+dnl libunwind is optionally used by the leaks tracer
+PKG_CHECK_MODULES(UNWIND, libunwind, HAVE_UNWIND=yes, HAVE_UNWIND=no)
 if test "x$HAVE_UNWIND" = "xyes"; then
   AC_DEFINE(HAVE_UNWIND, 1, [libunwind available])
 fi
@@ -1164,6 +1170,7 @@ Configuration
 	Unit testing support       : ${BUILD_CHECK}
 	PTP clock support          : ${HAVE_PTP}
 	libunwind support          : ${HAVE_UNWIND}
+	babeltrace support         : ${HAVE_BABELTRACE}
 
 	Debug                      : ${USE_DEBUG}
 	Profiling                  : ${USE_PROFILING}
