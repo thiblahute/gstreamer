@@ -73,7 +73,7 @@ GST_START_TEST (serialize_message_logging)
   gchar *str;
 
   /* *INDENT-OFF* */
-  tr = gst_tracer_record_new ("test.class",
+  tr = gst_tracer_record_new ("test", "test.class",
       "string", GST_TYPE_STRUCTURE, gst_structure_new ("value",
           "type", G_TYPE_GTYPE, G_TYPE_STRING,
           NULL),
@@ -105,7 +105,7 @@ GST_START_TEST (serialize_static_record)
   GstPadDirection enum_val;
 
   /* *INDENT-OFF* */
-  tr = gst_tracer_record_new ("test.class",
+  tr = gst_tracer_record_new ("test", "test.class",
       "string", GST_TYPE_STRUCTURE, gst_structure_new ("value",
           "type", G_TYPE_GTYPE, G_TYPE_STRING,
           NULL),
@@ -151,20 +151,43 @@ GST_START_TEST (serialize_static_record)
 GST_END_TEST;
 
 #ifdef HAVE_BABELTRACE
+#include <babeltrace/context.h>
+#include <babeltrace/babeltrace.h>
+#include <babeltrace/ctf/events.h>
+#include <babeltrace/ctf/iterator.h>
+#include <babeltrace/ctf/iterator.h>
+#include <babeltrace/ctf-ir/event-class.h>
+#include <babeltrace/ctf-ir/event.h>
+
 #include <gst/gsttracerctfrecord.h>
+
+const char *bt_ctf_event_name (const struct bt_ctf_event *ctf_event);
+
+typedef struct
+{
+  const gchar *name;
+} CtfEventDef;
+
 GST_START_TEST (serialize_ctf_message)
 {
   GstTracerRecord *tr, *tr1;
-  gchar *tracedir = g_strdup("gstctftraces");
+  struct bt_context *ctx;
+  struct bt_ctf_iter *iter;
+  struct bt_ctf_event *ctf_event;
+  struct bt_iter_pos *begin_pos = NULL;
+  gchar *template = g_build_filename (g_get_tmp_dir (),
+      "gstctftraces-XXXXXX", NULL);
+  gint i;
+  const CtfEventDef evs[] = { {"test.class"}, {"test1.class"} };
+  gchar *tracedir = g_mkdtemp (template);
 
   cleanup ();
-  GST_ERROR("TRACEDIR: %s\n", tracedir);
   g_setenv ("GST_TRACE_FILE", tracedir, TRUE);
   g_setenv ("GST_TRACE_FORMAT", "ctf", TRUE);
-  g_free (tracedir);
+  cleanup ();
 
   /* *INDENT-OFF* */
-  tr = gst_tracer_record_new ("test.class",
+  tr = gst_tracer_record_new ("test", "test.class",
       "teststr", GST_TYPE_STRUCTURE, gst_structure_new ("value",
           "type", G_TYPE_GTYPE, G_TYPE_STRING,
           NULL),
@@ -172,7 +195,7 @@ GST_START_TEST (serialize_ctf_message)
           "type", G_TYPE_GTYPE, G_TYPE_INT,
           NULL),
       NULL);
-  tr1 = gst_tracer_record_new ("test1.class",
+  tr1 = gst_tracer_record_new ("test", "test1.class",
       "testint", GST_TYPE_STRUCTURE, gst_structure_new ("value",
           "type", G_TYPE_GTYPE, G_TYPE_INT, NULL),
       "testuint64", GST_TYPE_STRUCTURE, gst_structure_new ("value",
@@ -191,12 +214,33 @@ GST_START_TEST (serialize_ctf_message)
   fail_unless (GST_IS_TRACER_CTF_RECORD (tr));
   gst_tracer_record_log (tr, "nothing", 22, NULL);
   gst_tracer_record_log (tr1, -18, 50, (gdouble) 2.55, FALSE, GST_PAD_SRC,
-          GST_PAD_LINK_CHECK_CAPS, NULL);
+      GST_PAD_LINK_CHECK_CAPS, NULL);
 
+  gst_deinit ();
+
+  ctx = bt_context_create ();
+  fail_unless (ctx);
+
+  fail_unless (bt_context_add_trace (ctx,
+          tracedir, "ctf", NULL, NULL, NULL) == 0);
+
+  begin_pos = bt_iter_create_time_pos (NULL, 0);
+  begin_pos->type = BT_SEEK_BEGIN;
+  iter = bt_ctf_iter_create (ctx, begin_pos, NULL);
+  fail_unless (iter);
+  for (ctf_event = bt_ctf_iter_read_event (iter), i = 0; ctf_event;
+      bt_iter_next (bt_ctf_get_iter (iter)),
+      ctf_event = bt_ctf_iter_read_event (iter), i++) {
+    fail_unless_equals_string (bt_ctf_event_name (ctf_event), evs[i].name);
+  }
+  fail_unless_equals_int (i, 2);
+
+  g_free (tracedir);
   gst_object_unref (tr);
   gst_object_unref (tr1);
   setup ();
 }
+
 GST_END_TEST;
 #endif
 

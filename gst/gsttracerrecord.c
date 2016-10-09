@@ -214,7 +214,8 @@ gst_tracer_record_init (GstTracerRecord * self)
  * Returns: a new #GstTracerRecord
  */
 GstTracerRecord *
-gst_tracer_record_new (const gchar * name, const gchar * firstfield, ...)
+gst_tracer_record_new (const gchar *source_name,
+        const gchar * name, const gchar * firstfield, ...)
 {
   GstTracerRecord *self;
   GstStructure *structure;
@@ -257,6 +258,7 @@ gst_tracer_record_new (const gchar * name, const gchar * firstfield, ...)
   else
 #endif
     self = g_object_newv (GST_TYPE_TRACER_RECORD, 0, NULL);
+  self->source_name = g_strdup (source_name);
   gst_tracer_record_build_format (self, structure);
 
   return self;

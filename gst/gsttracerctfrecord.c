@@ -37,8 +37,8 @@
 #include <babeltrace/ctf-writer/stream-class.h>
 
 static struct bt_ctf_writer *writer = NULL;
-static struct bt_ctf_stream_class *stream_class = NULL;
-struct bt_ctf_stream *stream = NULL;
+static GHashTable * streams = NULL;
+struct bt_ctf_clock *ct_clock = NULL;
 
 struct _GstTracerCtfRecordClass
 {
@@ -49,6 +49,7 @@ struct _GstTracerCtfRecord
 {
   GstTracerRecord parent;
   struct bt_ctf_event_class *event_class;
+  struct bt_ctf_stream *stream;
 };
 
 /* FIXME Copied from writer.py, remove when exposed in the C API */
@@ -167,8 +168,8 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
   }
 
   if (type) {
-    gchar *f, *c;
-    const gchar *field_name = g_quark_to_string (field_id);
+    gchar *c;
+    const gchar *f, *field_name = g_quark_to_string (field_id);
 
     c = cleaned_field_name = g_strdup (field_name);
 
@@ -236,13 +237,30 @@ gst_tracer_ctf_record_build_format (GstTracerRecord * record,
     GstStructure * structure)
 {
   GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (record);
+  struct bt_ctf_stream_class *stream_class;
+  struct bt_ctf_stream * stream = g_hash_table_lookup (streams,
+      record->source_name);
 
+  if (!stream) {
+    stream_class = bt_ctf_stream_class_create (record->source_name);
+    bt_ctf_stream_class_set_clock (stream_class, ct_clock);
+    stream = bt_ctf_writer_create_stream (writer, stream_class);
+    g_assert (stream);
+
+    g_hash_table_insert (streams, g_strdup (record->source_name), stream);
+  } else {
+    stream_class = bt_ctf_stream_get_class (stream);
+  }
+
+  self->stream = stream;
   self->event_class =
       bt_ctf_event_class_create (gst_structure_get_name (structure));
   gst_structure_foreach (structure,
       (GstStructureForeachFunc) gst_tracer_ctf_add_event_class, self);
   g_assert (!bt_ctf_stream_class_add_event_class (stream_class,
           self->event_class));
+
+  bt_put (stream_class);
 
   return TRUE;
 }
@@ -327,7 +345,7 @@ gst_tracer_ctf_record_log (GstTracerRecord * record, va_list var_args)
     bt_put (field);
   }
 
-  g_assert (!bt_ctf_stream_append_event (stream, event));
+  g_assert (!bt_ctf_stream_append_event (self->stream, event));
   bt_put (event);
 }
 
@@ -340,6 +358,13 @@ gst_tracer_ctf_record_finalize (GObject * object)
 }
 
 static void
+clean_stream (struct bt_ctf_stream *stream)
+{
+  bt_ctf_stream_flush (stream);
+  bt_put (stream);
+}
+
+static void
 gst_tracer_ctf_record_class_init (GstTracerCtfRecordClass * klass)
 {
   GstTracerRecordClass *record_klass = GST_TRACER_RECORD_CLASS (klass);
@@ -348,19 +373,15 @@ gst_tracer_ctf_record_class_init (GstTracerCtfRecordClass * klass)
   const gchar *trace_path = g_getenv ("GST_TRACE_FILE");
 
   if (g_once_init_enter (&writer)) {
-    /* TODO Make it possible to use a GStreamer based clock */
-    struct bt_ctf_clock *clock = bt_ctf_clock_create ("main_clock");
     struct bt_ctf_writer *w = bt_ctf_writer_create (trace_path);
 
-    bt_ctf_writer_add_clock (w, clock);
+    ct_clock = bt_ctf_clock_create ("main_clock");
+
+    bt_ctf_writer_add_clock (w, ct_clock);
     bt_ctf_writer_add_environment_field (w, "GST_VERSION", PACKAGE_VERSION);
 
-    stream_class = bt_ctf_stream_class_create ("gsttracer");
-    bt_ctf_stream_class_set_clock (stream_class, clock);
-
-    stream = bt_ctf_writer_create_stream (w, stream_class);
-    g_assert (stream);
-
+    streams = g_hash_table_new_full (g_str_hash, g_str_equal,
+            g_free, (GDestroyNotify) clean_stream);
     g_once_init_leave (&writer, w);
   }
 
@@ -379,11 +400,9 @@ void
 gst_tracer_ctf_record_deinit (void)
 {
   if (writer) {
-    bt_ctf_stream_flush (stream);
+    g_hash_table_unref (streams);
     bt_ctf_writer_flush_metadata (writer);
 
-    BT_PUT (stream_class);
     BT_PUT (writer);
-    BT_PUT (stream);
   }
 }

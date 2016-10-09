@@ -520,9 +520,11 @@ do_query_post (GstStatsTracer * self, guint64 ts, GstPad * this_pad,
 static void
 gst_stats_tracer_class_init (GstStatsTracerClass * klass)
 {
+  const gchar *classname = G_OBJECT_CLASS_NAME (klass);
+
   /* announce trace formats */
   /* *INDENT-OFF* */
-  tr_buffer = gst_tracer_record_new ("buffer.class",
+  tr_buffer = gst_tracer_record_new (classname, "buffer.class",
       "thread-id", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
           "type", G_TYPE_GTYPE, G_TYPE_UINT64,
           "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_THREAD,
@@ -576,7 +578,7 @@ gst_stats_tracer_class_init (GstStatsTracerClass * klass)
           "description", G_TYPE_STRING, "flags of the buffer",
           NULL),
       NULL);
-  tr_event = gst_tracer_record_new ("event.class",
+  tr_event = gst_tracer_record_new (classname, "event.class",
       "thread-id", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
           "type", G_TYPE_GTYPE, G_TYPE_UINT64,
           "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_THREAD,
@@ -598,7 +600,7 @@ gst_stats_tracer_class_init (GstStatsTracerClass * klass)
           "description", G_TYPE_STRING, "name of the event",
           NULL),
       NULL);
-  tr_message = gst_tracer_record_new ("message.class",
+  tr_message = gst_tracer_record_new (classname, "message.class",
       "thread-id", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
           "type", G_TYPE_GTYPE, G_TYPE_UINT64,
           "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_THREAD,
@@ -620,7 +622,7 @@ gst_stats_tracer_class_init (GstStatsTracerClass * klass)
           "description", G_TYPE_STRING, "message structure",
           NULL),
       NULL);
-  tr_element_query = gst_tracer_record_new ("element-query.class",
+  tr_element_query = gst_tracer_record_new (classname, "element-query.class",
       "thread-id", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
           "type", G_TYPE_GTYPE, G_TYPE_UINT64,
           "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_THREAD,
@@ -638,7 +640,7 @@ gst_stats_tracer_class_init (GstStatsTracerClass * klass)
           "description", G_TYPE_STRING, "name of the query",
           NULL),
       NULL);
-  tr_query = gst_tracer_record_new ("query.class",
+  tr_query = gst_tracer_record_new (classname, "query.class",
       "thread-id", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
           "type", G_TYPE_GTYPE, G_TYPE_UINT64,
           "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_THREAD,
@@ -677,7 +679,7 @@ gst_stats_tracer_class_init (GstStatsTracerClass * klass)
           "flags", GST_TYPE_TRACER_VALUE_FLAGS, GST_TRACER_VALUE_FLAGS_OPTIONAL,
           NULL),
       NULL);
-  tr_new_element = gst_tracer_record_new ("new-element.class",
+  tr_new_element = gst_tracer_record_new (classname, "new-element.class",
       "thread-id", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
           "type", G_TYPE_GTYPE, G_TYPE_UINT64,
           "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_THREAD,
@@ -707,7 +709,7 @@ gst_stats_tracer_class_init (GstStatsTracerClass * klass)
           "description", G_TYPE_STRING, "is element a bin",
           NULL),
       NULL);
-  tr_new_pad = gst_tracer_record_new ("new-pad.class",
+  tr_new_pad = gst_tracer_record_new (classname, "new-pad.class",
       "thread-id", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
           "type", G_TYPE_GTYPE, G_TYPE_UINT64,
           "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_THREAD,
