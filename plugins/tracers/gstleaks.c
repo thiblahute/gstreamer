@@ -619,13 +619,13 @@ sig_usr2_handler (G_GNUC_UNUSED int signal)
 }
 
 static void
-setup_signals (void)
+setup_signals (const gchar *classname)
 {
-  tr_added = gst_tracer_record_new ("object-added.class",
+  tr_added = gst_tracer_record_new (classname, "object-added.class",
       RECORD_FIELD_TYPE_NAME, RECORD_FIELD_ADDRESS, NULL);
   GST_OBJECT_FLAG_SET (tr_added, GST_OBJECT_FLAG_MAY_BE_LEAKED);
 
-  tr_removed = gst_tracer_record_new ("object-removed.class",
+  tr_removed = gst_tracer_record_new (classname, "object-removed.class",
       RECORD_FIELD_TYPE_NAME, RECORD_FIELD_ADDRESS, NULL);
   GST_OBJECT_FLAG_SET (tr_removed, GST_OBJECT_FLAG_MAY_BE_LEAKED);
 
@@ -638,18 +638,19 @@ static void
 gst_leaks_tracer_class_init (GstLeaksTracerClass * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+  const gchar *classname = G_OBJECT_CLASS_NAME (klass);
 
   gobject_class->constructed = gst_leaks_tracer_constructed;
   gobject_class->finalize = gst_leaks_tracer_finalize;
 
-  tr_alive = gst_tracer_record_new ("object-alive.class",
+  tr_alive = gst_tracer_record_new (classname, "object-alive.class",
       RECORD_FIELD_TYPE_NAME, RECORD_FIELD_ADDRESS, RECORD_FIELD_DESC,
       RECORD_FIELD_REF_COUNT, RECORD_FIELD_TRACE, NULL);
   GST_OBJECT_FLAG_SET (tr_alive, GST_OBJECT_FLAG_MAY_BE_LEAKED);
 
   if (g_getenv ("GST_LEAKS_TRACER_SIG")) {
 #ifdef G_OS_UNIX
-    setup_signals ();
+    setup_signals (classname);
 #else
     g_warning ("System doesn't support POSIX signals");
 #endif /* G_OS_UNIX */

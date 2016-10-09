@@ -197,13 +197,15 @@ do_push_event_pre (GstTracer * self, guint64 ts, GstPad * pad, GstEvent * ev)
 static void
 gst_latency_tracer_class_init (GstLatencyTracerClass * klass)
 {
+  const gchar *classname = G_OBJECT_CLASS_NAME (klass);
+
   latency_probe_id = g_quark_from_static_string ("latency_probe.id");
   latency_probe_pad = g_quark_from_static_string ("latency_probe.pad");
   latency_probe_ts = g_quark_from_static_string ("latency_probe.ts");
 
   /* announce trace formats */
   /* *INDENT-OFF* */
-  tr_latency = gst_tracer_record_new ("latency.class",
+  tr_latency = gst_tracer_record_new (classname, "latency.class",
       "src", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
           "type", G_TYPE_GTYPE, G_TYPE_STRING,
           "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_PAD,

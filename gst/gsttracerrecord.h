@@ -36,6 +36,8 @@ struct _GstTracerRecord
 
   GstTracerRecordPrivate *priv;
 
+  /* <protected> */
+  gchar *source_name;
   /*< private >*/
   /* Padding for API extension */
   gpointer _gst_reserved[GST_PADDING];
@@ -110,7 +112,10 @@ typedef enum
 
 #ifdef GST_USE_UNSTABLE_API
 
-GstTracerRecord * gst_tracer_record_new (const gchar * name, const gchar * firstfield, ...);
+GstTracerRecord * gst_tracer_record_new (const gchar *source_name,
+                                         const gchar * name,
+                                         const gchar * firstfield,
+                                         ...);
 
 #ifndef GST_DISABLE_GST_DEBUG
 void              gst_tracer_record_log (GstTracerRecord *self, ...);

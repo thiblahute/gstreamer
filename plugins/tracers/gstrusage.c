@@ -271,6 +271,7 @@ static void
 gst_rusage_tracer_class_init (GstRUsageTracerClass * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+  const gchar *classname = G_OBJECT_CLASS_NAME (klass);
 
   gobject_class->finalize = gst_rusage_tracer_finalize;
 
@@ -285,7 +286,7 @@ gst_rusage_tracer_class_init (GstRUsageTracerClass * klass)
 
   /* announce trace formats */
   /* *INDENT-OFF* */
-  tr_thread = gst_tracer_record_new ("thread-rusage.class",
+  tr_thread = gst_tracer_record_new (classname, "thread-rusage.class",
       "thread-id", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
           "type", G_TYPE_GTYPE, G_TYPE_UINT64,
           "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_THREAD,
@@ -315,8 +316,8 @@ gst_rusage_tracer_class_init (GstRUsageTracerClass * klass)
           "max", G_TYPE_UINT64, G_MAXUINT64,
           NULL),
       NULL);
-  tr_proc = gst_tracer_record_new ("proc-rusage.class",
-      "process-id", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
+  tr_proc = gst_tracer_record_new (classname, "proc-rusage.class",
+      "thread-id", GST_TYPE_STRUCTURE, gst_structure_new ("scope",
           "type", G_TYPE_GTYPE, G_TYPE_UINT64,
           "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_PROCESS,
           NULL),
