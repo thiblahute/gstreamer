@@ -479,7 +479,11 @@ init_pre (GOptionContext * context, GOptionGroup * group, gpointer data,
 
   _priv_gst_start_time = gst_util_get_timestamp ();
 
+  _priv_gst_value_initialize ();
+  _priv_gst_mini_object_initialize ();
+  _priv_gst_structure_initialize ();
 #ifndef GST_DISABLE_GST_DEBUG
+  _priv_gst_tracing_init_pre ();
   _priv_gst_debug_init ();
   priv_gst_dump_dot_dir = g_getenv ("GST_DEBUG_DUMP_DOT_DIR");
 #endif
@@ -571,13 +575,11 @@ init_post (GOptionContext * context, GOptionGroup * group, gpointer data,
   llf = G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_ERROR | G_LOG_FLAG_FATAL;
   g_log_set_handler (g_log_domain_gstreamer, llf, debug_log_handler, NULL);
 
-  _priv_gst_mini_object_initialize ();
   _priv_gst_quarks_initialize ();
   _priv_gst_allocator_initialize ();
   _priv_gst_memory_initialize ();
   _priv_gst_format_initialize ();
   _priv_gst_query_initialize ();
-  _priv_gst_structure_initialize ();
   _priv_gst_caps_initialize ();
   _priv_gst_caps_features_initialize ();
   _priv_gst_meta_initialize ();
@@ -687,7 +689,6 @@ init_post (GOptionContext * context, GOptionGroup * group, gpointer data,
   _priv_gst_sample_initialize ();
   _priv_gst_context_initialize ();
   _priv_gst_date_time_initialize ();
-  _priv_gst_value_initialize ();
   _priv_gst_tag_initialize ();
   _priv_gst_toc_initialize ();
 
@@ -723,7 +724,7 @@ init_post (GOptionContext * context, GOptionGroup * group, gpointer data,
   GST_INFO ("initialized GStreamer successfully");
 
 #ifndef GST_DISABLE_GST_DEBUG
-  _priv_gst_tracing_init ();
+  _priv_gst_tracing_init_post ();
 #endif
 
   return TRUE;

@@ -541,7 +541,7 @@ gst_leaks_tracer_finalize (GObject * object)
         "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_PROCESS, \
         NULL)
 #define RECORD_FIELD_TRACE \
-    "trace", GST_TYPE_STRUCTURE, gst_structure_new ("value", \
+    "stacktrace", GST_TYPE_STRUCTURE, gst_structure_new ("value", \
         "type", G_TYPE_GTYPE, G_TYPE_STRING, \
         "related-to", GST_TYPE_TRACER_VALUE_SCOPE, GST_TRACER_VALUE_SCOPE_PROCESS, \
         NULL)
@@ -619,7 +619,7 @@ sig_usr2_handler (G_GNUC_UNUSED int signal)
 }
 
 static void
-setup_signals (const gchar *classname)
+setup_signals (const gchar * classname)
 {
   tr_added = gst_tracer_record_new (classname, "object-added.class",
       RECORD_FIELD_TYPE_NAME, RECORD_FIELD_ADDRESS, NULL);

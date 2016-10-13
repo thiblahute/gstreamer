@@ -39,7 +39,10 @@ typedef struct _GstTracerCtfRecord GstTracerCtfRecord;
 typedef struct _GstTracerCtfRecordClass GstTracerCtfRecordClass;
 
 GType          gst_tracer_ctf_record_get_type   (void);
-void           gst_tracer_ctf_record_deinit     (void);
+void           gst_ctf_init_pre   (void);
+void           gst_ctf_init_post  (void);
+void           gst_ctf_deinit     (void);
+gboolean       gst_use_ctf        (void);
 
 G_END_DECLS
 

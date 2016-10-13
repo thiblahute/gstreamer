@@ -38,6 +38,8 @@ struct _GstTracerRecord
 
   /* <protected> */
   gchar *source_name;
+  GstStructure *options;
+
   /*< private >*/
   /* Padding for API extension */
   gpointer _gst_reserved[GST_PADDING];

@@ -457,6 +457,34 @@ The variable takes a comma-separated list of tracing options to enable.
 
 </formalpara>
 
+<formalpara id="GST_DEBUG_FORMAT">
+  <title><envar>GST_DEBUG_FORMAT</envar></title>
+
+  <para>
+    The variable takes a serialized 'GstStructure' like string to define
+     the format into which the logs should be outputed, currently supported
+     values are:
+     <variablelist>
+         <varlistentry>
+           <term>ctf,directory=/directory/where/to/output/common_traces</term>
+           <listitem>
+             <para>
+               Use the Common Trace Format (avalaible only if babeltrace is present on the system)
+             </para>
+           </listitem>
+         </varlistentry>
+         <varlistentry>
+           <term>gst,file=/gst/debug/file</term>
+          <listitem>
+             <para>
+               Use standard gst-debug log format (if file is not specified, it outputs on stderr)
+             </para>
+           </listitem>
+         </varlistentry>
+     </variablelist>
+  </para>
+</formalpara>
+
 <formalpara id="ORC_CODE">
   <title><envar>ORC_CODE</envar></title>
 

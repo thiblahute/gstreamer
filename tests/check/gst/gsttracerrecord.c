@@ -179,12 +179,13 @@ GST_START_TEST (serialize_ctf_message)
       "gstctftraces-XXXXXX", NULL);
   gint i;
   const CtfEventDef evs[] = { {"test.class"}, {"test1.class"} };
-  gchar *tracedir = g_mkdtemp (template);
+  gchar *tracedir = g_mkdtemp (template),
+      *debug_format = g_strdup_printf ("ctf,directory=%s", tracedir);
 
+  g_setenv ("GST_DEBUG_FORMAT", debug_format, TRUE);
+  gst_ctf_deinit ();
   cleanup ();
-  g_setenv ("GST_TRACE_FILE", tracedir, TRUE);
-  g_setenv ("GST_TRACE_FORMAT", "ctf", TRUE);
-  cleanup ();
+  gst_ctf_init_pre ();
 
   /* *INDENT-OFF* */
   tr = gst_tracer_record_new ("test", "test.class",
@@ -210,13 +211,14 @@ GST_START_TEST (serialize_ctf_message)
           "type", G_TYPE_GTYPE, GST_TYPE_PAD_LINK_CHECK, NULL),
       NULL);
   /* *INDENT-ON* */
+  gst_ctf_init_post ();
 
   fail_unless (GST_IS_TRACER_CTF_RECORD (tr));
   gst_tracer_record_log (tr, "nothing", 22, NULL);
   gst_tracer_record_log (tr1, -18, 50, (gdouble) 2.55, FALSE, GST_PAD_SRC,
       GST_PAD_LINK_CHECK_CAPS, NULL);
 
-  gst_deinit ();
+  gst_ctf_deinit ();
 
   ctx = bt_context_create ();
   fail_unless (ctx);
@@ -236,6 +238,7 @@ GST_START_TEST (serialize_ctf_message)
   fail_unless_equals_int (i, 2);
 
   g_free (tracedir);
+  g_free (debug_format);
   gst_object_unref (tr);
   gst_object_unref (tr1);
   setup ();
