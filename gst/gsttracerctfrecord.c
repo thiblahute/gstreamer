@@ -36,8 +36,10 @@
 #include <babeltrace/ctf-writer/event-fields.h>
 #include <babeltrace/ctf-writer/stream-class.h>
 
+#define STREAM_FLUSH_COUNT 1000
+
 static struct bt_ctf_writer *writer = NULL;
-static GHashTable * streams = NULL;
+static GHashTable *streams = NULL;
 struct bt_ctf_clock *ct_clock = NULL;
 
 struct _GstTracerCtfRecordClass
@@ -45,11 +47,17 @@ struct _GstTracerCtfRecordClass
   GstTracerRecordClass parent;
 };
 
+typedef struct
+{
+  struct bt_ctf_stream *ctfstream;
+  gint n_logs;
+} CtfFlushStream;
+
 struct _GstTracerCtfRecord
 {
   GstTracerRecord parent;
   struct bt_ctf_event_class *event_class;
-  struct bt_ctf_stream *stream;
+  CtfFlushStream *stream;
 };
 
 /* FIXME Copied from writer.py, remove when exposed in the C API */
@@ -62,12 +70,19 @@ enum FloatingPointFieldDeclaration
   DBL_EXP_DIG = 11
 };
 
+
+/* *INDENT-OFF* */
 G_DEFINE_TYPE (GstTracerCtfRecord, gst_tracer_ctf_record,
     GST_TYPE_TRACER_RECORD)
+/* *INDENT-ON* */
 
-     GstTracerCtfRecord *gst_tracer_ctf_record_new (void)
+static void
+free_stream (CtfFlushStream * stream)
 {
-  return g_object_new (GST_TYPE_TRACER_CTF_RECORD, NULL);
+  bt_ctf_stream_flush (stream->ctfstream);
+  bt_put (stream->ctfstream);
+
+  g_free (stream);
 }
 
 static struct bt_ctf_field_type *
@@ -238,21 +253,26 @@ gst_tracer_ctf_record_build_format (GstTracerRecord * record,
 {
   GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (record);
   struct bt_ctf_stream_class *stream_class;
-  struct bt_ctf_stream * stream = g_hash_table_lookup (streams,
-      record->source_name);
+  CtfFlushStream *fstream;
 
-  if (!stream) {
+  fstream = g_hash_table_lookup (streams, record->source_name);
+  if (!fstream) {
+    struct bt_ctf_stream *stream;
+
     stream_class = bt_ctf_stream_class_create (record->source_name);
     bt_ctf_stream_class_set_clock (stream_class, ct_clock);
     stream = bt_ctf_writer_create_stream (writer, stream_class);
     g_assert (stream);
 
-    g_hash_table_insert (streams, g_strdup (record->source_name), stream);
+    fstream = g_new0 (CtfFlushStream, 1);
+    fstream->ctfstream = stream;
+
+    g_hash_table_insert (streams, g_strdup (record->source_name), fstream);
   } else {
-    stream_class = bt_ctf_stream_get_class (stream);
+    stream_class = bt_ctf_stream_get_class (fstream->ctfstream);
   }
 
-  self->stream = stream;
+  self->stream = fstream;
   self->event_class =
       bt_ctf_event_class_create (gst_structure_get_name (structure));
   gst_structure_foreach (structure,
@@ -263,6 +283,21 @@ gst_tracer_ctf_record_build_format (GstTracerRecord * record,
   bt_put (stream_class);
 
   return TRUE;
+}
+
+static void
+gst_tracer_ctf_record_append_event (GstTracerCtfRecord * self,
+    struct bt_ctf_event *event)
+{
+  g_assert (!bt_ctf_stream_append_event (self->stream->ctfstream, event));
+  bt_put (event);
+
+  /* Not really MT safe... but it should not cause any issue! */
+  self->stream->n_logs++;
+  if (self->stream->n_logs > STREAM_FLUSH_COUNT) {
+    self->stream->n_logs = 0;
+    bt_ctf_stream_flush (self->stream->ctfstream);
+  }
 }
 
 static void
@@ -345,8 +380,7 @@ gst_tracer_ctf_record_log (GstTracerRecord * record, va_list var_args)
     bt_put (field);
   }
 
-  g_assert (!bt_ctf_stream_append_event (self->stream, event));
-  bt_put (event);
+  gst_tracer_ctf_record_append_event (self, event);
 }
 
 static void
@@ -355,13 +389,6 @@ gst_tracer_ctf_record_finalize (GObject * object)
   GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (object);
 
   bt_put (self->event_class);
-}
-
-static void
-clean_stream (struct bt_ctf_stream *stream)
-{
-  bt_ctf_stream_flush (stream);
-  bt_put (stream);
 }
 
 static void
@@ -381,7 +408,7 @@ gst_tracer_ctf_record_class_init (GstTracerCtfRecordClass * klass)
     bt_ctf_writer_add_environment_field (w, "GST_VERSION", PACKAGE_VERSION);
 
     streams = g_hash_table_new_full (g_str_hash, g_str_equal,
-            g_free, (GDestroyNotify) clean_stream);
+        g_free, (GDestroyNotify) free_stream);
     g_once_init_leave (&writer, w);
   }
 
