@@ -43,6 +43,12 @@
 #include <gst/gsttracerctfrecord.h>
 #endif
 
+enum
+{
+  PROP_0,
+  PROP_LAST
+};
+
 GST_DEBUG_CATEGORY_EXTERN (tracer_debug);
 #define GST_CAT_DEFAULT tracer_debug
 
@@ -53,7 +59,34 @@ struct _GstTracerRecordPrivate
 };
 
 #define gst_tracer_record_parent_class parent_class
-G_DEFINE_TYPE_WITH_PRIVATE (GstTracerRecord, gst_tracer_record, GST_TYPE_OBJECT);
+G_DEFINE_TYPE_WITH_PRIVATE (GstTracerRecord, gst_tracer_record,
+    GST_TYPE_OBJECT);
+
+typedef enum
+{
+  GST_DEBUG_FORMAT_PLAIN,
+  GST_DEBUG_FORMAT_CTF
+} GstDebugFormat;
+
+static GType record_type = G_TYPE_NONE;
+
+static GstTracerRecord *
+gst_tracer_record_create (void)
+{
+  if (record_type != G_TYPE_NONE)
+    goto done;
+
+  record_type = GST_TYPE_TRACER_RECORD;
+
+#ifdef HAVE_BABELTRACE
+  if (gst_use_ctf ())
+    record_type = GST_TYPE_TRACER_CTF_RECORD;
+#endif
+
+done:
+  return g_object_new (record_type, NULL);
+}
+
 
 static gboolean
 build_field_template (GQuark field_id, const GValue * value, gpointer user_data)
@@ -97,8 +130,8 @@ static gboolean
 gst_tracer_record_build_format (GstTracerRecord * self,
     GstStructure * structure)
 {
-  g_return_val_if_fail (g_str_has_suffix ((gchar *) g_quark_to_string (structure->name),
-              ".class"), FALSE);
+  g_return_val_if_fail (g_str_has_suffix ((gchar *)
+          g_quark_to_string (structure->name), ".class"), FALSE);
 
   /* announce the format */
   GST_TRACE ("%" GST_PTR_FORMAT, structure);
@@ -107,7 +140,8 @@ gst_tracer_record_build_format (GstTracerRecord * self,
 }
 
 static gboolean
-_gst_tracer_record_build_format (GstTracerRecord * self, GstStructure *structure)
+_gst_tracer_record_build_format (GstTracerRecord * self,
+    GstStructure * structure)
 {
   GString *s;
   gchar *name = (gchar *) g_quark_to_string (structure->name);
@@ -133,7 +167,7 @@ _gst_tracer_record_build_format (GstTracerRecord * self, GstStructure *structure
 }
 
 static void
-_gst_tracer_record_log (GstTracerRecord *self, va_list var_args)
+_gst_tracer_record_log (GstTracerRecord * self, va_list var_args)
 {
   /*
    * does it make sense to use the {file, line, func} from the tracer hook?
@@ -214,8 +248,8 @@ gst_tracer_record_init (GstTracerRecord * self)
  * Returns: a new #GstTracerRecord
  */
 GstTracerRecord *
-gst_tracer_record_new (const gchar *source_name,
-        const gchar * name, const gchar * firstfield, ...)
+gst_tracer_record_new (const gchar * source_name,
+    const gchar * name, const gchar * firstfield, ...)
 {
   GstTracerRecord *self;
   GstStructure *structure;
@@ -223,7 +257,6 @@ gst_tracer_record_new (const gchar *source_name,
   gchar *err = NULL;
   GType type;
   GQuark id;
-
   va_start (varargs, firstfield);
   structure = gst_structure_new_empty (name);
 
@@ -252,12 +285,7 @@ gst_tracer_record_new (const gchar *source_name,
   }
   va_end (varargs);
 
-#ifdef HAVE_BABELTRACE
-  if (!g_strcmp0 (g_getenv ("GST_TRACE_FORMAT"), "ctf"))
-    self = g_object_newv (GST_TYPE_TRACER_CTF_RECORD, 0, NULL);
-  else
-#endif
-    self = g_object_newv (GST_TYPE_TRACER_RECORD, 0, NULL);
+  self = gst_tracer_record_create ();
   self->source_name = g_strdup (source_name);
   gst_tracer_record_build_format (self, structure);
 

@@ -292,6 +292,25 @@ _priv_gst_in_valgrind (void)
   return (in_valgrind == GST_VG_INSIDE);
 }
 
+static FILE *
+__get_debug_file_from_string (const gchar * fname)
+{
+  FILE *log_file;
+
+  if (strcmp (fname, "-") == 0) {
+    log_file = stdout;
+  } else {
+    log_file = g_fopen (fname, "w");
+    if (log_file == NULL) {
+      g_printerr ("Could not open log file '%s' for writing: %s\n", fname,
+          g_strerror (errno));
+      log_file = stderr;
+    }
+  }
+
+  return log_file;
+}
+
 /* Initialize the debugging system */
 void
 _priv_gst_debug_init (void)
@@ -300,20 +319,26 @@ _priv_gst_debug_init (void)
   FILE *log_file;
 
   if (add_default_log_func) {
+    log_file = stderr;
     env = g_getenv ("GST_DEBUG_FILE");
     if (env != NULL && *env != '\0') {
-      if (strcmp (env, "-") == 0) {
-        log_file = stdout;
-      } else {
-        log_file = g_fopen (env, "w");
-        if (log_file == NULL) {
-          g_printerr ("Could not open log file '%s' for writing: %s\n", env,
-              g_strerror (errno));
-          log_file = stderr;
+      log_file = __get_debug_file_from_string (env);
+    } else {
+      env = g_getenv ("GST_DEBUG_FORMAT");
+      if (env != NULL) {
+        GstStructure *format_description = gst_structure_from_string (env,
+            NULL);
+
+        if (gst_structure_has_name (format_description, "gst")) {
+          const gchar *file = gst_structure_get_string (format_description,
+              "file");
+
+          if (file)
+            log_file = __get_debug_file_from_string (file);
+        } else {
+          GST_FIXME ("Support other formats");
         }
       }
-    } else {
-      log_file = stderr;
     }
 
     gst_debug_add_log_function (gst_debug_log_default, log_file, NULL);

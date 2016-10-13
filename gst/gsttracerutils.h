@@ -35,7 +35,8 @@ G_BEGIN_DECLS
 
 /* tracing hooks */
 
-void _priv_gst_tracing_init (void);
+void _priv_gst_tracing_init_pre (void);
+void _priv_gst_tracing_init_post (void);
 void _priv_gst_tracing_deinit (void);
 
 /* tracer quarks */

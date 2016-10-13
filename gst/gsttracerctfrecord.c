@@ -397,21 +397,6 @@ gst_tracer_ctf_record_class_init (GstTracerCtfRecordClass * klass)
   GstTracerRecordClass *record_klass = GST_TRACER_RECORD_CLASS (klass);
   GObjectClass *object_klass = G_OBJECT_CLASS (klass);
 
-  const gchar *trace_path = g_getenv ("GST_TRACE_FILE");
-
-  if (g_once_init_enter (&writer)) {
-    struct bt_ctf_writer *w = bt_ctf_writer_create (trace_path);
-
-    ct_clock = bt_ctf_clock_create ("main_clock");
-
-    bt_ctf_writer_add_clock (w, ct_clock);
-    bt_ctf_writer_add_environment_field (w, "GST_VERSION", PACKAGE_VERSION);
-
-    streams = g_hash_table_new_full (g_str_hash, g_str_equal,
-        g_free, (GDestroyNotify) free_stream);
-    g_once_init_leave (&writer, w);
-  }
-
   object_klass->finalize = gst_tracer_ctf_record_finalize;
   record_klass->build_format = gst_tracer_ctf_record_build_format;
   record_klass->log = gst_tracer_ctf_record_log;
@@ -420,11 +405,69 @@ gst_tracer_ctf_record_class_init (GstTracerCtfRecordClass * klass)
 static void
 gst_tracer_ctf_record_init (GstTracerCtfRecord * self)
 {
-
 }
 
 void
-gst_tracer_ctf_record_deinit (void)
+gst_ctf_init_pre (void)
+{
+  const gchar *trace_path;
+  const char *format_description = g_getenv ("GST_DEBUG_FORMAT");
+  GstStructure *options;
+
+  if (format_description == NULL)
+    return;
+
+  options = gst_structure_from_string (format_description, NULL);
+
+  if (!options)
+    goto done;
+
+  if (!gst_structure_has_name (options, "ctf"))
+    return;
+
+  trace_path = (gchar *) gst_structure_get_string (options, "dir");
+  if (!trace_path)
+    trace_path = (gchar *) gst_structure_get_string (options, "d");
+
+  if (!trace_path)
+    trace_path = (gchar *) gst_structure_get_string (options, "directory");
+
+  if (!trace_path) {
+    gchar *trace_path = g_build_filename (g_get_tmp_dir (),
+        "gstctftraces-XXXXXX", NULL);
+
+    g_printerr ("GStreamer CTF logs outputed in: %s\n", trace_path);
+  }
+
+  writer = bt_ctf_writer_create (trace_path);
+  ct_clock = bt_ctf_clock_create ("main_clock");
+  bt_ctf_writer_add_clock (writer, ct_clock);
+  bt_ctf_writer_add_environment_field (writer, "GST_VERSION", PACKAGE_VERSION);
+
+  streams = g_hash_table_new_full (g_str_hash, g_str_equal,
+      g_free, (GDestroyNotify) free_stream);
+
+done:
+  if (options)
+    gst_structure_free (options);
+
+  return;
+}
+
+gboolean
+gst_use_ctf (void)
+{
+  return ! !writer;
+}
+
+void
+gst_ctf_init_post (void)
+{
+  bt_ctf_writer_flush_metadata (writer);
+}
+
+void
+gst_ctf_deinit (void)
 {
   if (writer) {
     g_hash_table_unref (streams);
