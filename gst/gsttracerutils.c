@@ -71,16 +71,7 @@ GHashTable *_priv_tracers = NULL;
 
 /* Initialize the tracing system */
 void
-_priv_gst_tracing_init_pre (void)
-{
-#ifdef HAVE_BABELTRACE
-  gst_ctf_init_pre ();
-#endif
-
-}
-
-void
-_priv_gst_tracing_init_post (void)
+_priv_gst_tracing_init (void)
 {
   gint i = 0;
   const gchar *env = g_getenv ("GST_TRACERS");
@@ -145,8 +136,9 @@ _priv_gst_tracing_init_post (void)
   }
 
 #ifdef HAVE_BABELTRACE
-  gst_ctf_init_post ();
+  gst_tracer_ctf_record_init ();
 #endif
+
 }
 
 void
@@ -174,7 +166,7 @@ _priv_gst_tracing_deinit (void)
   _priv_tracers = NULL;
 
 #ifdef HAVE_BABELTRACE
-  gst_ctf_deinit ();
+  gst_tracer_ctf_record_deinit ();
 #endif
 }
 

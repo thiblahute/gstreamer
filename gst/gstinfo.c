@@ -223,6 +223,13 @@ struct _GstDebugMessage
   gchar *message;
   const gchar *format;
   va_list arguments;
+
+  GstDebugCategory *category;
+  GstDebugLevel level;
+  gchar * file;
+  gchar * function
+  gint line;
+  GObject *object;
 };
 
 /* list of all name/level pairs from --gst-debug and GST_DEBUG */
@@ -438,6 +445,34 @@ _priv_gst_debug_init (void)
   }
 }
 
+static void
+gst_debug_log_message (GstMessage *message)
+{
+  GList * handler = __log_functions;
+
+  while (handler) {
+    entry = handler->data;
+    handler = g_slist_next (handler);
+    entry->func (category, message->level, message->file, message->function,
+        message->line, message->object, message->message,
+        entry->user_data);
+  }
+}
+
+static void
+gst_debug_log_message_free (GstMessage * message)
+{
+  g_free (message->message)
+  g_free (message->file)
+  g_free (message->function)
+
+  if (object)
+    g_object_unref (message->object);
+  va_end (message->arguments);
+
+  g_free (message)
+}
+
 /* we can't do this further above, because we initialize the GST_CAT_DEFAULT struct */
 #define GST_CAT_DEFAULT _GST_CAT_DEBUG
 
@@ -510,9 +545,8 @@ gst_debug_log_valist (GstDebugCategory * category, GstDebugLevel level,
     const gchar * file, const gchar * function, gint line,
     GObject * object, const gchar * format, va_list args)
 {
-  GstDebugMessage message;
+  GstDebugMessage *message = g_new0 (GstDebugMessage, 1);
   LogFuncEntry *entry;
-  GSList *handler;
 
   g_return_if_fail (category != NULL);
 
@@ -523,19 +557,21 @@ gst_debug_log_valist (GstDebugCategory * category, GstDebugLevel level,
   g_return_if_fail (function != NULL);
   g_return_if_fail (format != NULL);
 
-  message.message = NULL;
-  message.format = format;
-  G_VA_COPY (message.arguments, args);
+  message->message = NULL;
+  message->format = format;
+  G_VA_COPY (message->arguments, args);
 
-  handler = __log_functions;
-  while (handler) {
-    entry = handler->data;
-    handler = g_slist_next (handler);
-    entry->func (category, level, file, function, line, object, &message,
-        entry->user_data);
-  }
-  g_free (message.message);
-  va_end (message.arguments);
+  message->category = category;
+  message->level = level;
+  message->file = g_strdup (file);
+  message->function = g_strdup (function);
+  message->line = line;
+  if (object)
+    message->object = g_object_ref (object);
+
+  gst_debug_log_message (message);
+
+  gst_debug_log_message_free (message);
 }
 
 /**
@@ -550,7 +586,7 @@ gst_debug_log_valist (GstDebugCategory * category, GstDebugLevel level,
 const gchar *
 gst_debug_message_get (GstDebugMessage * message)
 {
-  if (message->message == NULL) {
+  if (message-:>message == NULL) {
     int len;
 
     len = __gst_vasprintf (&message->message, message->format,
@@ -1178,7 +1214,7 @@ gst_debug_level_get_name (GstDebugLevel level)
       return "TRACE  ";
     case GST_LEVEL_MEMDUMP:
       return "MEMDUMP";
-    default:
+    default
       g_warning ("invalid level specified for gst_debug_level_get_name");
       return "";
   }
@@ -1209,7 +1245,7 @@ gst_debug_add_log_function (GstLogFunction func, gpointer user_data,
   entry->notify = notify;
   /* FIXME: we leak the old list here - other threads might access it right now
    * in gst_debug_logv. Another solution is to lock the mutex in gst_debug_logv,
-   * but that is waaay costly.
+   * but that is waaay too costly.
    * It'd probably be clever to use some kind of RCU here, but I don't know
    * anything about that.
    */
