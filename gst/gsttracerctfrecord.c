@@ -27,6 +27,7 @@
 #include "gstenumtypes.h"
 #include "gststructure.h"
 #include "gstvalue.h"
+#include "gstatomicqueue.h"
 #include "gsttracerctfrecord.h"
 #include <babeltrace/ctf-writer/writer.h>
 #include <babeltrace/ctf-writer/clock.h>
@@ -36,11 +37,27 @@
 #include <babeltrace/ctf-writer/event-fields.h>
 #include <babeltrace/ctf-writer/stream-class.h>
 
-#define STREAM_FLUSH_COUNT 1000
+#define STREAM_FLUSH_COUNT 100
 
-static struct bt_ctf_writer *writer = NULL;
-static GHashTable *streams = NULL;
-struct bt_ctf_clock *ct_clock = NULL;
+static gchar *trace_path = NULL;
+
+/* We concider the CTF writer subsystem
+ * initialized when the writing thread is
+ * up and the CTF writer has been configured */
+static gboolean initialized = FALSE;
+
+/* List of GstTracerCtfRecord to be initialized
+ * in the writing thread */
+static GList *records = NULL;
+
+/* Queue holding the pending traces */
+static GstAtomicQueue *queue = NULL;
+
+static GThread *writing_thread = NULL;
+/* The writing lock needs to be hold while signaling
+ * the writing cond and while flushing the queue. */
+static GMutex writing_lock;
+static GCond writing_cond;
 
 struct _GstTracerCtfRecordClass
 {
@@ -50,15 +67,23 @@ struct _GstTracerCtfRecordClass
 typedef struct
 {
   struct bt_ctf_stream *ctfstream;
-  gint n_logs;
-} CtfFlushStream;
+} CtfStreamData;
 
 struct _GstTracerCtfRecord
 {
   GstTracerRecord parent;
   struct bt_ctf_event_class *event_class;
-  CtfFlushStream *stream;
+  CtfStreamData *stream;
+
+  GPtrArray *format;
+  GstStructure *definition;
 };
+
+typedef struct
+{
+  GstTracerCtfRecord *record;
+  GPtrArray *fields;
+} CtfLog;
 
 /* FIXME Copied from writer.py, remove when exposed in the C API */
 enum FloatingPointFieldDeclaration
@@ -77,7 +102,7 @@ G_DEFINE_TYPE (GstTracerCtfRecord, gst_tracer_ctf_record,
 /* *INDENT-ON* */
 
 static void
-free_stream (CtfFlushStream * stream)
+free_stream (CtfStreamData * stream)
 {
   bt_ctf_stream_flush (stream->ctfstream);
   bt_put (stream->ctfstream);
@@ -122,7 +147,6 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
     const GValue * value, GstTracerCtfRecord * self)
 {
   struct bt_ctf_field_type *type = NULL;
-  gchar *cleaned_field_name;
 
   switch (G_VALUE_TYPE (value)) {
     case G_TYPE_STRING:
@@ -183,7 +207,7 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
   }
 
   if (type) {
-    gchar *c;
+    gchar *c, *cleaned_field_name;
     const gchar *f, *field_name = g_quark_to_string (field_id);
 
     c = cleaned_field_name = g_strdup (field_name);
@@ -200,7 +224,9 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
       GST_ERROR ("Could not add field: '%s'", cleaned_field_name);
       g_assert_not_reached ();
     }
-    bt_put (type);
+
+    g_free (cleaned_field_name);
+    g_ptr_array_add (self->format, type);
   } else {
     g_error ("Unhandled type: %s!\n", G_VALUE_TYPE_NAME (value));
   }
@@ -251,136 +277,165 @@ static gboolean
 gst_tracer_ctf_record_build_format (GstTracerRecord * record,
     GstStructure * structure)
 {
-  GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (record);
-  struct bt_ctf_stream_class *stream_class;
-  CtfFlushStream *fstream;
-
-  fstream = g_hash_table_lookup (streams, record->source_name);
-  if (!fstream) {
-    struct bt_ctf_stream *stream;
-
-    stream_class = bt_ctf_stream_class_create (record->source_name);
-    bt_ctf_stream_class_set_clock (stream_class, ct_clock);
-    stream = bt_ctf_writer_create_stream (writer, stream_class);
-    g_assert (stream);
-
-    fstream = g_new0 (CtfFlushStream, 1);
-    fstream->ctfstream = stream;
-
-    g_hash_table_insert (streams, g_strdup (record->source_name), fstream);
-  } else {
-    stream_class = bt_ctf_stream_get_class (fstream->ctfstream);
-  }
-
-  self->stream = fstream;
-  self->event_class =
-      bt_ctf_event_class_create (gst_structure_get_name (structure));
-  gst_structure_foreach (structure,
-      (GstStructureForeachFunc) gst_tracer_ctf_add_event_class, self);
-  g_assert (!bt_ctf_stream_class_add_event_class (stream_class,
-          self->event_class));
-
-  bt_put (stream_class);
+  GST_TRACER_CTF_RECORD (record)->definition = structure;
+  records = g_list_prepend (records, record);
 
   return TRUE;
-}
-
-static void
-gst_tracer_ctf_record_append_event (GstTracerCtfRecord * self,
-    struct bt_ctf_event *event)
-{
-  g_assert (!bt_ctf_stream_append_event (self->stream->ctfstream, event));
-  bt_put (event);
-
-  /* Not really MT safe... but it should not cause any issue! */
-  self->stream->n_logs++;
-  if (self->stream->n_logs > STREAM_FLUSH_COUNT) {
-    self->stream->n_logs = 0;
-    bt_ctf_stream_flush (self->stream->ctfstream);
-  }
 }
 
 static void
 gst_tracer_ctf_record_log (GstTracerRecord * record, va_list var_args)
 {
   gint i;
-  struct bt_ctf_field *field;
   struct bt_ctf_field_type *field_type;
+  CtfLog *log;
+  GPtrArray *fields;
   GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (record);
-  struct bt_ctf_event *event = bt_ctf_event_create (self->event_class);
 
-  for (i = 0; (field = bt_ctf_event_get_payload_by_index (event, i)); i++) {
-    field_type = bt_ctf_field_get_type (field);
+  if (!initialized) {
+    GST_WARNING_OBJECT (record, "Trying to log before the CTF writer is "
+        "initialized");
+
+    return;
+  }
+
+  log = g_new (CtfLog, 1);
+  log->record = gst_object_ref (record);
+  fields = log->fields = g_ptr_array_sized_new (self->format->len);
+
+  for (i = 0; i < self->format->len; i++) {
+    field_type = g_ptr_array_index (self->format, i);
+
     switch (bt_ctf_field_type_get_type_id (field_type)) {
       case CTF_TYPE_STRING:
-        g_assert (!bt_ctf_field_string_set_value (field, va_arg (var_args,
-                    gchar *)));
+        g_ptr_array_add (fields, g_strdup (va_arg (var_args, gchar *)));
         break;
       case CTF_TYPE_INTEGER:
       {
-        if (bt_ctf_field_type_integer_get_signed (field_type)) {
+        gint64 *i = g_new0 (gint64, 1); /* Just make enough space .... */
 
-          if (bt_ctf_field_type_integer_get_size (field_type) == 32)
-            g_assert (!bt_ctf_field_signed_integer_set_value (field,
-                    va_arg (var_args, gint32)));
-          else
-            g_assert (!bt_ctf_field_signed_integer_set_value (field,
-                    va_arg (var_args, gint64)));
+        *i = va_arg (var_args, gint64);
 
-        } else {
-
-          if (bt_ctf_field_type_integer_get_size (field_type) == 8)
-            g_assert (!bt_ctf_field_unsigned_integer_set_value (field,
-                    ! !va_arg (var_args, gboolean)));
-          else if (bt_ctf_field_type_integer_get_size (field_type) == 8)
-            g_assert (!bt_ctf_field_unsigned_integer_set_value (field,
-                    va_arg (var_args, guint32)));
-          else
-            g_assert (!bt_ctf_field_unsigned_integer_set_value (field,
-                    va_arg (var_args, guint64)));
-
-        }
-
+        g_ptr_array_add (fields, i);
         break;
       }
       case CTF_TYPE_FLOAT:
       {
-        bt_ctf_field_floating_point_set_value (field, va_arg (var_args,
-                gdouble));
+        gdouble *i = g_new0 (gdouble, 1);       /* Just make enough space .... */
+        *i = va_arg (var_args, gdouble);
+
+        g_ptr_array_add (fields, i);
       }
         break;
       case CTF_TYPE_ENUM:
       {
-        struct bt_ctf_field *enum_container_field =
-            bt_ctf_field_enumeration_get_container (field);
-        gint64 val = va_arg (var_args, gint64);
+        gint64 *i = g_new0 (gint64, 1); /* Just make enough space .... */
 
-        bt_ctf_field_signed_integer_set_value (enum_container_field, val);
-
+        *i = va_arg (var_args, gint64);
+        g_ptr_array_add (fields, i);
         break;
       }
       case CTF_TYPE_STRUCT:
       {
         GstStructure *structure = va_arg (var_args, GstStructure *);
-
         gchar *structure_str = gst_structure_to_string (structure);
-        struct bt_ctf_field *str_field =
-            bt_ctf_field_structure_get_field (field,
-            "gststructure_string");
 
-        bt_ctf_field_string_set_value (str_field, structure_str);
-        g_free (structure_str);
-
+        g_ptr_array_add (fields, structure_str);
         break;
       }
       default:
         break;
     }
+  }
+
+  gst_atomic_queue_push (queue, log);
+
+  /* Not really MT safe... but it should not cause any issue! */
+  if (gst_atomic_queue_length (queue) > STREAM_FLUSH_COUNT) {
+    g_mutex_lock (&writing_lock);
+    if (gst_atomic_queue_length (queue) > STREAM_FLUSH_COUNT)
+      g_cond_signal (&writing_cond);
+    g_mutex_unlock (&writing_lock);
+  }
+}
+
+static void
+gst_ctf_recorder_write_log (CtfLog * log)
+{
+  gint i;
+  struct bt_ctf_field *field;
+  struct bt_ctf_field_type *field_type;
+  GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (log->record);
+  struct bt_ctf_event *event = bt_ctf_event_create (self->event_class);
+
+  for (i = 0; (field = bt_ctf_event_get_payload_by_index (event, i)); i++) {
+    gpointer *data = g_ptr_array_index (log->fields, i);
+
+    field_type = bt_ctf_field_get_type (field);
+    switch (bt_ctf_field_type_get_type_id (field_type)) {
+      case CTF_TYPE_STRING:
+        g_assert (!bt_ctf_field_string_set_value (field, (gchar *) data));
+        goto next;
+      case CTF_TYPE_INTEGER:
+      {
+        if (bt_ctf_field_type_integer_get_signed (field_type)) {
+          if (bt_ctf_field_type_integer_get_size (field_type) == 32)
+            g_assert (!bt_ctf_field_signed_integer_set_value (field,
+                    *((gint32 *) data)));
+          else
+            g_assert (!bt_ctf_field_signed_integer_set_value (field,
+                    *((gint64 *) data)));
+        } else {
+
+          if (bt_ctf_field_type_integer_get_size (field_type) == 8)
+            g_assert (!bt_ctf_field_unsigned_integer_set_value (field,
+                    *((guint8 *) data)));
+          else if (bt_ctf_field_type_integer_get_size (field_type) == 32)
+            g_assert (!bt_ctf_field_unsigned_integer_set_value (field,
+                    *((guint32 *) data)));
+          else
+            g_assert (!bt_ctf_field_unsigned_integer_set_value (field,
+                    *((guint64 *) data)));
+        }
+
+        goto next;
+      }
+      case CTF_TYPE_FLOAT:
+      {
+        bt_ctf_field_floating_point_set_value (field, *((gdouble *) data));
+        goto next;
+      }
+      case CTF_TYPE_ENUM:
+      {
+        struct bt_ctf_field *enum_container_field =
+            bt_ctf_field_enumeration_get_container (field);
+        gint64 val = (gint64) * data;
+
+        bt_ctf_field_signed_integer_set_value (enum_container_field, val);
+
+        bt_put (enum_container_field);
+        goto next;
+      }
+      case CTF_TYPE_STRUCT:
+      {
+        struct bt_ctf_field *str_field =
+            bt_ctf_field_structure_get_field (field, "gststructure_string");
+
+        bt_ctf_field_string_set_value (str_field, (gchar *) data);
+        goto next;
+      }
+      default:
+        break;
+
+      next:
+        g_free (data);
+    }
     bt_put (field_type);
     bt_put (field);
   }
 
-  gst_tracer_ctf_record_append_event (self, event);
+  g_assert (!bt_ctf_stream_append_event (self->stream->ctfstream, event));
+  bt_put (event);
 }
 
 static void
@@ -405,12 +460,131 @@ gst_tracer_ctf_record_class_init (GstTracerCtfRecordClass * klass)
 static void
 gst_tracer_ctf_record_init (GstTracerCtfRecord * self)
 {
+  self->format = g_ptr_array_sized_new (10);
+}
+
+static void
+gst_ctf_flush_queue (void)
+{
+  GList *tmp, *streams = NULL;
+  CtfLog *log;
+
+  while ((log = (CtfLog *) gst_atomic_queue_pop (queue))) {
+    gst_ctf_recorder_write_log (log);
+
+    if (!g_list_find (streams, log->record->stream->ctfstream)) {
+      streams = g_list_prepend (streams, log->record->stream->ctfstream);
+    }
+
+    g_ptr_array_unref (log->fields);
+    gst_object_unref (log->record);
+    g_free (log);
+  }
+
+  for (tmp = streams; tmp; tmp = tmp->next) {
+    GST_INFO ("Flushing %p", tmp->data);
+    bt_ctf_stream_flush (tmp->data);
+  }
+
+  g_list_free (streams);
+
+}
+
+static gpointer
+gst_ctf_write (gpointer unused)
+{
+  struct bt_ctf_writer *writer = NULL;
+  struct bt_ctf_clock *ct_clock = NULL;
+  GHashTable *streams = NULL;
+  GList *tmp;
+
+  if (!records) {
+    GST_INFO ("No record set, not doing anything");
+
+    g_clear_pointer (&writing_thread, g_thread_unref);
+
+    GST_DEBUG ("Nothing to log in CTF ... "
+        "waking up the initializing thread");
+    g_mutex_lock (&writing_lock);
+    initialized = TRUE;
+    g_cond_signal (&writing_cond);
+    g_mutex_unlock (&writing_lock);
+
+    return NULL;
+  }
+
+  writer = bt_ctf_writer_create (trace_path);
+  ct_clock = bt_ctf_clock_create ("main_clock");
+  bt_ctf_writer_add_clock (writer, ct_clock);
+  bt_ctf_writer_add_environment_field (writer, "GST_VERSION", PACKAGE_VERSION);
+
+  streams = g_hash_table_new_full (g_str_hash, g_str_equal,
+      g_free, (GDestroyNotify) free_stream);
+
+  for (tmp = records; tmp; tmp = tmp->next) {
+    GstTracerRecord *record = GST_TRACER_RECORD (tmp->data);
+    GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (record);
+    GstStructure *structure = self->definition;
+    struct bt_ctf_stream_class *stream_class;
+    CtfStreamData *fstream;
+
+    fstream = g_hash_table_lookup (streams, record->source_name);
+    if (!fstream) {
+      struct bt_ctf_stream *stream;
+
+      stream_class = bt_ctf_stream_class_create (record->source_name);
+      bt_ctf_stream_class_set_clock (stream_class, ct_clock);
+      stream = bt_ctf_writer_create_stream (writer, stream_class);
+      g_assert (stream);
+
+      fstream = g_new0 (CtfStreamData, 1);
+      fstream->ctfstream = stream;
+
+      g_hash_table_insert (streams, g_strdup (record->source_name), fstream);
+    } else {
+      stream_class = bt_ctf_stream_get_class (fstream->ctfstream);
+    }
+
+    self->stream = fstream;
+    self->event_class =
+        bt_ctf_event_class_create (gst_structure_get_name (structure));
+    gst_structure_foreach (structure,
+        (GstStructureForeachFunc) gst_tracer_ctf_add_event_class, self);
+    g_assert (!bt_ctf_stream_class_add_event_class (stream_class,
+            self->event_class));
+
+    bt_put (stream_class);
+  }
+  bt_ctf_writer_flush_metadata (writer);
+
+  g_list_free (records);
+  records = NULL;
+
+  /* Declare that thread as up and running */
+  g_mutex_lock (&writing_lock);
+  initialized = TRUE;
+  g_cond_signal (&writing_cond);
+  g_mutex_unlock (&writing_lock);
+
+  while (initialized) {
+    g_mutex_lock (&writing_lock);
+    g_cond_wait (&writing_cond, &writing_lock);
+    gst_ctf_flush_queue ();
+    g_mutex_unlock (&writing_lock);
+  }
+
+  gst_ctf_flush_queue ();
+
+  g_hash_table_unref (streams);
+  bt_ctf_writer_flush_metadata (writer);
+  BT_PUT (writer);
+
+  return NULL;
 }
 
 void
 gst_ctf_init_pre (void)
 {
-  const gchar *trace_path;
   const char *format_description = g_getenv ("GST_DEBUG_FORMAT");
   GstStructure *options;
 
@@ -439,13 +613,8 @@ gst_ctf_init_pre (void)
     g_printerr ("GStreamer CTF logs outputed in: %s\n", trace_path);
   }
 
-  writer = bt_ctf_writer_create (trace_path);
-  ct_clock = bt_ctf_clock_create ("main_clock");
-  bt_ctf_writer_add_clock (writer, ct_clock);
-  bt_ctf_writer_add_environment_field (writer, "GST_VERSION", PACKAGE_VERSION);
-
-  streams = g_hash_table_new_full (g_str_hash, g_str_equal,
-      g_free, (GDestroyNotify) free_stream);
+  trace_path = g_strdup (trace_path);
+  queue = gst_atomic_queue_new (STREAM_FLUSH_COUNT + 10);
 
 done:
   if (options)
@@ -454,25 +623,43 @@ done:
   return;
 }
 
-gboolean
-gst_use_ctf (void)
-{
-  return ! !writer;
-}
-
 void
 gst_ctf_init_post (void)
 {
-  bt_ctf_writer_flush_metadata (writer);
+  g_cond_init (&writing_cond);
+  g_mutex_init (&writing_lock);
+
+  /* All the tracer have been initialized between init_pre and
+   * now, we can launch the ctf writing thread and wait for all
+   * the Records to be initialized. */
+  writing_thread = g_thread_new ("ctf_writer", gst_ctf_write, NULL);
+  g_mutex_lock (&writing_lock);
+  while (!initialized)
+    g_cond_wait (&writing_cond, &writing_lock);
+  g_mutex_unlock (&writing_lock);
+}
+
+gboolean
+gst_use_ctf (void)
+{
+  return ! !trace_path;
 }
 
 void
 gst_ctf_deinit (void)
 {
-  if (writer) {
-    g_hash_table_unref (streams);
-    bt_ctf_writer_flush_metadata (writer);
+  g_mutex_lock (&writing_lock);
+  initialized = FALSE;
 
-    BT_PUT (writer);
+  if (gst_use_ctf ()) {
+    g_cond_signal (&writing_cond);
+    g_mutex_unlock (&writing_lock);
+    g_thread_join (writing_thread);
+  } else {
+    g_mutex_unlock (&writing_lock);
   }
+
+  g_cond_clear (&writing_cond);
+  g_mutex_clear (&writing_lock);
+  g_clear_pointer (&trace_path, g_free);
 }

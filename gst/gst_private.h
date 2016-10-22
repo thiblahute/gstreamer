@@ -126,6 +126,7 @@ G_GNUC_INTERNAL  void  _priv_gst_sample_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_tag_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_value_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_debug_init (void);
+G_GNUC_INTERNAL  void  _priv_gst_debug_deinit (void);
 G_GNUC_INTERNAL  void  _priv_gst_context_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_toc_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_date_time_initialize (void);
