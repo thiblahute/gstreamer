@@ -125,12 +125,21 @@
 #include "printf/printf.h"
 #include "printf/printf-extension.h"
 
+#ifdef HAVE_BABELTRACE
+#define GST_USE_UNSTABLE_API
+#include "gstenumtypes.h"
+#include "gsttracerrecord.h"
+#include "gsttracerctfrecord.h"
+static GstTracerRecord *debug_ctf_record;
+#endif
+
 static char *gst_info_printf_pointer_extension_func (const char *format,
     void *ptr);
 
 #endif /* !GST_DISABLE_GST_DEBUG */
 
 extern gboolean gst_is_initialized (void);
+
 
 /* we want these symbols exported even if debug is disabled, to maintain
  * ABI compatibility. Unless GST_REMOVE_DISABLED is defined. */
@@ -311,6 +320,20 @@ __get_debug_file_from_string (const gchar * fname)
   return log_file;
 }
 
+#ifdef HAVE_BABELTRACE
+static void
+gst_debug_log_ctf (GstDebugCategory * category, GstDebugLevel level,
+    const gchar * file, const gchar * function, gint line,
+    GObject * object, GstDebugMessage * message, gpointer user_data)
+{
+  g_return_if_fail (debug_ctf_record);
+
+  gst_tracer_record_log (debug_ctf_record,
+      gst_debug_category_get_name (category), level, file, function, line,
+      object, gst_debug_message_get (message));
+}
+#endif
+
 /* Initialize the debugging system */
 void
 _priv_gst_debug_init (void)
@@ -319,6 +342,8 @@ _priv_gst_debug_init (void)
   FILE *log_file;
 
   if (add_default_log_func) {
+    GstLogFunction debug_func = gst_debug_log_default;
+
     log_file = stderr;
     env = g_getenv ("GST_DEBUG_FILE");
     if (env != NULL && *env != '\0') {
@@ -329,19 +354,39 @@ _priv_gst_debug_init (void)
         GstStructure *format_description = gst_structure_from_string (env,
             NULL);
 
+        g_printerr ("Use CTF?? %d", gst_use_ctf ());
         if (gst_structure_has_name (format_description, "gst")) {
           const gchar *file = gst_structure_get_string (format_description,
               "file");
 
           if (file)
             log_file = __get_debug_file_from_string (file);
-        } else {
-          GST_FIXME ("Support other formats");
+#ifdef HAVE_BABELTRACE
+        } else if (gst_use_ctf ()) {
+          debug_ctf_record =
+              gst_tracer_record_new ("GstDebugLog", "debug.class", "category",
+              GST_TYPE_STRUCTURE, gst_structure_new ("categrory", "type",
+                  G_TYPE_GTYPE, G_TYPE_STRING, NULL), "level",
+              GST_TYPE_STRUCTURE, gst_structure_new ("level", "type",
+                  G_TYPE_GTYPE, GST_TYPE_DEBUG_LEVEL, NULL), "file",
+              GST_TYPE_STRUCTURE, gst_structure_new ("file", "type",
+                  G_TYPE_GTYPE, G_TYPE_STRING, NULL), "function",
+              GST_TYPE_STRUCTURE, gst_structure_new ("function", "type",
+                  G_TYPE_GTYPE, G_TYPE_STRING, NULL), "line",
+              GST_TYPE_STRUCTURE, gst_structure_new ("line", "type",
+                  G_TYPE_GTYPE, G_TYPE_INT, NULL), "object", GST_TYPE_STRUCTURE,
+              gst_structure_new ("object", "type", G_TYPE_GTYPE, G_TYPE_POINTER,
+                  NULL), "message", GST_TYPE_STRUCTURE,
+              gst_structure_new ("message", "type", G_TYPE_GTYPE, G_TYPE_STRING,
+                  NULL), NULL);
+
+          debug_func = gst_debug_log_ctf;
+#endif
         }
       }
     }
 
-    gst_debug_add_log_function (gst_debug_log_default, log_file, NULL);
+    gst_debug_add_log_function (debug_func, log_file, NULL);
   }
 
   __gst_printf_pointer_extension_set_func

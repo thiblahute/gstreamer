@@ -37,7 +37,7 @@
 #include <babeltrace/ctf-writer/event-fields.h>
 #include <babeltrace/ctf-writer/stream-class.h>
 
-#define STREAM_FLUSH_COUNT 100
+#define STREAM_FLUSH_COUNT 1500
 
 static gchar *trace_path = NULL;
 
@@ -293,8 +293,7 @@ gst_tracer_ctf_record_log (GstTracerRecord * record, va_list var_args)
   GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (record);
 
   if (!initialized) {
-    GST_WARNING_OBJECT (record, "Trying to log before the CTF writer is "
-        "initialized");
+    g_warning ("Trying to log before the CTF writer is initialized");
 
     return;
   }
