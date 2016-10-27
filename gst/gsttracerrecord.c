@@ -34,7 +34,6 @@
 #include "gst_private.h"
 #include "gstenumtypes.h"
 #include "gstinfo.h"
-#include "gststructure.h"
 #include "gsttracerrecord.h"
 #include "gstvalue.h"
 #include <gobject/gvaluecollector.h>

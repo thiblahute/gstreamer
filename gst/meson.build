@@ -223,7 +223,7 @@ if libtype != 'static'
       include_directories('parse')],
     link_with : printf_lib,
     install : true,
-    dependencies : [gobject_dep, gmodule_dep, glib_dep, mathlib, babeltrace_dep] + platform_deps,
+    dependencies : [gobject_dep, gmodule_dep, glib_dep, mathlib, babeltrace_dep, lttng_ust] + platform_deps,
     vs_module_defs: vs_module_defs_dir + 'libgstreamer.def',
   )
   libgst = libgst_shared

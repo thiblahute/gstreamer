@@ -22,6 +22,7 @@
 #ifndef __GST_TRACER_RECORD_H__
 #define __GST_TRACER_RECORD_H__
 
+#include "gststructure.h"
 #include <gst/gstobject.h>
 
 G_BEGIN_DECLS

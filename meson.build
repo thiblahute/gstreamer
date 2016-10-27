@@ -264,6 +264,7 @@ babeltrace_dep = dependency('babeltrace-ctf', required : false)
 if babeltrace_dep.found()
   cdata.set('HAVE_BABELTRACE', 1)
 endif
+lttng_ust = dependency('lttng-ust')
 
 configure_file(input : 'config.h.meson',
   output : 'config.h',
