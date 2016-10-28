@@ -37,7 +37,10 @@
 #include <babeltrace/ctf-writer/event-fields.h>
 #include <babeltrace/ctf-writer/stream-class.h>
 
+/* FIXME Check if that arbitrary number makes sense ?
+ * Maybe make it configurable through env var? */
 #define STREAM_FLUSH_COUNT 100
+#define CHECK(exp) if (exp) goto failed
 
 static gchar *trace_path = NULL;
 
@@ -114,32 +117,40 @@ static struct bt_ctf_field_type *
 gst_tracer_ctf_create_type_for_gtype (GstTracerCtfRecord * self, GType type)
 {
   gint i;
-  struct bt_ctf_field_type *enum_type, *int_64_type =
+  struct bt_ctf_field_type *enum_type = NULL, *int_64_type =
       bt_ctf_field_type_integer_create (64);
 
-  bt_ctf_field_type_integer_set_signed (int_64_type, TRUE);
+  CHECK (bt_ctf_field_type_integer_set_signed (int_64_type, TRUE));
   enum_type = bt_ctf_field_type_enumeration_create (int_64_type);
 
   if (g_type_is_a (type, G_TYPE_ENUM)) {
     GEnumClass *eclass = g_type_class_peek (type);
 
     for (i = 0; eclass->values[i].value_name; i++) {
-      bt_ctf_field_type_enumeration_add_mapping (enum_type,
-          eclass->values[i].value_name, eclass->values[i].value,
-          eclass->values[i].value);
+      CHECK (bt_ctf_field_type_enumeration_add_mapping (enum_type,
+              eclass->values[i].value_name, eclass->values[i].value,
+              eclass->values[i].value));
     }
   } else if (g_type_is_a (type, G_TYPE_FLAGS)) {
     GFlagsClass *fclass = g_type_class_peek (type);
 
     for (i = 0; fclass->values[i].value_name; i++) {
-      bt_ctf_field_type_enumeration_add_mapping (enum_type,
-          fclass->values[i].value_name, fclass->values[i].value,
-          fclass->values[i].value);
+      CHECK (bt_ctf_field_type_enumeration_add_mapping (enum_type,
+              fclass->values[i].value_name, fclass->values[i].value,
+              fclass->values[i].value));
     }
   }
-  bt_put (int_64_type);
 
+done:
+  bt_put (int_64_type);
   return enum_type;
+
+failed:
+  if (enum_type)
+    bt_put (enum_type);
+  enum_type = NULL;
+
+  goto done;
 }
 
 static gboolean
@@ -154,7 +165,7 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
       break;
     case G_TYPE_INT:
       type = bt_ctf_field_type_integer_create (sizeof (gint) * 8);
-      bt_ctf_field_type_integer_set_signed (type, TRUE);
+      CHECK (bt_ctf_field_type_integer_set_signed (type, TRUE));
       break;
     case G_TYPE_UINT:
       type = bt_ctf_field_type_integer_create (sizeof (guint) * 8);
@@ -164,7 +175,7 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
       break;
     case G_TYPE_INT64:
       type = bt_ctf_field_type_integer_create (64);
-      bt_ctf_field_type_integer_set_signed (type, TRUE);
+      CHECK (bt_ctf_field_type_integer_set_signed (type, TRUE));
       break;
     case G_TYPE_POINTER:
     case G_TYPE_UINT64:
@@ -172,13 +183,17 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
       break;
     case G_TYPE_FLOAT:
       type = bt_ctf_field_type_floating_point_create ();
-      bt_ctf_field_type_floating_point_set_exponent_digits (type, FLT_EXP_DIG);
-      bt_ctf_field_type_floating_point_set_mantissa_digits (type, FLT_MANT_DIG);
+      CHECK (bt_ctf_field_type_floating_point_set_exponent_digits (type,
+              FLT_EXP_DIG));
+      CHECK (bt_ctf_field_type_floating_point_set_mantissa_digits (type,
+              FLT_MANT_DIG));
       break;
     case G_TYPE_DOUBLE:
       type = bt_ctf_field_type_floating_point_create ();
-      bt_ctf_field_type_floating_point_set_exponent_digits (type, DBL_EXP_DIG);
-      bt_ctf_field_type_floating_point_set_mantissa_digits (type, DBL_MANT_DIG);
+      CHECK (bt_ctf_field_type_floating_point_set_exponent_digits (type,
+              DBL_EXP_DIG));
+      CHECK (bt_ctf_field_type_floating_point_set_mantissa_digits (type,
+              DBL_MANT_DIG));
       break;
     default:
       if (g_type_is_a (G_VALUE_TYPE (value), G_TYPE_ENUM) ||
@@ -190,6 +205,9 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
           type =
               gst_tracer_ctf_create_type_for_gtype (self, G_VALUE_TYPE (value));
 
+          if (!type)
+            goto failed;
+
           g_type_set_qdata (G_VALUE_TYPE (value),
               g_quark_from_static_string ("bt_ctf_type"), type);
         }
@@ -197,8 +215,8 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
         struct bt_ctf_field_type *str_type = bt_ctf_field_type_string_create ();
 
         type = bt_ctf_field_type_structure_create ();
-        bt_ctf_field_type_structure_add_field (type, str_type,
-            "gststructure_string");
+        CHECK (bt_ctf_field_type_structure_add_field (type, str_type,
+                "gststructure_string"));
 
         bt_put (str_type);
         break;
@@ -207,6 +225,7 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
   }
 
   if (type) {
+    gboolean res;
     gchar *c, *cleaned_field_name;
     const gchar *f, *field_name = g_quark_to_string (field_id);
 
@@ -219,21 +238,29 @@ gst_tracer_ctf_record_add_event_class_field (GQuark field_id,
         *c = *f;
     }
 
-    if (bt_ctf_event_class_add_field (self->event_class, type,
-            cleaned_field_name)) {
+    res = bt_ctf_event_class_add_field (self->event_class, type,
+        cleaned_field_name);
+    g_free (cleaned_field_name);
+    if (res) {
       GST_ERROR ("Could not add field: '%s'", cleaned_field_name);
-      g_assert_not_reached ();
+      goto failed;
     }
 
-    g_free (cleaned_field_name);
     g_ptr_array_add (self->format, type);
   } else {
-    g_error ("Unhandled type: %s!\n", G_VALUE_TYPE_NAME (value));
+    GST_ERROR_OBJECT (self, "Unhandled type: %s!\n", G_VALUE_TYPE_NAME (value));
+
+    goto failed;
   }
 
   return TRUE;
+
+failed:
+  return FALSE;
 }
 
+/* NOTE: On any error, self->event_class will be unrefed
+ * and set to NULL and the Record will become unusable */
 static gboolean
 gst_tracer_ctf_add_event_class (GQuark field_id,
     const GValue * value, GstTracerCtfRecord * self)
@@ -247,7 +274,7 @@ gst_tracer_ctf_add_event_class (GQuark field_id,
   if (G_VALUE_TYPE (value) != GST_TYPE_STRUCTURE) {
     GST_WARNING ("expected field of type GstStructure, but %s is %s",
         g_quark_to_string (field_id), G_VALUE_TYPE_NAME (value));
-    return FALSE;
+    goto failed;
   }
 
   sub = gst_value_get_structure (value);
@@ -259,10 +286,13 @@ gst_tracer_ctf_add_event_class (GQuark field_id,
 
     /* add a boolean field, that indicates the presence of the next field */
     g_value_init (&template_value, G_TYPE_BOOLEAN);
-    gst_tracer_ctf_record_add_event_class_field (g_quark_from_string
+    res = gst_tracer_ctf_record_add_event_class_field (g_quark_from_string
         (opt_name), &template_value, self);
     g_value_unset (&template_value);
     g_free (opt_name);
+
+    if (!res)
+      goto failed;
   }
 
   g_value_init (&template_value, type);
@@ -271,6 +301,10 @@ gst_tracer_ctf_add_event_class (GQuark field_id,
   g_value_unset (&template_value);
 
   return res;
+
+failed:
+  g_clear_pointer (&self->event_class, bt_put);
+  return FALSE;
 }
 
 static gboolean
@@ -295,6 +329,13 @@ gst_tracer_ctf_record_log (GstTracerRecord * record, va_list var_args)
   if (!initialized) {
     GST_WARNING_OBJECT (record, "Trying to log before the CTF writer is "
         "initialized");
+
+    return;
+  }
+
+  if (!self->event_class) {
+    GST_INFO_OBJECT (record, "No event class set, probably due to a previous"
+        "failure, bailing out");
 
     return;
   }
@@ -374,36 +415,41 @@ gst_ctf_recorder_write_log (CtfLog * log)
     field_type = bt_ctf_field_get_type (field);
     switch (bt_ctf_field_type_get_type_id (field_type)) {
       case CTF_TYPE_STRING:
-        g_assert (!bt_ctf_field_string_set_value (field, (gchar *) data));
-        goto next;
+      {
+        CHECK (bt_ctf_field_string_set_value (field, (gchar *) data));
+
+        break;
+      }
       case CTF_TYPE_INTEGER:
       {
         if (bt_ctf_field_type_integer_get_signed (field_type)) {
-          if (bt_ctf_field_type_integer_get_size (field_type) == 32)
-            g_assert (!bt_ctf_field_signed_integer_set_value (field,
+          if (bt_ctf_field_type_integer_get_size (field_type) == 32) {
+            CHECK (bt_ctf_field_signed_integer_set_value (field,
                     *((gint32 *) data)));
-          else
-            g_assert (!bt_ctf_field_signed_integer_set_value (field,
+          } else {
+            CHECK (bt_ctf_field_signed_integer_set_value (field,
                     *((gint64 *) data)));
+          }
         } else {
-
-          if (bt_ctf_field_type_integer_get_size (field_type) == 8)
-            g_assert (!bt_ctf_field_unsigned_integer_set_value (field,
+          if (bt_ctf_field_type_integer_get_size (field_type) == 8) {
+            CHECK (bt_ctf_field_unsigned_integer_set_value (field,
                     *((guint8 *) data)));
-          else if (bt_ctf_field_type_integer_get_size (field_type) == 32)
-            g_assert (!bt_ctf_field_unsigned_integer_set_value (field,
+          } else if (bt_ctf_field_type_integer_get_size (field_type) == 32) {
+            CHECK (bt_ctf_field_unsigned_integer_set_value (field,
                     *((guint32 *) data)));
-          else
-            g_assert (!bt_ctf_field_unsigned_integer_set_value (field,
+          } else {
+            CHECK (bt_ctf_field_unsigned_integer_set_value (field,
                     *((guint64 *) data)));
+          }
         }
-
-        goto next;
+        break;
       }
       case CTF_TYPE_FLOAT:
       {
-        bt_ctf_field_floating_point_set_value (field, *((gdouble *) data));
-        goto next;
+        CHECK (bt_ctf_field_floating_point_set_value (field,
+                *((gdouble *) data)));
+
+        break;
       }
       case CTF_TYPE_ENUM:
       {
@@ -411,30 +457,45 @@ gst_ctf_recorder_write_log (CtfLog * log)
             bt_ctf_field_enumeration_get_container (field);
         gint64 val = (gint64) * data;
 
-        bt_ctf_field_signed_integer_set_value (enum_container_field, val);
+        if (bt_ctf_field_signed_integer_set_value (enum_container_field, val))
+          goto failed;
 
         bt_put (enum_container_field);
-        goto next;
+        break;
       }
       case CTF_TYPE_STRUCT:
       {
         struct bt_ctf_field *str_field =
             bt_ctf_field_structure_get_field (field, "gststructure_string");
 
-        bt_ctf_field_string_set_value (str_field, (gchar *) data);
-        goto next;
+        if (bt_ctf_field_string_set_value (str_field, (gchar *) data))
+          goto failed;
+        break;
       }
       default:
-        break;
+      {
+        GST_ERROR_OBJECT (self, "CTF Type %d not handled.",
+            bt_ctf_field_type_get_type_id (field_type));
 
-      next:
-        g_free (data);
+        break;
+      }
     }
+    g_free (data);
     bt_put (field_type);
     bt_put (field);
+    continue;
+
+  failed:
+    g_free (data);
+    bt_put (field_type);
+    bt_put (field);
+    goto done;
   }
 
-  g_assert (!bt_ctf_stream_append_event (self->stream->ctfstream, event));
+  if (bt_ctf_stream_append_event (self->stream->ctfstream, event))
+    GST_ERROR_OBJECT (self, "Could not add event %p", event);
+
+done:
   bt_put (event);
 }
 
@@ -443,7 +504,8 @@ gst_tracer_ctf_record_finalize (GObject * object)
 {
   GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (object);
 
-  bt_put (self->event_class);
+  if (self->event_class)
+    bt_put (self->event_class);
 }
 
 static void
@@ -525,7 +587,7 @@ gst_ctf_write (gpointer unused)
     GstTracerRecord *record = GST_TRACER_RECORD (tmp->data);
     GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (record);
     GstStructure *structure = self->definition;
-    struct bt_ctf_stream_class *stream_class;
+    struct bt_ctf_stream_class *stream_class = NULL;
     CtfStreamData *fstream;
 
     fstream = g_hash_table_lookup (streams, record->source_name);
@@ -535,7 +597,11 @@ gst_ctf_write (gpointer unused)
       stream_class = bt_ctf_stream_class_create (record->source_name);
       bt_ctf_stream_class_set_clock (stream_class, ct_clock);
       stream = bt_ctf_writer_create_stream (writer, stream_class);
-      g_assert (stream);
+      if (!stream) {
+        GST_ERROR_OBJECT (record, "Could not create stream, the record"
+            " won't be usable.");
+        goto next;
+      }
 
       fstream = g_new0 (CtfStreamData, 1);
       fstream->ctfstream = stream;
@@ -548,12 +614,26 @@ gst_ctf_write (gpointer unused)
     self->stream = fstream;
     self->event_class =
         bt_ctf_event_class_create (gst_structure_get_name (structure));
+    if (!self->event_class) {
+      GST_ERROR_OBJECT (self, "Could not create event class, the record"
+          " won't be usable");
+      goto next;
+    }
+
     gst_structure_foreach (structure,
         (GstStructureForeachFunc) gst_tracer_ctf_add_event_class, self);
-    g_assert (!bt_ctf_stream_class_add_event_class (stream_class,
-            self->event_class));
 
-    bt_put (stream_class);
+    if (bt_ctf_stream_class_add_event_class (stream_class, self->event_class)) {
+      GST_ERROR_OBJECT (self, "Could not add event class to the stream");
+
+      bt_put (self->event_class);
+      self->event_class = NULL;
+      goto next;
+    }
+
+  next:
+    if (stream_class)
+      bt_put (stream_class);
   }
   bt_ctf_writer_flush_metadata (writer);
 
