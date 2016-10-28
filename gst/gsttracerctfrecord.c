@@ -67,16 +67,11 @@ struct _GstTracerCtfRecordClass
   GstTracerRecordClass parent;
 };
 
-typedef struct
-{
-  struct bt_ctf_stream *ctfstream;
-} CtfStreamData;
-
 struct _GstTracerCtfRecord
 {
   GstTracerRecord parent;
   struct bt_ctf_event_class *event_class;
-  CtfStreamData *stream;
+  struct bt_ctf_stream *stream;
 
   GPtrArray *format;
   GstStructure *definition;
@@ -103,15 +98,6 @@ enum FloatingPointFieldDeclaration
 G_DEFINE_TYPE (GstTracerCtfRecord, gst_tracer_ctf_record,
     GST_TYPE_TRACER_RECORD)
 /* *INDENT-ON* */
-
-static void
-free_stream (CtfStreamData * stream)
-{
-  bt_ctf_stream_flush (stream->ctfstream);
-  bt_put (stream->ctfstream);
-
-  g_free (stream);
-}
 
 static struct bt_ctf_field_type *
 gst_tracer_ctf_create_type_for_gtype (GstTracerCtfRecord * self, GType type)
@@ -492,7 +478,7 @@ gst_ctf_recorder_write_log (CtfLog * log)
     goto done;
   }
 
-  if (bt_ctf_stream_append_event (self->stream->ctfstream, event))
+  if (bt_ctf_stream_append_event (self->stream, event))
     GST_ERROR_OBJECT (self, "Could not add event %p", event);
 
 done:
@@ -534,8 +520,8 @@ gst_ctf_flush_queue (void)
   while ((log = (CtfLog *) gst_atomic_queue_pop (queue))) {
     gst_ctf_recorder_write_log (log);
 
-    if (!g_list_find (streams, log->record->stream->ctfstream)) {
-      streams = g_list_prepend (streams, log->record->stream->ctfstream);
+    if (!g_list_find (streams, log->record->stream)) {
+      streams = g_list_prepend (streams, log->record->stream);
     }
 
     g_ptr_array_unref (log->fields);
@@ -581,19 +567,17 @@ gst_ctf_write (gpointer unused)
   bt_ctf_writer_add_environment_field (writer, "GST_VERSION", PACKAGE_VERSION);
 
   streams = g_hash_table_new_full (g_str_hash, g_str_equal,
-      g_free, (GDestroyNotify) free_stream);
+      g_free, (GDestroyNotify) bt_put);
 
   for (tmp = records; tmp; tmp = tmp->next) {
     GstTracerRecord *record = GST_TRACER_RECORD (tmp->data);
     GstTracerCtfRecord *self = GST_TRACER_CTF_RECORD (record);
     GstStructure *structure = self->definition;
     struct bt_ctf_stream_class *stream_class = NULL;
-    CtfStreamData *fstream;
+    struct bt_ctf_stream *stream = NULL;
 
-    fstream = g_hash_table_lookup (streams, record->source_name);
-    if (!fstream) {
-      struct bt_ctf_stream *stream;
-
+    stream = g_hash_table_lookup (streams, record->source_name);
+    if (!stream) {
       stream_class = bt_ctf_stream_class_create (record->source_name);
       bt_ctf_stream_class_set_clock (stream_class, ct_clock);
       stream = bt_ctf_writer_create_stream (writer, stream_class);
@@ -603,15 +587,12 @@ gst_ctf_write (gpointer unused)
         goto next;
       }
 
-      fstream = g_new0 (CtfStreamData, 1);
-      fstream->ctfstream = stream;
-
-      g_hash_table_insert (streams, g_strdup (record->source_name), fstream);
+      g_hash_table_insert (streams, g_strdup (record->source_name), stream);
     } else {
-      stream_class = bt_ctf_stream_get_class (fstream->ctfstream);
+      stream_class = bt_ctf_stream_get_class (stream);
     }
 
-    self->stream = fstream;
+    self->stream = stream;
     self->event_class =
         bt_ctf_event_class_create (gst_structure_get_name (structure));
     if (!self->event_class) {
