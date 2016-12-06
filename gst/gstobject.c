@@ -111,6 +111,11 @@ enum
   SO_LAST_SIGNAL
 };
 
+struct _GstObjectPrivate
+{
+  GList *control_bindings;      /* List of GstControlBinding */
+};
+
 /* maps type name quark => count */
 static GData *object_name_counts = NULL;
 
@@ -147,6 +152,8 @@ static void
 gst_object_class_init (GstObjectClass * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
+
+  g_type_class_add_private (klass, sizeof (GstObjectPrivate));
 
   gobject_class->set_property = gst_object_set_property;
   gobject_class->get_property = gst_object_get_property;
@@ -201,6 +208,8 @@ gst_object_class_init (GstObjectClass * klass)
 static void
 gst_object_init (GstObject * object)
 {
+  object->priv = G_TYPE_INSTANCE_GET_PRIVATE (object,
+      GST_TYPE_OBJECT, GstObjectPrivate);
   g_mutex_init (&object->lock);
   object->parent = NULL;
   object->name = NULL;
@@ -358,14 +367,14 @@ gst_object_dispose (GObject * object)
   GST_OBJECT_PARENT (object) = NULL;
   GST_OBJECT_UNLOCK (object);
 
-  if (self->control_bindings) {
+  if (self->priv->control_bindings) {
     GList *node;
 
-    for (node = self->control_bindings; node; node = g_list_next (node)) {
+    for (node = self->priv->control_bindings; node; node = g_list_next (node)) {
       gst_object_unparent (node->data);
     }
-    g_list_free (self->control_bindings);
-    self->control_bindings = NULL;
+    g_list_free (self->priv->control_bindings);
+    self->priv->control_bindings = NULL;
   }
 
   ((GObjectClass *) gst_object_parent_class)->dispose (object);
@@ -1034,7 +1043,7 @@ gst_object_find_control_binding (GstObject * self, const gchar * name)
   GstControlBinding *binding;
   GList *node;
 
-  for (node = self->control_bindings; node; node = g_list_next (node)) {
+  for (node = self->priv->control_bindings; node; node = g_list_next (node)) {
     binding = node->data;
     /* FIXME: eventually use GQuark to speed it up */
     if (!strcmp (binding->name, name)) {
@@ -1105,13 +1114,13 @@ gst_object_sync_values (GstObject * object, GstClockTime timestamp)
   g_return_val_if_fail (GST_CLOCK_TIME_IS_VALID (timestamp), FALSE);
 
   GST_LOG_OBJECT (object, "sync_values");
-  if (!object->control_bindings)
+  if (!object->priv->control_bindings)
     return TRUE;
 
   /* FIXME: this deadlocks */
   /* GST_OBJECT_LOCK (object); */
   g_object_freeze_notify ((GObject *) object);
-  for (node = object->control_bindings; node; node = g_list_next (node)) {
+  for (node = object->priv->control_bindings; node; node = g_list_next (node)) {
     ret &= gst_control_binding_sync_values ((GstControlBinding *) node->data,
         object, timestamp, object->last_sync);
   }
@@ -1140,7 +1149,7 @@ gst_object_has_active_control_bindings (GstObject * object)
   g_return_val_if_fail (GST_IS_OBJECT (object), FALSE);
 
   GST_OBJECT_LOCK (object);
-  for (node = object->control_bindings; node; node = g_list_next (node)) {
+  for (node = object->priv->control_bindings; node; node = g_list_next (node)) {
     res |= !gst_control_binding_is_disabled ((GstControlBinding *) node->data);
   }
   GST_OBJECT_UNLOCK (object);
@@ -1164,7 +1173,7 @@ gst_object_set_control_bindings_disabled (GstObject * object, gboolean disabled)
   g_return_if_fail (GST_IS_OBJECT (object));
 
   GST_OBJECT_LOCK (object);
-  for (node = object->control_bindings; node; node = g_list_next (node)) {
+  for (node = object->priv->control_bindings; node; node = g_list_next (node)) {
     gst_control_binding_set_disabled ((GstControlBinding *) node->data,
         disabled);
   }
@@ -1225,10 +1234,12 @@ gst_object_add_control_binding (GstObject * object, GstControlBinding * binding)
   GST_OBJECT_LOCK (object);
   if ((old = gst_object_find_control_binding (object, binding->name))) {
     GST_DEBUG_OBJECT (object, "controlled property %s removed", old->name);
-    object->control_bindings = g_list_remove (object->control_bindings, old);
+    object->priv->control_bindings =
+        g_list_remove (object->priv->control_bindings, old);
     gst_object_unparent (GST_OBJECT_CAST (old));
   }
-  object->control_bindings = g_list_prepend (object->control_bindings, binding);
+  object->priv->control_bindings =
+      g_list_prepend (object->priv->control_bindings, binding);
   gst_object_set_parent (GST_OBJECT_CAST (binding), object);
   GST_DEBUG_OBJECT (object, "controlled property %s added", binding->name);
   GST_OBJECT_UNLOCK (object);
@@ -1285,10 +1296,10 @@ gst_object_remove_control_binding (GstObject * object,
   g_return_val_if_fail (GST_IS_CONTROL_BINDING (binding), FALSE);
 
   GST_OBJECT_LOCK (object);
-  if ((node = g_list_find (object->control_bindings, binding))) {
+  if ((node = g_list_find (object->priv->control_bindings, binding))) {
     GST_DEBUG_OBJECT (object, "controlled property %s removed", binding->name);
-    object->control_bindings =
-        g_list_delete_link (object->control_bindings, node);
+    object->priv->control_bindings =
+        g_list_delete_link (object->priv->control_bindings, node);
     gst_object_unparent (GST_OBJECT_CAST (binding));
     ret = TRUE;
   }

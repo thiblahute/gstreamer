@@ -158,6 +158,7 @@ typedef enum
 #define GST_OBJECT_FLAG_UNSET(obj,flag)        (GST_OBJECT_FLAGS (obj) &= ~(flag))
 
 typedef struct _GstObject GstObject;
+typedef struct _GstObjectPrivate GstObjectPrivate;
 typedef struct _GstObjectClass GstObjectClass;
 
 /**
@@ -179,9 +180,9 @@ struct _GstObject {
   guint32        flags;
 
   /*< private >*/
-  GList         *control_bindings;  /* List of GstControlBinding */
-  guint64        control_rate;
-  guint64        last_sync;
+  GstObjectPrivate *priv;
+  guint64           control_rate;
+  guint64           last_sync;
 
   gpointer _gst_reserved;
 };
