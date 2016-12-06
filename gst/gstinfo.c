@@ -202,6 +202,7 @@ GstDebugCategory *GST_CAT_META = NULL;
 GstDebugCategory *GST_CAT_LOCKING = NULL;
 GstDebugCategory *GST_CAT_CONTEXT = NULL;
 GstDebugCategory *_priv_GST_CAT_PROTECTION = NULL;
+gint object_repr_level;
 
 
 #endif /* !defined(GST_DISABLE_GST_DEBUG) || !defined(GST_REMOVE_DISABLED) */
@@ -456,7 +457,14 @@ _priv_gst_debug_init (void)
       pretty_tags = FALSE;
     else if (strstr (env, "pretty_tags") || strstr (env, "pretty-tags"))
       pretty_tags = TRUE;
+
+    if (strstr (env, "objects_path") || strstr (env, "objects-path"))
+      object_repr_level = 2;
+    else if (strstr (env, "objects_toplevel")
+        || strstr (env, "objects-toplevel"))
+      object_repr_level = 1;
   }
+
 
   if (g_getenv ("GST_DEBUG_NO_COLOR") != NULL)
     gst_debug_set_color_mode (GST_DEBUG_COLOR_MODE_OFF);
@@ -876,11 +884,8 @@ gst_debug_print_object (gpointer ptr)
         gst_info_describe_stream_collection (GST_STREAM_COLLECTION_CAST
         (object));
   }
-  if (GST_IS_PAD (object) && GST_OBJECT_NAME (object)) {
-    return g_strdup_printf ("<%s:%s>", GST_DEBUG_PAD_NAME (object));
-  }
-  if (GST_IS_OBJECT (object) && GST_OBJECT_NAME (object)) {
-    return g_strdup_printf ("<%s>", GST_OBJECT_NAME (object));
+  if (GST_IS_OBJECT (object)) {
+    return _priv_gst_object_get_repr (GST_OBJECT_CAST (object));
   }
   if (G_IS_OBJECT (object)) {
     return g_strdup_printf ("<%s@%p>", G_OBJECT_TYPE_NAME (object), object);

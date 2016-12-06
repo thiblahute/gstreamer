@@ -103,6 +103,7 @@ core_tests = [
   [ 'gst/gstbin.c', not have_registry ],
   [ 'gst/gstbus.c', not have_registry ],
   [ 'gst/gstevent.c', not have_registry ],
+  [ 'gst/gstobjectrepr.c', disable_gst_debug, [], 'gstobject.c'],
   [ 'pipelines/stress.c', not have_registry ],
   [ 'generic/sinks.c', not have_registry ],
 ]
@@ -131,6 +132,7 @@ foreach t : core_tests
   test_name = fname.split('.').get(0).underscorify()
   skip_test = t.get(1, false)
   link_with_libs = t.get(2, [])
+  link_objs = libgst.extract_objects (t.get(3, []))
 
   if not skip_test
     exe = executable(test_name, fname,
@@ -139,6 +141,7 @@ foreach t : core_tests
         include_directories : [configinc],
         link_with : link_with_libs,
         dependencies : test_deps + glib_deps + gst_deps,
+        objects: link_objs,
     )
 
     env = environment()

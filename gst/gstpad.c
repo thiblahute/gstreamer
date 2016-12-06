@@ -399,6 +399,7 @@ gst_pad_init (GstPad * pad)
   pad->priv = GST_PAD_GET_PRIVATE (pad);
 
   GST_PAD_DIRECTION (pad) = GST_PAD_UNKNOWN;
+  GST_OBJECT_FLAG_SET (pad, GST_OBJECT_FLAG_ALWAYS_CHILD);
 
   GST_PAD_ACTIVATEFUNC (pad) = gst_pad_activate_default;
   GST_PAD_EVENTFUNC (pad) = gst_pad_event_default;

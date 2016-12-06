@@ -134,6 +134,13 @@ G_GNUC_INTERNAL  void  _priv_gst_date_time_initialize (void);
 G_GNUC_INTERNAL  void  _priv_gst_allocator_cleanup (void);
 G_GNUC_INTERNAL  void  _priv_gst_caps_features_cleanup (void);
 G_GNUC_INTERNAL  void  _priv_gst_caps_cleanup (void);
+#ifndef GST_DISABLE_GST_DEBUG
+G_GNUC_INTERNAL  void  _priv_gst_object_update_repr (GstObject *self, GstObject *parent);
+G_GNUC_INTERNAL  gchar * _priv_gst_object_get_repr (GstObject *self);
+#else
+#define  _priv_gst_object_update_repr(self, parent)
+#define _priv_gst_object_get_repr(self)
+#endif /* GST_DISABLE_GST_DEBUG */
 
 /* called from gst_task_cleanup_all(). */
 G_GNUC_INTERNAL  void  _priv_gst_element_cleanup (void);
@@ -282,6 +289,9 @@ GST_EXPORT GstDebugCategory *GST_CAT_QOS;
 GST_EXPORT GstDebugCategory *GST_CAT_META;
 GST_EXPORT GstDebugCategory *GST_CAT_LOCKING;
 GST_EXPORT GstDebugCategory *GST_CAT_CONTEXT;
+
+/* GstObject debugging representation level */
+extern gint object_repr_level;
 
 /* Categories that should be completely private to
  * libgstreamer should be done like this: */

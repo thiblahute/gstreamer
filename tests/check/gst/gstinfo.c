@@ -422,6 +422,58 @@ GST_START_TEST (info_fourcc)
 
 GST_END_TEST;
 
+static gpointer
+_print_obj (gpointer pad)
+{
+  gint i;
+  GRegex *rbin = g_regex_new ("</bin\\d+:pad\\d+>", 0, 0, NULL);
+  GRegex *rnobin = g_regex_new ("<\\(NULL\\):pad\\d+>", 0, 0, NULL);
+
+  for (i = 0; i < 5000; i++) {
+    gchar *v = gst_info_strdup_printf ("%" GST_PTR_FORMAT,
+        pad);
+
+    if (!g_regex_match (rbin, v, 0, NULL)
+        && !g_regex_match (rnobin, v, 0, NULL))
+      g_error ("%s does not match expected name", v);
+    g_free (v);
+  }
+
+  g_regex_unref (rbin);
+  g_regex_unref (rnobin);
+
+  return NULL;
+}
+
+
+GST_START_TEST (info_debug_object_set_name)
+{
+  gint i;
+  GstElement *elem = GST_ELEMENT (gst_bin_new ("bin0"));
+  GstPad *pad = g_object_ref_sink (gst_pad_new ("pad0", GST_PAD_SRC));
+  GThread *thread = g_thread_new ("print_object", _print_obj, pad);
+
+  for (i = 0; i < 10000; i++) {
+    gchar *bname = g_strdup_printf ("bin%d", i);
+    gchar *pname = g_strdup_printf ("pad%d", i);
+
+    fail_unless_equals_int (gst_element_add_pad (GST_ELEMENT (elem),
+            pad), TRUE);
+    gst_element_remove_pad (GST_ELEMENT (elem), pad);
+    gst_object_set_name (GST_OBJECT (pad), pname);
+    gst_object_set_name (GST_OBJECT (elem), bname);
+
+    g_free (bname);
+    g_free (pname);
+  }
+
+  g_thread_join (thread);
+  gst_object_unref (pad);
+  gst_object_unref (elem);
+}
+
+GST_END_TEST;
+
 static Suite *
 gst_info_suite (void)
 {
@@ -442,6 +494,7 @@ gst_info_suite (void)
   tcase_add_test (tc_chain, info_register_same_debug_category_twice);
   tcase_add_test (tc_chain, info_set_and_unset_single);
   tcase_add_test (tc_chain, info_set_and_unset_multiple);
+  tcase_add_test (tc_chain, info_debug_object_set_name);
 #endif
 
   return s;

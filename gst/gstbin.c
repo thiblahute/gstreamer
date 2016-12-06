@@ -147,6 +147,10 @@ GST_DEBUG_CATEGORY_STATIC (bin_debug);
 #define GST_BIN_GET_PRIVATE(obj)  \
    (G_TYPE_INSTANCE_GET_PRIVATE ((obj), GST_TYPE_BIN, GstBinPrivate))
 
+#ifdef GST_DISABLE_GST_DEBUG
+#define gst_bin_update_children_repr(object, parent)
+#endif
+
 struct _GstBinPrivate
 {
   gboolean asynchandling;
@@ -502,6 +506,7 @@ gst_bin_init (GstBin * bin)
       bus);
   gst_bus_set_sync_handler (bus, (GstBusSyncHandler) bin_bus_handler, bin,
       NULL);
+  GST_OBJECT_FLAG_SET (bin, GST_OBJECT_FLAG_ALWAYS_REPR);
 
   bin->priv = GST_BIN_GET_PRIVATE (bin);
   bin->priv->asynchandling = DEFAULT_ASYNC_HANDLING;
@@ -1490,6 +1495,53 @@ gst_bin_deep_element_removed_func (GstBin * bin, GstBin * sub_bin,
   gst_object_unref (parent_bin);
 }
 
+#ifndef GST_DISABLE_GST_DEBUG
+void
+gst_bin_update_children_repr (GstObject * object, GstObject * parent)
+{
+  GstIterator *iter;
+  GValue item = { 0, };
+  gboolean done = FALSE;
+
+  if (object_repr_level <= 0)
+    return;
+
+  _priv_gst_object_update_repr (object, parent);
+
+  if (!GST_IS_BIN (object))
+    return;
+
+  iter = gst_bin_iterate_recurse (GST_BIN (object));
+  while (!done) {
+    switch (gst_iterator_next (iter, &item)) {
+      case GST_ITERATOR_OK:
+      {
+        GstObject *child = g_value_get_object (&item);
+        GstObject *parent = gst_object_get_parent (child);
+
+        _priv_gst_object_update_repr (child, parent);
+        if (parent)
+          gst_object_unref (parent);
+        g_value_reset (&item);
+      }
+        break;
+      case GST_ITERATOR_RESYNC:
+        gst_iterator_resync (iter);
+        break;
+      case GST_ITERATOR_ERROR:
+        done = TRUE;
+        break;
+      case GST_ITERATOR_DONE:
+        done = TRUE;
+        break;
+    }
+  }
+
+  gst_iterator_free (iter);
+}
+#endif
+
+
 /**
  * gst_bin_add:
  * @bin: a #GstBin
@@ -1534,6 +1586,10 @@ gst_bin_add (GstBin * bin, GstElement * element)
   GST_TRACER_BIN_ADD_PRE (bin, element);
   result = bclass->add_element (bin, element);
   GST_TRACER_BIN_ADD_POST (bin, element, result);
+
+  if (result)
+    gst_bin_update_children_repr (GST_OBJECT_CAST (element),
+        GST_OBJECT_CAST (bin));
 
   return result;
 
@@ -1868,9 +1924,14 @@ gst_bin_remove (GstBin * bin, GstElement * element)
   GST_CAT_DEBUG (GST_CAT_PARENTAGE, "removing element %s from bin %s",
       GST_ELEMENT_NAME (element), GST_ELEMENT_NAME (bin));
 
+  gst_object_ref (element);
   GST_TRACER_BIN_REMOVE_PRE (bin, element);
   result = bclass->remove_element (bin, element);
   GST_TRACER_BIN_REMOVE_POST (bin, result);
+
+  if (result)
+    gst_bin_update_children_repr (GST_OBJECT_CAST (element), NULL);
+  gst_object_unref (element);
 
   return result;
 

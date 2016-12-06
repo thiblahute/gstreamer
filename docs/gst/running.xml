@@ -334,11 +334,19 @@ codes.
 
   <para>
 This environment variable can be used to tweak the behaviour of the debugging
-system. Currently the only options supported are "pretty-tags" and "full-tags".
+system. Currently the supported options are "pretty-tags", "full-tags",
+"objects-path" and "objects-toplevel".
 In "pretty-tags" mode (the default), taglists in the debug log will be
 serialized so that only the first few and last few bytes of a buffer-type tag
 will be serialized into the log, to avoid dumping hundreds of lines of useless
 output into the log in case of large image tags and the like.
+
+When "objects-path" is enabled, printing a GstObject in the GStreamer debug
+system, a full path in the object hierarchy will be printed.
+
+When "objects-toplevel" is enabled, printing a GstObject in the GStreamer debug
+system will print its toplevbel container name and then its name (in the form
+toplevel_name/../object_name).
   </para>
 
 </formalpara>
