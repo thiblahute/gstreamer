@@ -1,0 +1,5 @@
+gst-libs-index.md
+        gi-index
+                base/gstbitreader.h
+                base/gstbytereader.h
+                base/gstbytewriter.h
