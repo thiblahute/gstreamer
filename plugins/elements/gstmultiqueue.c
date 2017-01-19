@@ -65,7 +65,6 @@
  * more buffers into the queue will block the pushing thread until more space
  * becomes available. #GstMultiQueue:extra-size-buffers,
  *
- *
  * #GstMultiQueue:extra-size-bytes and #GstMultiQueue:extra-size-time are
  * currently unused.
  *
