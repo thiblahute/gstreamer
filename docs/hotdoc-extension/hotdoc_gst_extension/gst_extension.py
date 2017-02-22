@@ -11,7 +11,7 @@ from hotdoc.parsers.gtk_doc import GtkDocParser
 from hotdoc_c_extension.c_extension import extract_comments
 from hotdoc.core.exceptions import HotdocSourceException
 from hotdoc_c_extension.c_comment_scanner.c_comment_scanner import extract_comments
-from hotdoc_c_extension.c_formatter import CFormatter, Formatter
+from hotdoc.core.formatter import Formatter
 from hotdoc_c_extension.gi_extension import WritableFlag, ReadableFlag, ConstructFlag, ConstructOnlyFlag
 
 import subprocess
@@ -85,8 +85,8 @@ GST_PAD_TEMPLATE_TEMPLATE = """
 """
 
 
-class GstFormatter(CFormatter):
-    def __init__(self):
+class GstFormatter(Formatter):
+    def __init__(self, link_resolver):
         c_extension_path = hotdoc_c_extension.__path__[0]
         searchpath = [os.path.join(c_extension_path, "templates")]
 
@@ -94,7 +94,7 @@ class GstFormatter(CFormatter):
         with open(os.path.join(self.__tmpdir.name, "padtemplate.html"), "w") as f:
             f.write(GST_PAD_TEMPLATE_TEMPLATE)
         searchpath.append(self.__tmpdir.name)
-        Formatter.__init__(self, searchpath)
+        Formatter.__init__(self, link_resolver, searchpath)
         self._ordering.insert(self._ordering.index(ClassSymbol) + 1, GstPadTemplateSymbol)
 
     def __del__(self):
@@ -115,21 +115,20 @@ class GstFormatter(CFormatter):
 class GstExtension(Extension):
     extension_name = 'gst-extension'
     argument_prefix = 'gst'
-    smart_index = False
-    c_sources = set()
-    dl_sources = set()
 
-    def __init__(self, doc_repo):
-        super().__init__(doc_repo)
+    def __init__(self, app, project):
+        super().__init__(app, project)
         self.__elements = {}
-        self.__raw_comment_parser = GtkDocParser(doc_repo)
-        self.formatters["html"] = GstFormatter()
+        self.__raw_comment_parser = GtkDocParser(project)
         self.__pending_signals = {}
 
+    def _make_formatter(self):
+        return GstFormatter(self.app.link_resolver)
+
     def setup(self):
-        stale_c, unlisted_c = self.get_stale_files(GstExtension.c_sources,
+        stale_c, unlisted_c = self.get_stale_files(self.c_sources,
             'gst-c')
-        stale_dl, unlisted_dl = self.get_stale_files(GstExtension.dl_sources,
+        stale_dl, unlisted_dl = self.get_stale_files(self.dl_sources,
             'gst-dl')
 
         comments = []
@@ -160,27 +159,28 @@ class GstExtension(Extension):
                             signal, element_name = self.__pending_signals.pop(block.name, (None, None))
                             if signal:
                                 self.__create_signal_symbol(block.name, element_name, signal, block)
-                            self.project.database.add_comment(block)
+                            self.app.database.add_comment(block)
 
         for unique_name, (signal, element_name) in self.__pending_signals.items():
             self.__create_signal_symbol(unique_name, element_name, signal)
+        super().setup()
 
     def _get_smart_index_title(self):
         return 'GStreamer plugins documentation'
 
     @staticmethod
-    def add_arguments (parser):
+    def add_arguments(parser):
         group = parser.add_argument_group('Gst extension', DESCRIPTION)
         GstExtension.add_index_argument(group)
-        GstExtension.add_order_generated_subpages(group)
+        # GstExtension.add_order_generated_subpages(group)
         GstExtension.add_sources_argument(group, prefix='gst-c')
         GstExtension.add_sources_argument(group, prefix='gst-dl')
 
-    @staticmethod
-    def parse_config(doc_repo, config):
-        GstExtension.parse_standard_config(config)
-        GstExtension.c_sources = config.get_sources('gst-c_')
-        GstExtension.dl_sources = config.get_sources('gst-dl_')
+    def parse_config(self, config):
+        self.c_sources = config.get_sources('gst-c_')
+        self.dl_sources = config.get_sources('gst-dl_')
+
+        super().parse_config(config)
 
     def _get_smart_key(self, symbol):
         return symbol.extra.get('gst-element-name')
@@ -252,7 +252,7 @@ class GstExtension(Extension):
                     extra={'gst-element-name': element['name']})
 
             # FIXME This is incorrect, it's not yet format time (from gi_extension)
-            extra_content = self.get_formatter(self.project.output_format)._format_flags (flags)
+            extra_content = self.formatter._format_flags (flags)
             res.extension_contents['Flags'] = extra_content
 
     def __create_pad_template_symbols(self, element):

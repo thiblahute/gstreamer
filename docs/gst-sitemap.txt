@@ -1,2 +1,2 @@
 gst-index.md
-        gi-index
+        ../build/docs/gstreamer-core-doc.json

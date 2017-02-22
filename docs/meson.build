@@ -30,7 +30,8 @@ if hotdoc_p.found()
 
     hotdoc = import('hotdoc')
 
-    hotdoc.generate_doc('gstreamer-' + apiversion,
+    gst_core_doc = hotdoc.generate_doc('gstreamer-core',
+        project_version: apiversion,
         c_sources: ['../gst/gst.h', '../gst/*.[hc]'],
         gi_sources: [gst_gir[0].full_path()],
         c_source_filters: gst_excludes,
@@ -39,10 +40,10 @@ if hotdoc_p.found()
         gi_smart_index: true,
         gi_order_generated_subpages: true,
         dependencies: [gst_dep, glib_dep, gobject_dep, gmodule_dep],
-        install: true,
     )
 
-    hotdoc.generate_doc('gstreamer-libs-' + apiversion,
+    gst_libs_doc = hotdoc.generate_doc('gstreamer-libs',
+        project_version: apiversion,
         c_sources: ['../libs/gst/base/*.[ch]',
                     '../libs/gst/controller/*.[ch]',
                     '../libs/gst/net/*.[ch]',
@@ -60,10 +61,10 @@ if hotdoc_p.found()
         dependencies: [gst_dep, glib_dep, gobject_dep, gmodule_dep,
                        gst_base_dep, gst_net_dep, gst_controller_dep,
                        gst_check_dep],
-        install: true,
     )
 
-    hotdoc.generate_doc('gstreamer-plugins-' + apiversion,
+    gst_plugins_doc = hotdoc.generate_doc('gstreamer-plugins',
+        project_version: apiversion,
         sitemap: 'plugins-sitemap.txt',
         index: 'plugins-index.md',
         gst_smart_index: true,
@@ -73,6 +74,14 @@ if hotdoc_p.found()
             gst_elements],
         extra_extensions_paths: hotdoc_extension_dir,
         gst_order_generated_subpages: true,
+    )
+
+    gst_doc = hotdoc.generate_doc('gstreamer',
+        project_version: apiversion,
+        sitemap: 'gst-sitemap.txt',
+        index: 'gst-index.md',
+        gi_smart_index: true,
+        gi_order_generated_subpages: true,
         install: true,
     )
 else
