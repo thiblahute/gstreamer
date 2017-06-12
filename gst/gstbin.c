@@ -1506,7 +1506,9 @@ gst_bin_update_children_repr (GstObject * object, GstObject * parent)
   if (object_repr_level <= 0)
     return;
 
+  GST_OBJECT_LOCK (object);
   _priv_gst_object_update_repr (object, parent);
+  GST_OBJECT_UNLOCK (object);
 
   if (!GST_IS_BIN (object))
     return;
@@ -1519,7 +1521,9 @@ gst_bin_update_children_repr (GstObject * object, GstObject * parent)
         GstObject *child = g_value_get_object (&item);
         GstObject *parent = gst_object_get_parent (child);
 
+        GST_OBJECT_LOCK (object);
         _priv_gst_object_update_repr (child, parent);
+        GST_OBJECT_UNLOCK (object);
         if (parent)
           gst_object_unref (parent);
         g_value_reset (&item);

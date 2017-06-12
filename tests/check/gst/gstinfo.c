@@ -426,10 +426,10 @@ static gpointer
 _print_obj (gpointer pad)
 {
   gint i;
-  GRegex *rbin = g_regex_new ("</bin\\d+:pad\\d+>", 0, 0, NULL);
+  GRegex *rbin = g_regex_new ("<bin\\d+:pad\\d+>", 0, 0, NULL);
   GRegex *rnobin = g_regex_new ("<\\(NULL\\):pad\\d+>", 0, 0, NULL);
 
-  for (i = 0; i < 5000; i++) {
+  for (i = 0; i < 100000; i++) {
     gchar *v = gst_info_strdup_printf ("%" GST_PTR_FORMAT,
         pad);
 
@@ -451,9 +451,11 @@ GST_START_TEST (info_debug_object_set_name)
   gint i;
   GstElement *elem = GST_ELEMENT (gst_bin_new ("bin0"));
   GstPad *pad = g_object_ref_sink (gst_pad_new ("pad0", GST_PAD_SRC));
+  GstClockTime start = gst_util_get_timestamp ();
   GThread *thread = g_thread_new ("print_object", _print_obj, pad);
 
-  for (i = 0; i < 10000; i++) {
+  GST_ERROR ("Here!");
+  for (i = 0; i < 1000000; i++) {
     gchar *bname = g_strdup_printf ("bin%d", i);
     gchar *pname = g_strdup_printf ("pad%d", i);
 
@@ -468,6 +470,8 @@ GST_START_TEST (info_debug_object_set_name)
   }
 
   g_thread_join (thread);
+  GST_ERROR ("Time spent: %" GST_TIME_FORMAT,
+      GST_TIME_ARGS (gst_util_get_timestamp () - start));
   gst_object_unref (pad);
   gst_object_unref (elem);
 }

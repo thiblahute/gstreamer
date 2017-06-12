@@ -111,7 +111,9 @@ enum
   SO_LAST_SIGNAL
 };
 
-typedef struct
+typedef struct _GstObjectRepr GstObjectRepr;
+
+struct _GstObjectRepr
 {
   GstMiniObject parent;
 
@@ -120,7 +122,9 @@ typedef struct
   gboolean is_toplevel;
 
   gchar *name;
-} GstObjectRepr;
+
+  GstObjectRepr *parent_repr;
+};
 
 gint object_repr_level;
 
@@ -132,6 +136,7 @@ struct _GstObjectPrivate
   GList *control_bindings;      /* List of GstControlBinding */
 
   GstObjectRepr *repr;
+  GMutex repr_lock;
 };
 
 /* maps type name quark => count */
@@ -164,6 +169,8 @@ gst_object_repr_free (GstObjectRepr * repr)
   g_free (repr->path);
   g_free (repr->toplevel);
   g_free (repr->name);
+  if (repr->parent_repr)
+    gst_object_repr_unref (repr->parent_repr);
 
   g_free (repr);
 }
@@ -184,32 +191,11 @@ gst_object_ref_repr (GstObject * obj)
 {
   GstObjectRepr *repr;
 
-  while (TRUE) {
-    repr = gst_object_repr_ref (obj->priv->repr);
-    if (repr == obj->priv->repr)
-      return repr;
+  g_mutex_lock (&obj->priv->repr_lock);
+  repr = gst_object_repr_ref (obj->priv->repr);
+  g_mutex_unlock (&obj->priv->repr_lock);
 
-    /* Potential leak of repr, but avoids races */
-  }
-}
-
-static GstObjectRepr *
-gst_object_ref_parent_repr (GstObject * obj)
-{
-  GstObject *parent;
-  GstObjectRepr *repr;
-
-  while (TRUE) {
-    parent = obj->parent;
-    if (!parent)
-      return NULL;
-
-    repr = gst_object_ref_repr (parent);
-    if (parent == obj->parent)
-      return repr;
-
-    /* Potential leak, but avoids races */
-  }
+  return repr;
 }
 
 #ifndef GST_DISABLE_GST_DEBUG
@@ -218,23 +204,23 @@ _priv_gst_object_get_repr (GstObject * self)
 {
   gchar *prefix = "";
   gchar *repr_str = NULL;
-  GstObjectRepr *repr, *parent_repr = NULL;
-
-  repr = gst_object_ref_repr (self);
+  GstObjectRepr *repr = gst_object_ref_repr (self);
   if (GST_OBJECT_FLAG_IS_SET (self, GST_OBJECT_FLAG_ALWAYS_CHILD)) {
 
     /* Dealing with a 'always child' object (as GstPad), always
      * print in the form parent_name:name */
 
-    parent_repr = gst_object_ref_parent_repr (self);
-    if (parent_repr) {
-      if (parent_repr->path)
-        repr_str = g_strdup_printf ("<%s:%s>", parent_repr->path, repr->name);
-      else if (parent_repr->toplevel)
-        repr_str = g_strdup_printf ("<%s/../%s:%s>", parent_repr->toplevel,
-            parent_repr->name, repr->name);
+    if (repr->parent_repr) {
+      if (repr->parent_repr->path)
+        repr_str =
+            g_strdup_printf ("<%s:%s>", repr->parent_repr->path, repr->name);
+      else if (repr->parent_repr->toplevel)
+        repr_str =
+            g_strdup_printf ("<%s/../%s:%s>", repr->parent_repr->toplevel,
+            repr->parent_repr->name, repr->name);
       else
-        repr_str = g_strdup_printf ("<%s:%s>", parent_repr->name, repr->name);
+        repr_str =
+            g_strdup_printf ("<%s:%s>", repr->parent_repr->name, repr->name);
     } else {
       repr_str = g_strdup_printf ("<%s:%s>", GST_STR_NULL (NULL), repr->name);
     }
@@ -256,9 +242,6 @@ _priv_gst_object_get_repr (GstObject * self)
 
     }
   }
-
-  if (parent_repr)
-    gst_object_repr_unref (parent_repr);
   gst_object_repr_unref (repr);
 
   return repr_str;
@@ -270,19 +253,11 @@ _priv_gst_object_update_repr (GstObject * self, GstObject * parent)
   GstObjectPrivate *priv = self->priv;
   GstObjectRepr *last_repr = NULL, *repr = NULL, *parent_repr = NULL;
 
+  g_mutex_lock (&priv->repr_lock);
   last_repr = gst_object_repr_ref (self->priv->repr);
-  if (GST_OBJECT_FLAG_IS_SET (self, GST_OBJECT_FLAG_ALWAYS_CHILD)) {
-    /* If we deal with an always child object, we just need to make
-     * sure its representation name is always in sync */
-    repr = gst_object_repr_new ();
-    repr->name = g_strdup (GST_STR_NULL (self->name));
-
-    gst_mini_object_replace ((GstMiniObject **) & priv->repr,
-        (GstMiniObject *) repr);
-
-    goto done;
-  } else if (object_repr_level <= 0 && !GST_OBJECT_FLAG_IS_SET (self,
-          GST_OBJECT_FLAG_ALWAYS_REPR)) {
+  if (object_repr_level <= 0 && !GST_OBJECT_FLAG_IS_SET (self,
+          GST_OBJECT_FLAG_ALWAYS_REPR) &&
+      !GST_OBJECT_FLAG_IS_SET (self, GST_OBJECT_FLAG_ALWAYS_CHILD)) {
     goto done;
   }
 
@@ -290,6 +265,7 @@ _priv_gst_object_update_repr (GstObject * self, GstObject * parent)
     parent_repr = gst_object_ref_repr (parent);
 
   repr = gst_object_repr_new ();
+  repr->parent_repr = parent_repr;
   repr->name = g_strdup (GST_STR_NULL (self->name));
   if (object_repr_level == 1) {
     if (parent_repr) {
@@ -302,24 +278,17 @@ _priv_gst_object_update_repr (GstObject * self, GstObject * parent)
     }
   } else {
     if (parent_repr && parent_repr->path) {
-      repr->path = g_strdup_printf ("%s/%s",
-          parent_repr->path, GST_OBJECT_NAME (self));
-    } else {
       repr->path = g_strdup_printf ("/%s", GST_OBJECT_NAME (self));
       repr->is_toplevel = TRUE;
     }
   }
 
-  gst_mini_object_replace ((GstMiniObject **) & priv->repr,
-      (GstMiniObject *) repr);
+  priv->repr = repr;
 
 done:
-  if (repr)
-    gst_object_repr_unref (repr);
   if (last_repr)
     gst_object_repr_unref (last_repr);
-  if (parent_repr)
-    gst_object_repr_unref (parent_repr);
+  g_mutex_unlock (&priv->repr_lock);
 }
 #endif
 
@@ -397,6 +366,7 @@ gst_object_init (GstObject * object)
   object->parent = NULL;
   object->name = NULL;
   object->priv->repr = gst_object_repr_new ();
+  g_mutex_init (&object->priv->repr_lock);
   GST_CAT_TRACE_OBJECT (GST_CAT_REFCOUNTING, object, "%p new", object);
 
   object->flags = 0;
@@ -794,6 +764,7 @@ gst_object_set_name (GstObject * object, const gchar * name)
   if (name != NULL) {
     g_free (object->name);
     object->name = g_strdup (name);
+    _priv_gst_object_update_repr (object, NULL);
     GST_OBJECT_UNLOCK (object);
     result = TRUE;
   } else {
@@ -801,7 +772,6 @@ gst_object_set_name (GstObject * object, const gchar * name)
     result = gst_object_set_name_default (object);
   }
 
-  _priv_gst_object_update_repr (object, NULL);
   g_object_notify (G_OBJECT (object), "name");
   return result;
 
@@ -873,9 +843,9 @@ gst_object_set_parent (GstObject * object, GstObject * parent)
 
   object->parent = parent;
   gst_object_ref_sink (object);
-  GST_OBJECT_UNLOCK (object);
 
   _priv_gst_object_update_repr (object, parent);
+  GST_OBJECT_UNLOCK (object);
 
   /* FIXME-2.0: this does not work, the deep notify takes the lock from the
    * parent object and deadlocks when the parent holds its lock when calling
@@ -948,10 +918,10 @@ gst_object_unparent (GstObject * object)
   if (G_LIKELY (parent != NULL)) {
     GST_CAT_TRACE_OBJECT (GST_CAT_REFCOUNTING, object, "unparent");
     object->parent = NULL;
-    GST_OBJECT_UNLOCK (object);
 
     /* g_object_notify_by_pspec ((GObject *)object, properties[PROP_PARENT]); */
     _priv_gst_object_update_repr (object, NULL);
+    GST_OBJECT_UNLOCK (object);
 
     gst_object_unref (object);
   } else {
