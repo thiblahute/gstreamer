@@ -240,7 +240,6 @@ GST_END_TEST;
 GST_START_TEST (test_reply_discard)
 {
   GstPromise *r;
-  struct change_data data = { 0, };
 
   /* NULL promise => discard reply */
   r = NULL;
