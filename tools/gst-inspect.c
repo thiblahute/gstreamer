@@ -321,7 +321,8 @@ print_object_properties_info (GObject * obj, GObjectClass * obj_class,
     first_flag = TRUE;
     n_print ("flags: ");
     readable = ! !(param->flags & G_PARAM_READABLE);
-    if (readable && obj != NULL) {
+    if (readable && obj != NULL
+        && !(param->flags & GST_PARAM_INSPECT_USE_DEFAULT)) {
       g_object_get_property (obj, param->name, &value);
     } else {
       /* if we can't read the property value, assume it's set to the default
