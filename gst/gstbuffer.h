@@ -410,7 +410,7 @@ gboolean       gst_buffer_unset_flags      (GstBuffer * buffer, GstBufferFlags f
 
 /* refcounting */
 /**
- * gst_buffer_ref:
+ * gst_buffer_ref: (skip)
  * @buf: a #GstBuffer.
  *
  * Increases the refcount of the given buffer by one.
@@ -423,6 +423,7 @@ gboolean       gst_buffer_unset_flags      (GstBuffer * buffer, GstBufferFlags f
  *
  * Returns: (transfer full): @buf
  */
+static inline GstBuffer* gst_buffer_ref(GstBuffer* buf);
 static inline GstBuffer *
 gst_buffer_ref (GstBuffer * buf)
 {
@@ -430,12 +431,13 @@ gst_buffer_ref (GstBuffer * buf)
 }
 
 /**
- * gst_buffer_unref:
+ * gst_buffer_unref: (skip)
  * @buf: (transfer full): a #GstBuffer.
  *
  * Decreases the refcount of the buffer. If the refcount reaches 0, the buffer
  * with the associated metadata and memory will be freed.
  */
+static inline void gst_buffer_unref(GstBuffer* buf);
 static inline void
 gst_buffer_unref (GstBuffer * buf)
 {
@@ -444,7 +446,7 @@ gst_buffer_unref (GstBuffer * buf)
 
 /* copy buffer */
 /**
- * gst_buffer_copy:
+ * gst_buffer_copy: (skip)
  * @buf: a #GstBuffer.
  *
  * Create a copy of the given buffer. This will only copy the buffer's
@@ -455,6 +457,7 @@ gst_buffer_unref (GstBuffer * buf)
  *
  * Returns: (transfer full): a new copy of @buf.
  */
+static inline GstBuffer* gst_buffer_copy(const GstBuffer* buf);
 static inline GstBuffer *
 gst_buffer_copy (const GstBuffer * buf)
 {
@@ -556,7 +559,7 @@ gboolean        gst_buffer_copy_into            (GstBuffer *dest, GstBuffer *src
 #define         gst_buffer_make_writable(buf)   GST_BUFFER_CAST (gst_mini_object_make_writable (GST_MINI_OBJECT_CAST (buf)))
 
 /**
- * gst_buffer_replace:
+ * gst_buffer_replace: (skip)
  * @obuf: (inout) (transfer full) (nullable): pointer to a pointer to
  *     a #GstBuffer to be replaced.
  * @nbuf: (transfer none) (allow-none): pointer to a #GstBuffer that will
@@ -571,6 +574,7 @@ gboolean        gst_buffer_copy_into            (GstBuffer *dest, GstBuffer *src
  *
  * Returns: %TRUE when @obuf was different from @nbuf.
  */
+static inline gboolean gst_buffer_replace(GstBuffer** obuf, GstBuffer* nbuf);
 static inline gboolean
 gst_buffer_replace (GstBuffer **obuf, GstBuffer *nbuf)
 {

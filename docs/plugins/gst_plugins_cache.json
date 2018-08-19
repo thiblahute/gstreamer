@@ -1264,7 +1264,7 @@
                                 "value": "0"
                             },
                             {
-                                "desc": "Line buffered",
+                                "desc": "Line buffered (deprecated, like full)",
                                 "name": "line",
                                 "value": "1"
                             },

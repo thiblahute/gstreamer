@@ -242,12 +242,13 @@ gst_query_ref (GstQuery * q)
 }
 
 /**
- * gst_query_unref:
+ * gst_query_unref: (skip)
  * @q: a #GstQuery to decrease the refcount of.
  *
  * Decreases the refcount of the query. If the refcount reaches 0, the query
  * will be freed.
  */
+static inline void gst_query_unref(GstQuery* q);
 static inline void
 gst_query_unref (GstQuery * q)
 {
@@ -256,7 +257,7 @@ gst_query_unref (GstQuery * q)
 
 /* copy query */
 /**
- * gst_query_copy:
+ * gst_query_copy: (skip)
  * @q: a #GstQuery to copy.
  *
  * Copies the given query using the copy function of the parent #GstStructure.
@@ -265,6 +266,7 @@ gst_query_unref (GstQuery * q)
  *
  * Returns: (transfer full): a new copy of @q.
  */
+static inline GstQuery* gst_query_copy(const GstQuery* q);
 static inline GstQuery *
 gst_query_copy (const GstQuery * q)
 {
@@ -288,7 +290,7 @@ gst_query_copy (const GstQuery * q)
  */
 #define         gst_query_make_writable(q)      GST_QUERY_CAST (gst_mini_object_make_writable (GST_MINI_OBJECT_CAST (q)))
 /**
- * gst_query_replace:
+ * gst_query_replace: (skip)
  * @old_query: (inout) (transfer full) (nullable): pointer to a pointer to a
  *     #GstQuery to be replaced.
  * @new_query: (allow-none) (transfer none): pointer to a #GstQuery that will
@@ -303,6 +305,7 @@ gst_query_copy (const GstQuery * q)
  *
  * Returns: %TRUE if @new_query was different from @old_query
  */
+static inline gboolean gst_query_replace(GstQuery** old_query, GstQuery* new_query);
 static inline gboolean
 gst_query_replace (GstQuery **old_query, GstQuery *new_query)
 {

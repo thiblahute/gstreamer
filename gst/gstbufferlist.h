@@ -61,7 +61,7 @@ typedef gboolean   (*GstBufferListFunc)   (GstBuffer **buffer, guint idx,
 
 /* refcounting */
 /**
- * gst_buffer_list_ref:
+ * gst_buffer_list_ref: (skip)
  * @list: a #GstBufferList
  *
  * Increases the refcount of the given buffer list by one.
@@ -73,6 +73,7 @@ typedef gboolean   (*GstBufferListFunc)   (GstBuffer **buffer, guint idx,
  *
  * Returns: (transfer full): @list
  */
+static inline GstBufferList* gst_buffer_list_ref(GstBufferList* list);
 static inline GstBufferList *
 gst_buffer_list_ref (GstBufferList * list)
 {
@@ -81,21 +82,22 @@ gst_buffer_list_ref (GstBufferList * list)
 }
 
 /**
- * gst_buffer_list_unref:
+ * gst_buffer_list_unref: (skip)
  * @list: (transfer full): a #GstBufferList
  *
  * Decreases the refcount of the buffer list. If the refcount reaches 0, the
  * buffer list will be freed.
  */
+static inline void gst_buffer_list_unref(GstBufferList* list);
 static inline void
-gst_buffer_list_unref (GstBufferList * list)
+gst_buffer_list_unref(GstBufferList* list)
 {
   gst_mini_object_unref (GST_MINI_OBJECT_CAST (list));
 }
 
 /* copy */
 /**
- * gst_buffer_list_copy:
+ * gst_buffer_list_copy: (skip)
  * @list: a #GstBufferList
  *
  * Create a shallow copy of the given buffer list. This will make a newly
@@ -104,6 +106,7 @@ gst_buffer_list_unref (GstBufferList * list)
  *
  * Returns: (transfer full): a new copy of @list.
  */
+static inline GstBufferList* gst_buffer_list_copy(const GstBufferList* list);
 static inline GstBufferList *
 gst_buffer_list_copy (const GstBufferList * list)
 {
