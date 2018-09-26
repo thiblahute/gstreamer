@@ -323,6 +323,13 @@ typelibs_DATA = $(BUILT_GIRSOURCES:.gir=.typelib)
 CLEANFILES += $(BUILT_GIRSOURCES) $(typelibs_DATA)
 endif
 
+# install gdb scripts
+gdbdir = $(datadir)/glib-2.0/gdb
+dist_gdb_DATA = gst_gdb.py
+
+install-data-hook:
+	$(INSTALL) -D $(builddir)/libgstreamer-gdb.py $(DESTDIR)$(datadir)/gdb/auto-load$(libdir)/libgstreamer-@GST_API_VERSION@.so.0.$(GST_CURRENT).$(GST_REVISION)-gdb.py
+
 # try to prevent packaging errors
 check-libexecdir-consistency:
 	@if test "${GST_PLUGIN_SCANNER_INSTALLED}" != "${libexecdir}/gstreamer-$(GST_API_VERSION)/gst-plugin-scanner"; then \

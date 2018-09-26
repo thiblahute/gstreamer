@@ -11,6 +11,7 @@ gstmarshal.h
 gstenumtypes.h
 gstenumtypes.c
 gstconfig.h
+libgstreamer-gdb.py
 *.bb
 *.bbg
 *.da
