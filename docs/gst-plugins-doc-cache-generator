@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+#
+# Copyright © 2018 Thibault Saunier <tsaunier@igalia.com>
+#
+# This library is free software; you can redistribute it and/or modify it under
+# the terms of the GNU Lesser General Public License as published by the Free
+# Software Foundation; either version 2.1 of the License, or (at your option)
+# any later version.
+#
+# This library is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS
+# FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for more
+# details.
+#
+# You should have received a copy of the GNU Lesser General Public License
+# along with this library.  If not, see <http://www.gnu.org/licenses/>.
+
+import argparse
+import json
+import os
+import sys
+import subprocess
+
+from collections import Mapping
+from collections import OrderedDict
+
+def dict_recursive_update(d, u):
+    for k, v in u.items():
+        if isinstance(v, Mapping):
+            r = dict_recursive_update(d.get(k, {}), v)
+            d[k] = r
+        else:
+            d[k] = u[k]
+    return d
+
+
+if __name__ == "__main__":
+    cache_filename = sys.argv[1]
+
+    subenv = os.environ.copy()
+    cache = {}
+    try:
+        with open(cache_filename) as f:
+            cache = json.load(f)
+    except FileNotFoundError:
+        pass
+
+    cmd = [os.path.join(os.path.dirname(os.path.realpath(__file__)), 'gst-hotdoc-plugins-scanner')]
+    gst_plugins_paths = []
+    for plugin_path in sys.argv[2:]:
+        cmd.append(plugin_path)
+        gst_plugins_paths.append(os.path.dirname(plugin_path))
+
+    if subenv.get('GST_REGISTRY_UPDATE') != 'no' and len(cmd) >= 2:
+        data = subprocess.check_output(cmd, env=subenv)
+        try:
+            plugins = json.loads(data.decode(), object_pairs_hook=OrderedDict)
+        except json.decoder.JSONDecodeError:
+            print("Could not decode:\n%s" % data.decode(), file=sys.stderr)
+            raise
+
+    cache = dict_recursive_update(cache, plugins)
+
+    with open(cache_filename, 'w') as f:
+        json.dump(cache, f, indent=4, sort_keys=True)

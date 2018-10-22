@@ -33,3 +33,5 @@ gst_elements = library('gstcoreelements',
   install : true,
   install_dir : join_paths(get_option('libdir'), 'gstreamer-1.0'),
 )
+
+plugins += [gst_elements]
