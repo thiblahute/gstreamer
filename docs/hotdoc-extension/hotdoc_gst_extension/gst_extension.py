@@ -51,7 +51,6 @@ DESCRIPTION=\
 Extract gstreamer plugin documentation from sources and
 built plugins.
 """
-CACHE_FIXED_DEFAULT="hotdoc-fixed-default"
 
 
 def _cleanup_package_name(package_name):
@@ -640,9 +639,6 @@ class GstExtension(Extension):
 
         for name, prop in properties.items():
             unique_name = '%s:%s' % (element['hierarchy'][0], name)
-
-            if name == "name":
-                prop[CACHE_FIXED_DEFAULT] = True
 
             flags = [ReadableFlag()]
             if prop['writable']:

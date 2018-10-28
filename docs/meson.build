@@ -20,7 +20,6 @@ configure_file(
 )
 
 plugins_cache_generator = find_program(join_paths(meson.current_build_dir(), 'gst-plugins-doc-cache-generator'))
-
 if not hotdoc_p.found()
     message('Hotdoc not found, not building the documentation')
     subdir_done()
@@ -28,7 +27,7 @@ endif
 
 required_hotdoc_extensions = ['gi-extension']
 if not import('hotdoc').has_extensions(required_hotdoc_extensions)
-    if get_option('hotdoc').enabled()
+    if get_option('doc').enabled()
         error('Documentation enabled but gi-extension missing')
     endif
 
@@ -37,7 +36,7 @@ if not import('hotdoc').has_extensions(required_hotdoc_extensions)
 endif
 
 if not build_gir
-    if get_option('hotdoc').enabled()
+    if get_option('doc').enabled()
         error('Documentation enabled but introspection not built.')
     endif
 
