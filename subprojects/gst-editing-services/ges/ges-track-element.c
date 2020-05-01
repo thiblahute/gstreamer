@@ -279,9 +279,9 @@ ges_track_element_dispose (GObject * object)
 static void
 ges_track_element_set_asset (GESExtractable * extractable, GESAsset * asset)
 {
+  gchar *tmp;
   GESTrackElementClass *class;
   GstElement *nleobject;
-  gchar *tmp;
   GESTrackElement *object = GES_TRACK_ELEMENT (extractable);
 
   if (ges_track_element_get_track_type (object) == GES_TRACK_TYPE_UNKNOWN) {
@@ -300,7 +300,7 @@ ges_track_element_set_asset (GESExtractable * extractable, GESAsset * asset)
     return;
   }
 
-  tmp = g_strdup_printf ("nle%s", GES_TIMELINE_ELEMENT_NAME (object));
+  tmp = g_strdup_printf ("nleges%s", GES_TIMELINE_ELEMENT_NAME (object));
   gst_object_set_name (GST_OBJECT (nleobject), tmp);
   g_free (tmp);
 
