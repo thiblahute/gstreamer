@@ -408,17 +408,16 @@ ges_timeline_element_finalize (GObject * self)
 }
 
 static void
-_child_prop_spec (ChildPropSpec * childprop)
+_child_prop_spec_free (ChildPropSpec * childprop)
 {
   g_object_freeze_notify (childprop->child);
   if (childprop->handler_id)
     g_signal_handler_disconnect (childprop->child, childprop->handler_id);
   g_object_thaw_notify (childprop->child);
 
-  if (handler->child != (GObject *) handler->self &&
-      handler->child != (GObject *) handler->owner)
-    gst_object_unref (handler->child);
-  g_free (handler);
+  if (childprop->child != (GObject *) childprop->self &&
+      childprop->child != (GObject *) childprop->owner)
+    gst_object_unref (childprop->child);
 }
 
 static gboolean
@@ -439,7 +438,7 @@ ges_timeline_element_init (GESTimelineElement * self)
 
   self->priv->children_props = g_array_new (TRUE, TRUE, sizeof (ChildPropSpec));
   g_array_set_clear_func (self->priv->children_props,
-      (GDestroyNotify) _child_prop_spec);
+      (GDestroyNotify) _child_prop_spec_free);
 }
 
 static void
@@ -901,8 +900,7 @@ ges_timeline_element_add_child_property_full (GESTimelineElement * self,
       child, pspec->name);
 
   signame = g_strconcat ("notify::", pspec->name, NULL);
-  handler = (ChildPropHandler *) g_new0 (ChildPropHandler, 1);
-  handler->self = self;
+  childprop.self = self;
   if (child == G_OBJECT (self) || child == G_OBJECT (owner))
     childprop.child = child;
   else
@@ -2321,12 +2319,12 @@ ges_timeline_element_remove_child_property_full (GESTimelineElement * self,
   g_array_set_clear_func (self->priv->children_props, NULL);
   g_array_remove_index (self->priv->children_props, index);
   g_array_set_clear_func (self->priv->children_props,
-      (GDestroyNotify) _child_prop_spec);
+      (GDestroyNotify) _child_prop_spec_free);
 
   g_signal_emit (self, ges_timeline_element_signals[CHILD_PROPERTY_REMOVED], 0,
       handler_copy.child, handler_copy.pspec);
 
-  _child_prop_spec (&handler_copy);
+  _child_prop_spec_free (&handler_copy);
 
   return TRUE;
 }
