@@ -3330,7 +3330,7 @@ gst_gl_upload_transform_caps (GstGLUpload * upload, GstGLContext * context,
   GstCaps *result, *tmp;
   gint i;
 
-  if (upload->priv->method) {
+  if (upload->priv->method && filter && !gst_caps_is_any (filter)) {
     tmp = upload->priv->method->transform_caps (upload->priv->method_impl,
         context, direction, caps);
 
@@ -3348,13 +3348,7 @@ gst_gl_upload_transform_caps (GstGLUpload * upload, GstGLContext * context,
         gst_caps_features_free (passthrough);
       }
 
-      if (filter) {
-        result =
-            gst_caps_intersect_full (filter, tmp, GST_CAPS_INTERSECT_FIRST);
-        gst_caps_unref (tmp);
-      } else {
-        result = tmp;
-      }
+      result = gst_caps_intersect_full (filter, tmp, GST_CAPS_INTERSECT_FIRST);
       if (!gst_caps_is_empty (result))
         return result;
       else
