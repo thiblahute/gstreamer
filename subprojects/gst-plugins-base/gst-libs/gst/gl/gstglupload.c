@@ -3088,7 +3088,7 @@ gst_gl_upload_transform_caps (GstGLUpload * upload, GstGLContext * context,
   GST_OBJECT_LOCK (upload);
 
   // Prefer caps from the currently configured method, if any
-  if (upload->priv->method) {
+  if (upload->priv->method && filter && !gst_caps_is_any (filter)) {
     tmp = upload->priv->method->transform_caps (upload->priv->method_impl,
         context, direction, caps);
     if (!tmp)
@@ -3112,7 +3112,7 @@ gst_gl_upload_transform_caps (GstGLUpload * upload, GstGLContext * context,
       tmp = gst_caps_merge (tmp, tmp2);
   }
 
-  if (filter) {
+  if (filter && !gst_caps_is_any (filter)) {
     result = gst_caps_intersect_full (filter, tmp, GST_CAPS_INTERSECT_FIRST);
     gst_caps_unref (tmp);
   } else {
