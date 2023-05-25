@@ -2249,6 +2249,12 @@ get_output_for_slot (MultiQueueSlot * slot)
    *   stream.
    */
 
+  if (slot->active_stream == NULL) {
+    GST_INFO_OBJECT (dbin, "No active stream for slot %p", slot);
+    return NULL;
+  }
+
+
   stream_id = gst_stream_get_stream_id (slot->active_stream);
   caps = gst_stream_get_caps (slot->active_stream);
   GST_DEBUG_OBJECT (dbin, "stream %s , %" GST_PTR_FORMAT, stream_id, caps);
