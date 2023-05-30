@@ -952,11 +952,19 @@ create_seek_data (NleComposition * comp, GstEvent * event)
 }
 
 static void
+_remove_seek_actions (NleComposition * comp)
+{
+  _remove_actions_for_type (comp, G_CALLBACK (_seek_pipeline_func));
+}
+
+static void
 _add_seek_action (NleComposition * comp, GstEvent * event)
 {
   SeekData *seekd;
   GList *tmp;
   guint32 seqnum = gst_event_get_seqnum (event);
+
+  _remove_seek_actions (comp);
 
   ACTIONS_LOCK (comp);
   /* Check if this is our current seqnum */
@@ -1013,12 +1021,6 @@ static void
 _remove_update_actions (NleComposition * comp)
 {
   _remove_actions_for_type (comp, G_CALLBACK (_update_pipeline_func));
-}
-
-static void
-_remove_seek_actions (NleComposition * comp)
-{
-  _remove_actions_for_type (comp, G_CALLBACK (_seek_pipeline_func));
 }
 
 static void
