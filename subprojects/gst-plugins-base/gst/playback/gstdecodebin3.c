@@ -565,7 +565,7 @@ gst_decodebin3_class_init (GstDecodebin3Class * klass)
    * This signal is emitted whenever @decodebin needs to decide whether
    * to expose a @stream of a given @collection.
    *
-   * Note that the prefered way to select streams is to listen to
+   * Note that the preferred way to select streams is to listen to
    * GST_MESSAGE_STREAM_COLLECTION on the bus and send a
    * GST_EVENT_SELECT_STREAMS with the streams the user wants.
    *
@@ -650,6 +650,7 @@ gst_decodebin3_reset (GstDecodebin3 * dbin)
 
   GST_DEBUG_OBJECT (dbin, "Resetting");
 
+  SELECTION_LOCK (dbin);
   /* Free output streams */
   for (tmp = dbin->output_streams; tmp; tmp = tmp->next) {
     DecodebinOutputStream *output = (DecodebinOutputStream *) tmp->data;
@@ -667,11 +668,19 @@ gst_decodebin3_reset (GstDecodebin3 * dbin)
   dbin->slots = NULL;
   dbin->current_group_id = GST_GROUP_ID_INVALID;
 
+  g_list_free (dbin->pending_select_streams);
+  dbin->pending_select_streams = NULL;
+
+  dbin->selection_updated = FALSE;
+  SELECTION_UNLOCK (dbin);
+
   /* Reset the inputs */
+  INPUT_LOCK (dbin);
   reset_input (dbin, dbin->main_input);
   for (tmp = dbin->other_inputs; tmp; tmp = tmp->next) {
     reset_input (dbin, tmp->data);
   }
+  INPUT_UNLOCK (dbin);
 
   /* Reset multiqueue to default interleave */
   g_object_set (dbin->multiqueue, "min-interleave-time",
@@ -687,11 +696,6 @@ gst_decodebin3_reset (GstDecodebin3 * dbin)
 
   g_list_free (dbin->to_activate);
   dbin->to_activate = NULL;
-
-  g_list_free (dbin->pending_select_streams);
-  dbin->pending_select_streams = NULL;
-
-  dbin->selection_updated = FALSE;
 }
 
 static void
