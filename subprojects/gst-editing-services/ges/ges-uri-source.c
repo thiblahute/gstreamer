@@ -36,6 +36,8 @@ GST_DEBUG_CATEGORY_STATIC (uri_source_debug);
   "subpicture/x-dvd; "			\
   "subpicture/x-pgs"
 
+#define USE_PLAYBINPOOL 1
+
 static GstStaticCaps default_raw_caps = GST_STATIC_CAPS (DEFAULT_RAW_CAPS);
 
 static inline gboolean
@@ -144,9 +146,48 @@ source_setup_cb (GstElement * decodebin, GstElement * source,
       GST_ELEMENT (subtimeline));
 }
 
+#if USE_PLAYBINPOOL
+static GstElement *
+ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
+{
+  GESTrack *track;
+  GstElement *decodebin;
+  const gchar *wanted_id =
+      gst_discoverer_stream_info_get_stream_id
+      (ges_uri_source_asset_get_stream_info (GES_URI_SOURCE_ASSET
+          (ges_extractable_get_asset (GES_EXTRACTABLE (self->element)))));
+
+  track = ges_track_element_get_track (self->element);
+
+  self->decodebin = decodebin =
+      gst_element_factory_make ("playbinpoolsrc", NULL);
+  GST_DEBUG_OBJECT (self->element,
+      "%" GST_PTR_FORMAT " - Track! %" GST_PTR_FORMAT, self->decodebin, track);
+  if (GES_IS_VIDEO_SOURCE (self->element)) {
+    g_object_set (decodebin, "stream-type", GST_STREAM_TYPE_VIDEO, NULL);
+  } else if (GES_IS_AUDIO_SOURCE (self->element)) {
+    g_object_set (decodebin, "stream-type", GST_STREAM_TYPE_AUDIO, NULL);
+  } else {
+    g_assert_not_reached ();
+  }
+
+  g_signal_connect (decodebin, "source-setup",
+      G_CALLBACK (source_setup_cb), self);
+
+  g_object_set (decodebin, "uri", self->uri, "stream-id", wanted_id, NULL);
+
+  return decodebin;
+}
+#endif
+
+
 GstElement *
 ges_uri_source_create_source (GESUriSource * self)
 {
+#if USE_PLAYBINPOOL
+  return ges_uri_source_create_playbinpoolsrc (self);
+#endif
+
   GESTrack *track;
   GstElement *decodebin;
   const GstCaps *caps = NULL;
@@ -190,7 +231,10 @@ ges_uri_source_track_set_cb (GESTrackElement * element,
   GST_INFO_OBJECT (element,
       "Setting %" GST_PTR_FORMAT "caps to: %" GST_PTR_FORMAT, self->decodebin,
       caps);
+
+#if !USE_PLAYBINPOOL
   g_object_set (self->decodebin, "caps", caps, NULL);
+#endif
 }
 
 
@@ -214,6 +258,9 @@ ges_uri_source_init (GESTrackElement * element, GESUriSource * self)
 gboolean
 ges_uri_source_select_pad (GESSource * self, GstPad * pad)
 {
+#if USE_PLAYBINPOOL
+  return TRUE;
+#else
   gboolean res = TRUE;
   gboolean is_nested_timeline;
   GESUriSourceAsset *asset =
@@ -243,4 +290,5 @@ ges_uri_source_select_pad (GESSource * self, GstPad * pad)
   g_free (stream_id);
 
   return res;
+#endif
 }
