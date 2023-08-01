@@ -600,6 +600,78 @@ interpolate_cubic_monotonic_get_value_array (GstTimedValueControlSource * self,
   return ret;
 }
 
+/* easeInOutExpo interpolation
+ *   implements the css easing 'cubic-bezier(0.87, 0, 0.13, 1)'.
+ *   Source: https://easings.net/#easeInOutExpo
+ */
+static inline gdouble
+_interpolate_ease_in_out_expo (GstClockTime timestamp1, gdouble value1,
+    GstClockTime timestamp2, gdouble value2, GstClockTime timestamp)
+{
+  gdouble t = gst_guint64_to_gdouble (timestamp - timestamp1)
+      / gst_guint64_to_gdouble (timestamp2 - timestamp1);
+  gdouble a = value2 - value1;
+  if (t < 0.5)
+    return a / 2 * pow (2, 20 * t - 10) + value1;
+  else
+    return a / 2 * (-pow (2, -20 * t + 10) + 2) + value1;
+}
+
+static gboolean
+interpolate_ease_in_out_expo_get (GstTimedValueControlSource * self,
+    GstClockTime timestamp, gdouble * value)
+{
+  gboolean ret = FALSE;
+  GstControlPoint *cp1, *cp2;
+
+  g_mutex_lock (&self->lock);
+
+  if (_get_nearest_control_points (self, timestamp, &cp1, &cp2)) {
+    *value = _interpolate_ease_in_out_expo (cp1->timestamp, cp1->value,
+        (cp2 ? cp2->timestamp : GST_CLOCK_TIME_NONE),
+        (cp2 ? cp2->value : 0.0), timestamp);
+    ret = TRUE;
+  }
+  g_mutex_unlock (&self->lock);
+  return ret;
+}
+
+static gboolean
+interpolate_ease_in_out_expo_get_value_array (GstTimedValueControlSource * self,
+    GstClockTime timestamp, GstClockTime interval, guint n_values,
+    gdouble * values)
+{
+  gboolean ret = FALSE;
+  guint i;
+  GstClockTime ts = timestamp;
+  GstClockTime next_ts = 0;
+  GstControlPoint *cp1 = NULL, *cp2 = NULL;
+
+  g_mutex_lock (&self->lock);
+
+  for (i = 0; i < n_values; i++) {
+    GST_LOG ("values[%3d] : ts=%" GST_TIME_FORMAT ", next_ts=%" GST_TIME_FORMAT,
+        i, GST_TIME_ARGS (ts), GST_TIME_ARGS (next_ts));
+    if (ts >= next_ts) {
+      _get_nearest_control_points2 (self, ts, &cp1, &cp2, &next_ts);
+    }
+
+    if (cp1) {
+      *values = _interpolate_ease_in_out_expo (cp1->timestamp, cp1->value,
+          (cp2 ? cp2->timestamp : GST_CLOCK_TIME_NONE),
+          (cp2 ? cp2->value : 0.0), ts);
+      ret = TRUE;
+      GST_LOG ("values[%3d]=%lf", i, *values);
+    } else {
+      *values = NAN;
+      GST_LOG ("values[%3d]=-", i);
+    }
+    ts += interval;
+    values++;
+  }
+  g_mutex_unlock (&self->lock);
+  return ret;
+}
 
 static struct
 {
@@ -615,7 +687,11 @@ static struct
       (GstControlSourceGetValueArray) interpolate_cubic_get_value_array}, {
         (GstControlSourceGetValue) interpolate_cubic_monotonic_get,
         (GstControlSourceGetValueArray)
-      interpolate_cubic_monotonic_get_value_array}
+      interpolate_cubic_monotonic_get_value_array}, {
+      (GstControlSourceGetValue) interpolate_ease_in_out_expo_get,
+      (GstControlSourceGetValueArray)
+      interpolate_ease_in_out_expo_get_value_array},
+
 };
 
 static const guint num_interpolation_modes = G_N_ELEMENTS (interpolation_modes);

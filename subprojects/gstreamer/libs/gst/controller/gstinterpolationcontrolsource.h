@@ -58,6 +58,8 @@ typedef struct _GstInterpolationControlSourcePrivate GstInterpolationControlSour
  * @GST_INTERPOLATION_MODE_CUBIC_MONOTONIC: monotonic cubic interpolation, will not
  *   produce any values outside of the min-max range set by the control points
  *   (Since: 1.8)
+ * @GST_INTERPOLATION_MODE_EASE_IN_OUT_EXPO: ease in out exponential interpolation.
+ *   Implements the css easing 'cubic-bezier(0.87, 0, 0.13, 1)'.
  *
  * The various interpolation modes available.
  */
@@ -67,6 +69,7 @@ typedef enum
   GST_INTERPOLATION_MODE_LINEAR,
   GST_INTERPOLATION_MODE_CUBIC,
   GST_INTERPOLATION_MODE_CUBIC_MONOTONIC,
+  GST_INTERPOLATION_MODE_EASE_IN_OUT_EXPO,
 } GstInterpolationMode;
 
 /**
