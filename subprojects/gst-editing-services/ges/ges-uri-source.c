@@ -159,8 +159,11 @@ ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
 
   track = ges_track_element_get_track (self->element);
 
+  gchar *name = g_strdup_printf ("%s-playbinpoolsrc",
+      GES_TIMELINE_ELEMENT_NAME (self->element));
   self->decodebin = decodebin =
-      gst_element_factory_make ("playbinpoolsrc", NULL);
+      gst_element_factory_make ("playbinpoolsrc", name);
+  g_free (name);
   GST_DEBUG_OBJECT (self->element,
       "%" GST_PTR_FORMAT " - Track! %" GST_PTR_FORMAT, self->decodebin, track);
   if (GES_IS_VIDEO_SOURCE (self->element)) {
@@ -285,10 +288,27 @@ ges_uri_source_select_pad (GESSource * self, GstPad * pad)
   stream_id = gst_pad_get_stream_id (pad);
   res = !g_strcmp0 (stream_id, wanted_stream_id);
 
-  GST_INFO_OBJECT (self, "%s pad with stream id: %s as %s wanted",
+  GST_ERROR_OBJECT (self, "%s pad with stream id: %s as %s wanted",
       res ? "Using" : "Ignoring", stream_id, wanted_stream_id);
   g_free (stream_id);
 
   return res;
+#endif
+}
+
+
+void
+_deinit_playbin_pool_src (void)
+{
+#if USE_PLAYBINPOOL
+  GstElement *playbinpoolsrc =
+      gst_element_factory_make ("playbinpoolsrc", NULL);
+  if (!playbinpoolsrc)
+    return;
+
+  GObject *pool =
+      gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (playbinpoolsrc),
+      "pool");
+  g_object_set (pool, "cleanup-timeout", 0, NULL);
 #endif
 }

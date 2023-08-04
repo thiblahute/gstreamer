@@ -412,6 +412,7 @@ G_GNUC_INTERNAL GstElement * get_element_for_encoding_profile   (GstEncodingProf
 G_GNUC_INTERNAL void _init_standard_transition_assets        (void);
 G_GNUC_INTERNAL void _init_formatter_assets                  (void);
 G_GNUC_INTERNAL void _deinit_formatter_assets                (void);
+G_GNUC_INTERNAL void _deinit_playbin_pool_src                 (void);
 
 /* Utilities */
 G_GNUC_INTERNAL gint element_start_compare                (GESTimelineElement * a,
