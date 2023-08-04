@@ -1365,18 +1365,26 @@ uri_src_block_probe (GstPad * pad, GstPadProbeInfo * info,
         handler->play_item);
     ret = GST_PAD_PROBE_REMOVE;
   } else if (play_item_has_all_pads (handler->play_item)) {
-    /* We have all expected pads for this play item but the current input
-     * play item isn't done yet, wait for it */
-    GST_DEBUG_OBJECT (pad, "Waiting for input source to be drained");
-    g_cond_wait (&handler->uridecodebin->input_source_drained,
-        &handler->uridecodebin->play_items_lock);
-    if (g_atomic_int_get (&handler->uridecodebin->shutdown))
-      goto shutdown;
-    if (play_item_is_eos (handler->uridecodebin->input_item)) {
-      GST_DEBUG_OBJECT (handler->uridecodebin,
-          "We can switch over to the next input item");
-      switch_and_activate_input_locked (handler->uridecodebin,
-          handler->play_item);
+    GstState state, next;
+
+    gst_element_get_state (handler->uridecodebin, &state, &next, 0);
+
+    if (state > GST_STATE_PAUSED && (next == GST_STATE_VOID_PENDING
+            || next > GST_STATE_PAUSED)) {
+      /* We have all expected pads for this play item but the current input
+       * play item isn't done yet, wait for it if we are playing, otherwise setup
+       * next item right away */
+      GST_DEBUG_OBJECT (pad, "Waiting for input source to be drained");
+      g_cond_wait (&handler->uridecodebin->input_source_drained,
+          &handler->uridecodebin->play_items_lock);
+      if (g_atomic_int_get (&handler->uridecodebin->shutdown))
+        goto shutdown;
+      if (play_item_is_eos (handler->uridecodebin->input_item)) {
+        GST_DEBUG_OBJECT (handler->uridecodebin,
+            "We can switch over to the next input item");
+        switch_and_activate_input_locked (handler->uridecodebin,
+            handler->play_item);
+      }
     }
     ret = GST_PAD_PROBE_REMOVE;
   }
