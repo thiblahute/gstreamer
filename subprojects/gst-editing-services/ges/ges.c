@@ -239,7 +239,6 @@ ges_deinit (void)
 
   /* Allow deinit only from a thread where ges_init() was called */
   g_assert (initialized_thread == g_thread_self ());
-
   _ges_uri_asset_cleanup ();
 
   g_type_class_unref (g_type_class_peek (GES_TYPE_TEST_CLIP));
@@ -254,6 +253,7 @@ ges_deinit (void)
   /* Register track elements */
   g_type_class_unref (g_type_class_peek (GES_TYPE_EFFECT));
 
+  _deinit_playbin_pool_src ();
   ges_asset_cache_deinit ();
   ges_xml_formatter_deinit ();
 
