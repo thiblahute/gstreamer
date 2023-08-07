@@ -144,6 +144,13 @@ source_setup_cb (GstElement * decodebin, GstElement * source,
       GST_ELEMENT (subtimeline));
 }
 
+static gboolean
+_should_enable_playbinpoolsrc (GESSource * self)
+{
+  return !ges_source_get_rendering_smartly (self)
+      && g_getenv ("GES_ENABLE_PLAYBINPOOLSRC");
+}
+
 static GstElement *
 ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
 {
@@ -186,7 +193,7 @@ ges_uri_source_create_source (GESUriSource * self)
   GstElement *decodebin;
   const GstCaps *caps = NULL;
 
-  if (g_getenv ("GES_ENABLE_PLAYBINPOOLSRC"))
+  if (_should_enable_playbinpoolsrc (GES_SOURCE (self->element)))
     return ges_uri_source_create_playbinpoolsrc (self);
 
   track = ges_track_element_get_track (self->element);
@@ -229,7 +236,7 @@ ges_uri_source_track_set_cb (GESTrackElement * element,
       "Setting %" GST_PTR_FORMAT "caps to: %" GST_PTR_FORMAT, self->decodebin,
       caps);
 
-  if (!g_getenv ("GES_ENABLE_PLAYBINPOOLSRC"))
+  if (!_should_enable_playbinpoolsrc (GES_SOURCE (self->element)))
     g_object_set (self->decodebin, "caps", caps, NULL);
 }
 
@@ -254,7 +261,7 @@ ges_uri_source_init (GESTrackElement * element, GESUriSource * self)
 gboolean
 ges_uri_source_select_pad (GESSource * self, GstPad * pad)
 {
-  if (g_getenv ("GES_ENABLE_PLAYBINPOOLSRC"))
+  if (_should_enable_playbinpoolsrc (self))
     return TRUE;
 
   gboolean res = TRUE;
