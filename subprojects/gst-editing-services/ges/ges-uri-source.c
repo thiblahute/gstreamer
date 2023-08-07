@@ -36,8 +36,6 @@ GST_DEBUG_CATEGORY_STATIC (uri_source_debug);
   "subpicture/x-dvd; "			\
   "subpicture/x-pgs"
 
-#define USE_PLAYBINPOOL 1
-
 static GstStaticCaps default_raw_caps = GST_STATIC_CAPS (DEFAULT_RAW_CAPS);
 
 static inline gboolean
@@ -146,7 +144,6 @@ source_setup_cb (GstElement * decodebin, GstElement * source,
       GST_ELEMENT (subtimeline));
 }
 
-#if USE_PLAYBINPOOL
 static GstElement *
 ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
 {
@@ -181,19 +178,16 @@ ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
 
   return decodebin;
 }
-#endif
-
 
 GstElement *
 ges_uri_source_create_source (GESUriSource * self)
 {
-#if USE_PLAYBINPOOL
-  return ges_uri_source_create_playbinpoolsrc (self);
-#endif
-
   GESTrack *track;
   GstElement *decodebin;
   const GstCaps *caps = NULL;
+
+  if (g_getenv ("GES_ENABLE_PLAYBINPOOLSRC"))
+    return ges_uri_source_create_playbinpoolsrc (self);
 
   track = ges_track_element_get_track (self->element);
 
@@ -235,9 +229,8 @@ ges_uri_source_track_set_cb (GESTrackElement * element,
       "Setting %" GST_PTR_FORMAT "caps to: %" GST_PTR_FORMAT, self->decodebin,
       caps);
 
-#if !USE_PLAYBINPOOL
-  g_object_set (self->decodebin, "caps", caps, NULL);
-#endif
+  if (!g_getenv ("GES_ENABLE_PLAYBINPOOLSRC"))
+    g_object_set (self->decodebin, "caps", caps, NULL);
 }
 
 
@@ -261,9 +254,9 @@ ges_uri_source_init (GESTrackElement * element, GESUriSource * self)
 gboolean
 ges_uri_source_select_pad (GESSource * self, GstPad * pad)
 {
-#if USE_PLAYBINPOOL
-  return TRUE;
-#else
+  if (g_getenv ("GES_ENABLE_PLAYBINPOOLSRC"))
+    return TRUE;
+
   gboolean res = TRUE;
   gboolean is_nested_timeline;
   GESUriSourceAsset *asset =
@@ -293,14 +286,15 @@ ges_uri_source_select_pad (GESSource * self, GstPad * pad)
   g_free (stream_id);
 
   return res;
-#endif
 }
 
 
 void
 _deinit_playbin_pool_src (void)
 {
-#if USE_PLAYBINPOOL
+  if (!g_getenv ("GES_ENABLE_PLAYBINPOOLSRC"))
+    return;
+
   GstElement *playbinpoolsrc =
       gst_element_factory_make ("playbinpoolsrc", NULL);
   if (!playbinpoolsrc)
@@ -311,5 +305,4 @@ _deinit_playbin_pool_src (void)
       "pool");
   g_object_set (pool, "cleanup-timeout", 0, NULL);
   gst_object_unref (pool);
-#endif
 }
