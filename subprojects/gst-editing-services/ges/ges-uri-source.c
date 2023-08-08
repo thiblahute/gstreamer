@@ -38,6 +38,8 @@ GST_DEBUG_CATEGORY_STATIC (uri_source_debug);
 
 static GstStaticCaps default_raw_caps = GST_STATIC_CAPS (DEFAULT_RAW_CAPS);
 
+static gchar *_ges_enable_playbinpoolsrc = NULL;
+
 static inline gboolean
 are_raw_caps (const GstCaps * caps)
 {
@@ -144,11 +146,29 @@ source_setup_cb (GstElement * decodebin, GstElement * source,
       GST_ELEMENT (subtimeline));
 }
 
+static gpointer
+_get_enable_playbinpoolsrc_env ()
+{
+  const gchar *env = g_getenv ("GES_ENABLE_PLAYBINPOOLSRC");
+  if (env)
+    return g_strdup (env);
+  else
+    return NULL;
+}
+
 static gboolean
 _should_enable_playbinpoolsrc (GESSource * self)
 {
+  static GOnce once = G_ONCE_INIT;
+
+  g_once (&once, _get_enable_playbinpoolsrc_env, NULL);
+
+  if (once.retval) {
+    _ges_enable_playbinpoolsrc = once.retval;
+  }
+
   return !ges_source_get_rendering_smartly (self)
-      && g_getenv ("GES_ENABLE_PLAYBINPOOLSRC");
+      && g_strcmp0 (_ges_enable_playbinpoolsrc, "1");
 }
 
 static GstElement *
@@ -299,7 +319,7 @@ ges_uri_source_select_pad (GESSource * self, GstPad * pad)
 void
 _deinit_playbin_pool_src (void)
 {
-  if (!g_getenv ("GES_ENABLE_PLAYBINPOOLSRC"))
+  if (!_ges_enable_playbinpoolsrc)
     return;
 
   GstElement *playbinpoolsrc =
