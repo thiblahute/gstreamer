@@ -310,5 +310,6 @@ _deinit_playbin_pool_src (void)
       gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (playbinpoolsrc),
       "pool");
   g_object_set (pool, "cleanup-timeout", 0, NULL);
+  gst_object_unref (pool);
 #endif
 }
