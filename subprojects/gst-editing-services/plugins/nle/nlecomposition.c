@@ -3469,6 +3469,7 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
   GstClockTime new_stop = GST_CLOCK_TIME_NONE;
   GstClockTime new_start = GST_CLOCK_TIME_NONE;
   GstClockTime duration = NLE_OBJECT (comp)->duration - 1;
+  gboolean is_new_stack;
 
   GstState nextstate = (GST_STATE_NEXT (comp) == GST_STATE_VOID_PENDING) ?
       GST_STATE (comp) : GST_STATE_NEXT (comp);
@@ -3500,8 +3501,18 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
 
   /* Get new stack and compare it to current one */
   stack = get_clean_toplevel_stack (comp, &currenttime, &new_start, &new_stop);
-  tear_down = !are_same_stacks (priv->current, stack)
+  is_new_stack = !are_same_stacks (priv->current, stack);
+  tear_down = is_new_stack
       || nle_composition_query_needs_teardown (comp, update_reason);
+
+  if (is_new_stack) {
+    gst_element_post_message (GST_ELEMENT (comp),
+        gst_message_new_element (GST_OBJECT (comp),
+            gst_structure_new ("NleCompositionNewStack",
+                "reason", G_TYPE_STRING, UPDATE_PIPELINE_REASONS[update_reason],
+                "stack-start", GST_TYPE_CLOCK_TIME, new_start,
+                "stack-end", GST_TYPE_CLOCK_TIME, new_stop, NULL)));
+  }
 
   /* set new current_stack_start/stop (the current zone over which the new stack
    * is valid) */
