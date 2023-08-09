@@ -25,6 +25,7 @@ typedef struct {
     GArray *prepared_sources;
     GESTimeline *timeline;
     GObject *pool;
+    gboolean has_subtimelines;
 
 } GESPipelinePoolManager;
 
