@@ -1,0 +1,196 @@
+#include "ges-pipeline-pool-manager.h"
+#include "ges-internal.h"
+
+
+#undef GST_CAT_DEFAULT
+#define GST_CAT_DEFAULT ges_pipeline_pool_manager_debug
+GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
+
+typedef struct
+{
+  GstElement *element;
+
+  /* Not keeping ref as it is only used to do pointer comparison */
+  GESTrack *track;
+
+  GstClockTime start;
+  GstClockTime end;
+} PooledSource;
+
+static gint
+compare_pooled_source (PooledSource * a, PooledSource * b)
+{
+  if (a->start == b->start) {
+    if (a->end < b->end)
+      return -1;
+    if (a->end > b->end)
+      return 1;
+    return 0;
+  } else if (a->start < b->start) {
+    return -1;
+  }
+
+  return 1;
+}
+
+
+static void
+pooled_source_clear (PooledSource * s)
+{
+  gst_object_unref (s->element);
+}
+
+void
+ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
+    self, GESTrack * track, GstClockTime stack_start, GstClockTime stack_end)
+{
+  gboolean entered_window = FALSE;
+  GstClockTime window_start =
+      stack_start >= (60 * GST_SECOND) ? stack_start - (60 * GST_SECOND) : 0;
+  GstClockTime window_stop = stack_end + (60 * GST_SECOND);
+
+  g_mutex_lock (&self->lock);
+  for (gint i = 0; i < self->pooled_sources->len; i++) {
+    PooledSource *source =
+        &g_array_index (self->pooled_sources, PooledSource, i);
+
+    if (!entered_window) {
+      if (source->start >= window_start) {
+        entered_window = TRUE;
+      } else {
+        continue;
+      }
+    }
+
+    if (source->start > window_stop) {
+      break;
+    }
+
+    if (source->track != track)
+      continue;
+
+    gboolean res = TRUE;
+    g_signal_emit_by_name (self->pool, "prepare-pipeline", source->element,
+        &res);
+    if (res) {
+      gst_object_ref (source->element);
+      g_array_append_val (self->prepared_sources, *source);
+    }
+  }
+
+  GArray *unprepare_source_indexes =
+      g_array_new (self->prepared_sources->len, FALSE, sizeof (gint));
+  for (gint i = 0; i < self->prepared_sources->len; i++) {
+    PooledSource *source =
+        &g_array_index (self->prepared_sources, PooledSource, i);
+
+    if (source->track != track)
+      continue;
+
+    gboolean in_window = (source->start < window_start)
+        || (source->start > window_stop);
+    if (!in_window) {
+      g_signal_emit_by_name (self->pool, "unprepare-pipeline", source->element);
+      g_array_append_val (unprepare_source_indexes, i);
+    }
+  }
+
+  for (gint i = unprepare_source_indexes->len - 1; i >= 0; i--) {
+    g_array_remove_index_fast (self->prepared_sources,
+        unprepare_source_indexes->data[i]);
+  }
+  g_mutex_unlock (&self->lock);
+}
+
+void
+ges_pipeline_pool_manager_unprepare_all (GESPipelinePoolManager * self)
+{
+  g_mutex_lock (&self->lock);
+  for (gint i = 0; i < self->prepared_sources->len; i++) {
+    PooledSource *source =
+        &g_array_index (self->prepared_sources, PooledSource, i);
+    g_signal_emit_by_name (self->pool, "unprepare-pipeline", source->element);
+  }
+  g_array_remove_range (self->prepared_sources, 0, self->prepared_sources->len);
+  g_mutex_unlock (&self->lock);
+}
+
+static gboolean
+list_pooled_sources (GNode * node, GESPipelinePoolManager * self)
+{
+  if (GES_IS_AUDIO_URI_SOURCE (node->data)
+      || GES_IS_VIDEO_URI_SOURCE (node->data)) {
+    GstElement *source_element =
+        ges_source_get_source_element (GES_SOURCE (node->data));
+    if (!g_strcmp0 (GST_OBJECT_NAME (gst_element_get_factory (source_element)),
+            "playbinpoolsrc")) {
+      PooledSource s = {
+        .element = gst_object_ref (source_element),
+        .track = ges_track_element_get_track (node->data),
+        .start = GES_TIMELINE_ELEMENT_START (node->data),
+        .end = GES_TIMELINE_ELEMENT_END (node->data),
+      };
+
+      g_array_append_val (self->pooled_sources, s);
+    }
+  }
+
+  g_array_sort (self->pooled_sources, (GCompareFunc) compare_pooled_source);
+
+  return FALSE;
+}
+
+void
+ges_pipeline_pool_clear (GESPipelinePoolManager * self)
+{
+  g_mutex_lock (&self->lock);
+  g_array_free (self->pooled_sources, TRUE);
+  g_array_free (self->prepared_sources, TRUE);
+  g_mutex_unlock (&self->lock);
+
+  gst_object_unref (self->pool);
+}
+
+void
+ges_pipeline_pool_manager_commit (GESPipelinePoolManager * self)
+{
+  GNode *tree = timeline_get_tree (self->timeline);
+
+  g_mutex_lock (&self->lock);
+  g_array_remove_range (self->pooled_sources, 0, self->pooled_sources->len);
+  g_node_traverse (tree, G_IN_ORDER, G_TRAVERSE_LEAVES, -1,
+      (GNodeTraverseFunc) list_pooled_sources, self);
+  g_mutex_unlock (&self->lock);
+}
+
+void
+ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
+    GESTimeline * timeline)
+{
+  static gsize init = 0;
+
+  if (g_once_init_enter ((gsize *) & init)) {
+    GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "gespipelinepoolmanager", 0,
+        "gespipelinepoolmanager");
+
+    g_once_init_leave ((gsize *) & init, 1);
+  }
+
+
+  GstElement *playbinpoolsrc =
+      gst_element_factory_make ("playbinpoolsrc", NULL);
+
+  if (!playbinpoolsrc)
+    return;
+
+  self->timeline = timeline;
+  self->pooled_sources = g_array_new (100, TRUE, sizeof (PooledSource));
+  g_array_set_clear_func (self->pooled_sources,
+      (GDestroyNotify) pooled_source_clear);
+  self->prepared_sources = g_array_new (100, TRUE, sizeof (PooledSource));
+  g_array_set_clear_func (self->prepared_sources,
+      (GDestroyNotify) pooled_source_clear);
+  self->pool =
+      gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (playbinpoolsrc),
+      "pool");
+}

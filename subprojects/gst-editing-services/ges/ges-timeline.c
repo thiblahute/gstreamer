@@ -134,6 +134,7 @@
  * You can use a #GESPipeline to easily preview/play the timeline's
  * content, or render it to a file.
  */
+#include "ges-pipeline-pool-manager.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -239,6 +240,8 @@ struct _GESTimelinePrivate
 
   gboolean rendering_smartly;
   gboolean disable_edit_apis;
+
+  GESPipelinePoolManager pool_manager;
 };
 
 /* private structure to contain our track-related information */
@@ -436,6 +439,7 @@ ges_timeline_finalize (GObject * object)
 
   g_rec_mutex_clear (&tl->priv->dyn_mutex);
   g_node_destroy (tl->priv->tree);
+  ges_pipeline_pool_clear (&tl->priv->pool_manager);
 
   G_OBJECT_CLASS (ges_timeline_parent_class)->finalize (object);
 }
@@ -461,7 +465,26 @@ ges_timeline_handle_message (GstBin * bin, GstMessage * message)
     GstMessage *amessage = NULL;
     const GstStructure *mstructure = gst_message_get_structure (message);
 
-    if (gst_structure_has_name (mstructure, "NleCompositionStartUpdate")) {
+    if (gst_structure_has_name (mstructure, "NleCompositionNewStack")) {
+      GstClockTime stack_start, stack_end;
+      GESTrack *track =
+          GES_TRACK (gst_object_get_parent (GST_MESSAGE_SRC (message)));
+
+      if (!gst_structure_get (mstructure,
+              "stack-start", GST_TYPE_CLOCK_TIME, &stack_start,
+              "stack-end", GST_TYPE_CLOCK_TIME, &stack_end, NULL)) {
+
+        g_error ("Invalid NleCompositionNewStack %s",
+            gst_structure_to_string (mstructure));
+      }
+
+      ges_pipeline_pool_manager_prepare_pipelines_around (&timeline->
+          priv->pool_manager, track, stack_start, stack_end);
+
+      gst_object_unref (track);
+
+    } else if (gst_structure_has_name (mstructure, "NleCompositionStartUpdate")) {
+
       if (g_strcmp0 (gst_structure_get_string (mstructure, "reason"), "Seek")) {
         GST_INFO_OBJECT (timeline,
             "A composition is starting an update because of %s"
@@ -535,8 +558,16 @@ ges_timeline_change_state (GstElement * element, GstStateChange transition)
   res = GST_ELEMENT_CLASS (ges_timeline_parent_class)->change_state (element,
       transition);
 
-  if (transition == GST_STATE_CHANGE_READY_TO_PAUSED)
-    ges_timeline_post_stream_collection (timeline);
+  switch (transition) {
+    case GST_STATE_CHANGE_READY_TO_PAUSED:
+      ges_timeline_post_stream_collection (timeline);
+      break;
+    case GST_STATE_CHANGE_PAUSED_TO_READY:
+      ges_pipeline_pool_manager_unprepare_all (&timeline->priv->pool_manager);
+      break;
+    default:
+      break;
+  }
   return res;
 }
 
@@ -930,6 +961,8 @@ ges_timeline_init (GESTimeline * self)
   g_rec_mutex_init (&priv->dyn_mutex);
   g_mutex_init (&priv->commited_lock);
   priv->valid_thread = g_thread_self ();
+
+  ges_pipeline_pool_manager_init (&priv->pool_manager, self);
 }
 
 /* Private methods */
@@ -2901,6 +2934,7 @@ ges_timeline_commit (GESTimeline * timeline)
 
   LOCK_DYN (timeline);
   ret = ges_timeline_commit_unlocked (timeline);
+  ges_pipeline_pool_manager_commit (&timeline->priv->pool_manager);
   UNLOCK_DYN (timeline);
 
   if (pcollection != timeline->priv->stream_collection) {

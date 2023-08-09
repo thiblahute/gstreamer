@@ -68,6 +68,7 @@ ges_sources = files([
     'ges-marker-list.c',
     'ges-discoverer-manager.c',
     'gesvideoscale.c',
+    'ges-pipeline-pool-manager.c',
     'gstframepositioner.c'
 ])
 
