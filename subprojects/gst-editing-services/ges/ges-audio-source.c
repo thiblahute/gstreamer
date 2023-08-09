@@ -134,6 +134,7 @@ ges_audio_source_create_element (GESTrackElement * trksrc)
   g_assert (source_class->create_source);
 
   sub_element = source_class->create_source (GES_SOURCE (trksrc));
+  ges_source_set_source_element(GES_SOURCE (trksrc), sub_element);
 
   GST_DEBUG_OBJECT (trksrc, "Creating a bin sub_element ! volume");
   vbin =

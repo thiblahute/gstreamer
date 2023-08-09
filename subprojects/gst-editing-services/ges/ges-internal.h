@@ -597,6 +597,10 @@ G_GNUC_INTERNAL GESMultiFileURI * ges_multi_file_uri_new (const gchar * uri);
  ******************************/
 G_GNUC_INTERNAL gboolean
 ges_video_uri_source_get_natural_size(GESVideoSource* source, gint* width, gint* height);
+G_GNUC_INTERNAL GstElement *
+ges_source_get_source_element(GESSource *source);
+G_GNUC_INTERNAL void
+ges_source_set_source_element(GESSource *source, GstElement *element);
 
 /**********************************
  *  GESTestClipAsset internal API *

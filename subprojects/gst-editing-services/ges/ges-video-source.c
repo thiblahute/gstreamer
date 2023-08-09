@@ -199,6 +199,8 @@ ges_video_source_create_element (GESTrackElement * trksrc)
     return NULL;
 
   sub_element = source_class->create_source (GES_SOURCE (trksrc));
+  ges_source_set_source_element(GES_SOURCE (trksrc), sub_element);
+
 
   self = (GESVideoSource *) trksrc;
   if (vsource_class->ABI.abi.needs_converters)
