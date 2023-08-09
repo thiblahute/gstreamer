@@ -146,28 +146,17 @@ source_setup_cb (GstElement * decodebin, GstElement * source,
       GST_ELEMENT (subtimeline));
 }
 
-static gchar *
-_get_enable_playbinpoolsrc_env ()
-{
-  const gchar *env = g_getenv ("GES_ENABLE_PLAYBINPOOLSRC");
-  if (env)
-    return g_strdup (env);
-  else
-    return NULL;
-}
-
 static gboolean
 _should_enable_playbinpoolsrc (GESSource * self)
 {
   static gsize once = 0;
-  gchar *env;
+  const gchar *env;
 
   if (g_once_init_enter (&once)) {
-    env = _get_enable_playbinpoolsrc_env ();
+    env = g_getenv ("GES_ENABLE_PLAYBINPOOLSRC");
 
     if (env) {
-      _ges_enable_playbinpoolsrc = g_strcmp0 (env, "1");
-      g_free (env);
+      _ges_enable_playbinpoolsrc = g_strcmp0 (env, "1") == 0;
     }
 
     g_once_init_leave (&once, 1);
