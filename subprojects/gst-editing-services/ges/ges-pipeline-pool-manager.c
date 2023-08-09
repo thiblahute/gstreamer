@@ -124,6 +124,18 @@ list_pooled_sources (GNode * node, GESPipelinePoolManager * self)
 {
   if (GES_IS_AUDIO_URI_SOURCE (node->data)
       || GES_IS_VIDEO_URI_SOURCE (node->data)) {
+    gboolean *is_nested_timeline;
+
+    g_object_get (ges_extractable_get_asset (GES_EXTRACTABLE
+            (GES_TIMELINE_ELEMENT_PARENT (node->data))), "is-nested-timeline",
+        &is_nested_timeline, NULL);
+
+    if (is_nested_timeline) {
+      GST_INFO_OBJECT (self->timeline, "Ignoring nested timeline");
+      self->has_subtimelines = TRUE;
+      return TRUE;
+    }
+
     GstElement *source_element =
         ges_source_get_source_element (GES_SOURCE (node->data));
     if (!g_strcmp0 (GST_OBJECT_NAME (gst_element_get_factory (source_element)),
@@ -161,9 +173,12 @@ ges_pipeline_pool_manager_commit (GESPipelinePoolManager * self)
   GNode *tree = timeline_get_tree (self->timeline);
 
   g_mutex_lock (&self->lock);
+  self->has_subtimelines = FALSE;
   g_array_remove_range (self->pooled_sources, 0, self->pooled_sources->len);
   g_node_traverse (tree, G_IN_ORDER, G_TRAVERSE_LEAVES, -1,
       (GNodeTraverseFunc) list_pooled_sources, self);
+  if (self->has_subtimelines)
+    g_array_remove_range (self->pooled_sources, 0, self->pooled_sources->len);
   g_mutex_unlock (&self->lock);
 }
 
