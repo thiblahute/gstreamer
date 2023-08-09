@@ -36,6 +36,7 @@
 struct _GESSourcePrivate
 {
   GstElement *topbin;
+  GstElement *source_element;
   GstElement *first_converter;
   GstElement *last_converter;
   GstPad *ghostpad;
@@ -189,6 +190,18 @@ _pad_added_cb (GstElement * element, GstPad * srcpad, GESSource * self)
   g_mutex_unlock (&priv->sub_element_lock);
 
   _set_ghost_pad_target (self, srcpad, element);
+}
+
+GstElement *
+ges_source_get_source_element (GESSource * source)
+{
+  return source->priv->source_element;
+}
+
+void
+ges_source_set_source_element (GESSource * source, GstElement * element)
+{
+  source->priv->source_element = element;
 }
 
 /* @elements: (transfer-full) */
