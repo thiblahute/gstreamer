@@ -982,6 +982,9 @@ gst_app_sink_event (GstBaseSink * sink, GstEvent * event)
     if ((priv->wait_status & APP_WAITING))
       g_cond_signal (&priv->cond);
 
+    if ((priv->wait_status & APP_WAITING))
+      g_cond_signal (&priv->cond);
+
     g_mutex_unlock (&priv->mutex);
 
     if (callbacks && callbacks->callbacks.new_event) {
