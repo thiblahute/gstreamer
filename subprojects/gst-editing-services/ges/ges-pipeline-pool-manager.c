@@ -87,10 +87,12 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     if (source->track != track)
       continue;
 
-    gboolean in_window = (source->start < window_start)
+    gboolean in_window = (source->start >= window_start)
         || (source->start > window_stop);
     if (!in_window) {
-      g_signal_emit_by_name (self->pool, "unprepare-pipeline", source->element);
+      gboolean res;
+      g_signal_emit_by_name (self->pool, "unprepare-pipeline", source->element,
+          &res);
       g_array_append_val (unprepare_source_indexes, i);
     }
   }
@@ -109,7 +111,9 @@ ges_pipeline_pool_manager_unprepare_all (GESPipelinePoolManager * self)
   for (gint i = 0; i < self->prepared_sources->len; i++) {
     PooledSource *source =
         &g_array_index (self->prepared_sources, PooledSource, i);
-    g_signal_emit_by_name (self->pool, "unprepare-pipeline", source->element);
+    gboolean res;
+    g_signal_emit_by_name (self->pool, "unprepare-pipeline", source->element,
+        &res);
   }
   g_array_remove_range (self->prepared_sources, 0, self->prepared_sources->len);
   g_mutex_unlock (&self->lock);
