@@ -1,0 +1,87 @@
+on:
+  push:
+    branches:
+      - tla
+
+name: Build and push container for current revision
+
+jobs:
+  start-runner:
+    name: Start self-hosted EC2 runner
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+      - name: Start EC2 runner
+        id: start-ec2-runner
+        uses: machulav/ec2-github-runner@v2
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-01cdd040bc624077f
+          ec2-instance-type: c6g.16xlarge
+          subnet-id: subnet-05c4ffd067c376048
+          security-group-id: sg-09701ca1e3efdc21c
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+
+  build-and-push:
+    name: Build and push
+    needs: start-runner
+    runs-on: ${{ needs.start-runner.outputs.label }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+
+      - name: Install AWS CLI v2 and Docker login
+        run: |
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install
+          aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin 486029010931.dkr.ecr.us-east-2.amazonaws.com
+
+      - name: Docker
+        run: |
+          docker pull 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image:latest
+          docker build . -f ci/docker/tella/Dockerfile --platform linux/arm64/v8 --cache-from 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image:latest -t 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image:latest
+          docker push 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image:latest
+
+  stop-runner:
+    name: Stop self-hosted EC2 runner
+    needs:
+      - start-runner
+      - build-and-push
+    runs-on: ubuntu-latest
+    if: ${{ always() }} # required to stop the runner even if the error happened in the previous jobs
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-2
+      - name: Stop EC2 runner
+        uses: machulav/ec2-github-runner@v2
+        with:
+          mode: stop
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          label: ${{ needs.start-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}
