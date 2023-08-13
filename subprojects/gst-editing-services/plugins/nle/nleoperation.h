@@ -56,9 +56,11 @@ G_BEGIN_DECLS
    * Number of sink pads currently used on the contolled element. */
   gint realsinks;
 
+  gboolean time_effect;
+
   /* FIXME : We might need to use a lock to access this list */
   GList * sinks;		/* The sink ghostpads */
-  
+
   GstElement *element;		/* controlled element */
 };
 
@@ -79,6 +81,7 @@ void nle_operation_update_base_time (NleOperation *operation,
                                      GstClockTime timestamp) G_GNUC_INTERNAL;
 
 void nle_operation_hard_cleanup (NleOperation *operation) G_GNUC_INTERNAL;
+gboolean nle_operation_is_time_effect (NleOperation *operation) G_GNUC_INTERNAL;
 
 
 /* normal GOperation stuff */

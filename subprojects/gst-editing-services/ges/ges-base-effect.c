@@ -134,6 +134,20 @@ ges_base_effect_set_child_property_full (GESTimelineElement * element,
       pspec, value, error);
 }
 
+static GstElement *
+ges_base_effect_create_nle_object (GESTrackElement * self)
+{
+  GstElement *nleobject =
+      GES_TRACK_ELEMENT_CLASS (ges_base_effect_parent_class)->create_gnl_object
+      (self);
+
+  if (GES_BASE_EFFECT (self)->priv->time_properties) {
+    g_object_set (nleobject, "time-effect", TRUE, NULL);
+  }
+
+  return nleobject;
+}
+
 static void
 ges_base_effect_dispose (GObject * object)
 {
@@ -155,10 +169,13 @@ ges_base_effect_class_init (GESBaseEffectClass * klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
   GESTimelineElementClass *element_class = GES_TIMELINE_ELEMENT_CLASS (klass);
+  GESTrackElementClass *tck_element_class = GES_TRACK_ELEMENT_CLASS (klass);
 
   object_class->dispose = ges_base_effect_dispose;
   element_class->set_child_property_full =
       ges_base_effect_set_child_property_full;
+
+  tck_element_class->create_gnl_object = ges_base_effect_create_nle_object;
 }
 
 static void
