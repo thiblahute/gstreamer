@@ -6868,19 +6868,23 @@ done:
   return GST_PAD_PROBE_OK;
 }
 
-static GstValidateExecuteActionReturn
-_execute_crank_clock (GstValidateScenario * scenario,
-    GstValidateAction * action)
+static void
+crank_clock (GstElement * pipeline, GstValidateAction * action)
 {
   GstClockTime expected_diff, expected_time;
-  GstClockTime prev_time =
-      gst_clock_get_time (GST_CLOCK (scenario->priv->clock));
+  GstValidateScenario *scenario = gst_validate_action_get_scenario (action);
+  GstClockTime prev_time;
+
+  g_assert (scenario);
+
+  prev_time = gst_clock_get_time (GST_CLOCK (scenario->priv->clock));
 
   if (!gst_test_clock_crank (scenario->priv->clock)) {
     GST_VALIDATE_REPORT_ACTION (scenario, action,
         SCENARIO_ACTION_EXECUTION_ERROR, "Cranking clock failed");
 
-    return GST_VALIDATE_EXECUTE_ACTION_ERROR_REPORTED;
+    gst_validate_action_set_done (action);
+    return;
   }
 
   if (gst_validate_action_get_clocktime (scenario, action,
@@ -6896,7 +6900,8 @@ _execute_crank_clock (GstValidateScenario * scenario,
           GST_TIME_FORMAT, GST_TIME_ARGS (elapsed),
           GST_TIME_ARGS (expected_diff));
 
-      return GST_VALIDATE_EXECUTE_ACTION_ERROR_REPORTED;
+      gst_validate_action_set_done (action);
+      return;
     }
   }
 
@@ -6911,11 +6916,26 @@ _execute_crank_clock (GstValidateScenario * scenario,
           " got %" GST_TIME_FORMAT " instead of the expected %" GST_TIME_FORMAT,
           GST_TIME_ARGS (time), GST_TIME_ARGS (expected_time));
 
-      return GST_VALIDATE_EXECUTE_ACTION_ERROR_REPORTED;
+      gst_validate_action_set_done (action);
+      return;
     }
   }
 
-  return GST_VALIDATE_EXECUTE_ACTION_OK;
+  gst_validate_action_set_done (action);
+}
+
+static GstValidateExecuteActionReturn
+_execute_crank_clock (GstValidateScenario * scenario,
+    GstValidateAction * action)
+{
+  DECLARE_AND_GET_PIPELINE (scenario, action);
+
+  gst_element_call_async (GST_ELEMENT (pipeline),
+      (GstElementCallAsyncFunc) crank_clock,
+      gst_validate_action_ref (action),
+      (GDestroyNotify) gst_validate_action_unref);
+
+  return GST_VALIDATE_EXECUTE_ACTION_ASYNC;
 }
 
 static gboolean
@@ -7083,6 +7103,14 @@ fail:
   goto done;
 }
 
+
+static gboolean
+unblock_clock_cb (GstClock * clock,
+    GstClockTime time, GstClockID id, gpointer user_data)
+{
+  return TRUE;
+}
+
 static GstValidateExecuteActionReturn
 _execute_stop (GstValidateScenario * scenario, GstValidateAction * action)
 {
@@ -7179,6 +7207,15 @@ _execute_stop (GstValidateScenario * scenario, GstValidateAction * action)
   gst_validate_scenario_stop_http_servers (scenario);
   gst_object_unref (bus);
   gst_object_unref (pipeline);
+
+  if (scenario->priv->clock) {
+    GST_DEBUG_OBJECT (scenario,
+        "Unblock the clock if it is stuck while cranking it");
+    GstClockEntry *entry =
+        gst_clock_new_single_shot_id (GST_CLOCK (scenario->priv->clock),
+        GST_SECOND);
+    gst_clock_id_wait_async (entry, unblock_clock_cb, NULL, NULL);
+  }
 
   return TRUE;
 }
