@@ -206,6 +206,7 @@ struct _GstValidateScenarioPrivate
 
   GList *sinks;                 /* List of GstValidateSinkInformation */
   GList *seeks;                 /* List of GstValidateSeekInformation */
+  GList *seeks_durations;
 
   /* Seek currently applied (set when all sinks received segment with
    * an identical seqnum and there is a matching pending seek).
@@ -6890,6 +6891,19 @@ _execute_stop (GstValidateScenario * scenario, GstValidateAction * action)
     scenario->priv->non_blocking_running_actions = NULL;
     scenario->priv->on_addition_actions = NULL;
 
+    if (scenario->priv->seeks_durations) {
+      GstClockTime all_actions_duration = 0;
+      gint n_seeks = 0;
+      for (GList * tmp = scenario->priv->seeks_durations; tmp; tmp = tmp->next) {
+        all_actions_duration += GPOINTER_TO_UINT (tmp->data);
+        n_seeks++;
+      }
+
+      gst_validate_printf (scenario,
+          "Average seek duration: %" GST_TIME_FORMAT "\n",
+          GST_TIME_ARGS (all_actions_duration / n_seeks));
+    }
+
 
     if (nb_actions > 0) {
       GstClockTime position = GST_CLOCK_TIME_NONE;
@@ -6956,6 +6970,12 @@ _action_set_done (GstValidateAction * action)
     case GST_VALIDATE_EXECUTE_ACTION_ERROR_REPORTED:
     case GST_VALIDATE_EXECUTE_ACTION_OK:
     {
+      if (!g_strcmp0 (action->type, "seek")) {
+        scenario->priv->seeks_durations =
+            g_list_append (scenario->priv->seeks_durations,
+            GUINT_TO_POINTER (action->priv->execution_duration));
+      }
+
       scenario->priv->actions = g_list_remove (scenario->priv->actions, action);
 
       _check_scenario_is_done (scenario);
