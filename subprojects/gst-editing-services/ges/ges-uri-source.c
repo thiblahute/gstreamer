@@ -162,8 +162,7 @@ _should_enable_playbinpoolsrc (GESSource * self)
     g_once_init_leave (&once, 1);
   }
 
-  return !ges_source_get_rendering_smartly (self)
-      && _ges_enable_playbinpoolsrc;
+  return _ges_enable_playbinpoolsrc;
 }
 
 static GstElement *
