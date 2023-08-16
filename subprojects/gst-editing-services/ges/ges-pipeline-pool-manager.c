@@ -50,6 +50,9 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
   GstClockTime window_stop = stack_end + (60 * GST_SECOND);
 
   g_mutex_lock (&self->lock);
+  if (!self->pooled_sources)
+    goto done;
+
   for (gint i = 0; i < self->pooled_sources->len; i++) {
     PooledSource *source =
         &g_array_index (self->pooled_sources, PooledSource, i);
@@ -101,6 +104,8 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     g_array_remove_index_fast (self->prepared_sources,
         unprepare_source_indexes->data[i]);
   }
+
+done:
   g_mutex_unlock (&self->lock);
 }
 
@@ -108,6 +113,9 @@ void
 ges_pipeline_pool_manager_unprepare_all (GESPipelinePoolManager * self)
 {
   g_mutex_lock (&self->lock);
+  if (!self->prepared_sources)
+    goto done;
+
   for (gint i = 0; i < self->prepared_sources->len; i++) {
     PooledSource *source =
         &g_array_index (self->prepared_sources, PooledSource, i);
@@ -116,9 +124,11 @@ ges_pipeline_pool_manager_unprepare_all (GESPipelinePoolManager * self)
         &res);
   }
   g_array_remove_range (self->prepared_sources, 0, self->prepared_sources->len);
+done:
   g_mutex_unlock (&self->lock);
 }
 
+/* With self->lock taken */
 static gboolean
 list_pooled_sources (GNode * node, GESPipelinePoolManager * self)
 {
@@ -160,8 +170,10 @@ void
 ges_pipeline_pool_clear (GESPipelinePoolManager * self)
 {
   g_mutex_lock (&self->lock);
-  g_array_free (self->pooled_sources, TRUE);
-  g_array_free (self->prepared_sources, TRUE);
+  if (self->pooled_sources) {
+    g_array_free (self->pooled_sources, TRUE);
+    g_array_free (self->prepared_sources, TRUE);
+  }
   g_mutex_unlock (&self->lock);
 
   gst_object_unref (self->pool);
@@ -173,12 +185,17 @@ ges_pipeline_pool_manager_commit (GESPipelinePoolManager * self)
   GNode *tree = timeline_get_tree (self->timeline);
 
   g_mutex_lock (&self->lock);
+  if (!self->pooled_sources)
+    goto done;
+
   self->has_subtimelines = FALSE;
   g_array_remove_range (self->pooled_sources, 0, self->pooled_sources->len);
   g_node_traverse (tree, G_IN_ORDER, G_TRAVERSE_LEAVES, -1,
       (GNodeTraverseFunc) list_pooled_sources, self);
   if (self->has_subtimelines)
     g_array_remove_range (self->pooled_sources, 0, self->pooled_sources->len);
+
+done:
   g_mutex_unlock (&self->lock);
 }
 
