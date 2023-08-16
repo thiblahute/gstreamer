@@ -182,12 +182,11 @@ ges_pipeline_pool_clear (GESPipelinePoolManager * self)
 void
 ges_pipeline_pool_manager_commit (GESPipelinePoolManager * self)
 {
-  GNode *tree = timeline_get_tree (self->timeline);
-
   g_mutex_lock (&self->lock);
   if (!self->pooled_sources)
     goto done;
 
+  GNode *tree = timeline_get_tree (self->timeline);
   self->has_subtimelines = FALSE;
   g_array_remove_range (self->pooled_sources, 0, self->pooled_sources->len);
   g_node_traverse (tree, G_IN_ORDER, G_TRAVERSE_LEAVES, -1,
