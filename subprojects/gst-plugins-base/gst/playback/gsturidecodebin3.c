@@ -1352,7 +1352,8 @@ uri_src_block_probe (GstPad * pad, GstPadProbeInfo * info,
   } else if (play_item_has_all_pads (handler->play_item)) {
     GstState state, next;
 
-    gst_element_get_state (handler->uridecodebin, &state, &next, 0);
+    gst_element_get_state (GST_ELEMENT (handler->uridecodebin), &state, &next,
+        0);
 
     if (state > GST_STATE_PAUSED && (next == GST_STATE_VOID_PENDING
             || next > GST_STATE_PAUSED)) {
