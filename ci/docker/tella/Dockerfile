@@ -121,6 +121,12 @@ FROM deps as ffmpeg
 COPY ci/docker/tella/build-ffmpeg /
 RUN ["/build-ffmpeg", "--build"]
 
+# FROM ffmpeg as ffmpeg-test
+# COPY --from=ffmpeg /opt/ffmpeg /usr
+
+# And then: docker build . -f ci/docker/tella/Dockerfile --target ffmpeg-test --platform linux/arm64/v8 -t 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image:ffmpeg   
+# docker run --rm 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image:ffmpeg ffmpeg
+
 FROM deps as gstreamer
 
 # Copy deps to /usr so GStreamer build can pick it up
