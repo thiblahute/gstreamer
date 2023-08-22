@@ -324,6 +324,6 @@ _deinit_playbin_pool_src (void)
   GObject *pool =
       gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (playbinpoolsrc),
       "pool");
-  g_object_set (pool, "cleanup-timeout", 0, NULL);
+  g_signal_emit_by_name (pool, "deinit");
   gst_object_unref (pool);
 }
