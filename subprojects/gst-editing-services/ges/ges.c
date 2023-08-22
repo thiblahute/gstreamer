@@ -227,8 +227,9 @@ ges_init (void)
 void
 ges_deinit (void)
 {
-  G_LOCK (init_lock);
+  _deinit_playbin_pool_src ();
 
+  G_LOCK (init_lock);
   GST_INFO ("deinitializing GES");
 
   if (!initialized_thread) {
@@ -253,7 +254,6 @@ ges_deinit (void)
   /* Register track elements */
   g_type_class_unref (g_type_class_peek (GES_TYPE_EFFECT));
 
-  _deinit_playbin_pool_src ();
   ges_asset_cache_deinit ();
   ges_xml_formatter_deinit ();
 
