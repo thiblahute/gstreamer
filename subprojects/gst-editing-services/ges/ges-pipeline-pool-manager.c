@@ -134,7 +134,7 @@ list_pooled_sources (GNode * node, GESPipelinePoolManager * self)
 {
   if (GES_IS_AUDIO_URI_SOURCE (node->data)
       || GES_IS_VIDEO_URI_SOURCE (node->data)) {
-    gboolean *is_nested_timeline;
+    gboolean is_nested_timeline;
 
     g_object_get (ges_extractable_get_asset (GES_EXTRACTABLE
             (GES_TIMELINE_ELEMENT_PARENT (node->data))), "is-nested-timeline",
