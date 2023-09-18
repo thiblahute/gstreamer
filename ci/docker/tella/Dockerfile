@@ -53,7 +53,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
   zlib1g-dev && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
-  pip3 install meson==0.62.2 --no-binary :all: && \
+  pip3 install meson==0.63.0 --no-binary :all: && \
   pip3 install ninja tomli
 
 # Install rust toolchain
