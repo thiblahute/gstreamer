@@ -1711,11 +1711,26 @@ gst_mpd_client2_stream_seek (GstMPDClient2 * client, GstActiveStream * stream,
       if (in_segment) {
         GstClockTime chunk_time;
 
+
+        const gchar *mimeType =
+            GST_MPD_REPRESENTATION_BASE_NODE (stream->
+            cur_representation)->mimeType;
+        if (mimeType == NULL) {
+          mimeType =
+              GST_MPD_REPRESENTATION_BASE_NODE (stream->
+              cur_adapt_set)->mimeType;
+        }
+
         selectedChunk = segment;
-        repeat_index =
-            ((ts - segment->start) +
-            ((GstMediaSegment *) stream->segments->pdata[0])->start) /
-            segment->duration;
+        if (g_str_has_suffix (mimeType, "/webm")) {
+          repeat_index =
+              ((ts - segment->start) +
+              ((GstMediaSegment *) stream->segments->pdata[0])->start) /
+              segment->duration;
+        } else {
+          repeat_index = (ts - segment->start) / segment->duration;
+        }
+
 
         chunk_time = segment->start + segment->duration * repeat_index;
 
