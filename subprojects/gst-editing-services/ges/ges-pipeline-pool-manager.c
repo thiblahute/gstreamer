@@ -4,6 +4,10 @@
 
 #undef GST_CAT_DEFAULT
 #define GST_CAT_DEFAULT ges_pipeline_pool_manager_debug
+
+/* FIXME Make that a public setting */
+#define MAX_PRELOADED_SOURCES 4
+
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 
 typedef struct
@@ -45,13 +49,15 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     self, GESTrack * track, GstClockTime stack_start, GstClockTime stack_end)
 {
   gboolean entered_window = FALSE;
+  GstClockTime window_dur = 60 * GST_SECOND;
   GstClockTime window_start =
-      stack_start >= (60 * GST_SECOND) ? stack_start - (60 * GST_SECOND) : 0;
-  GstClockTime window_stop = stack_end + (60 * GST_SECOND);
+      stack_start >= window_dur ? stack_start - window_dur : 0;
+  GstClockTime window_stop = stack_end + window_dur;
 
   g_mutex_lock (&self->lock);
   if (!self->pooled_sources)
     goto done;
+
 
   for (gint i = 0; i < self->pooled_sources->len; i++) {
     PooledSource *source =
@@ -78,6 +84,11 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     if (res) {
       gst_object_ref (source->element);
       g_array_append_val (self->prepared_sources, *source);
+    }
+
+    if (self->prepared_sources->len > MAX_PRELOADED_SOURCES) {
+      GST_INFO ("4 sources prepared already.");
+      break;
     }
   }
 
@@ -228,4 +239,5 @@ ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
   self->pool =
       gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (playbinpoolsrc),
       "pool");
+  g_object_set (self->pool, "cleanup-timeout", 0, NULL);
 }
