@@ -185,9 +185,11 @@ ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
   GST_DEBUG_OBJECT (self->element,
       "%" GST_PTR_FORMAT " - Track! %" GST_PTR_FORMAT, self->decodebin, track);
   if (GES_IS_VIDEO_SOURCE (self->element)) {
-    g_object_set (decodebin, "stream-type", GST_STREAM_TYPE_VIDEO, NULL);
+    g_object_set (decodebin, "caps", gst_caps_new_empty_simple ("video/x-raw"),
+        NULL);
   } else if (GES_IS_AUDIO_SOURCE (self->element)) {
-    g_object_set (decodebin, "stream-type", GST_STREAM_TYPE_AUDIO, NULL);
+    g_object_set (decodebin, "caps", gst_caps_new_empty_simple ("audio/x-raw"),
+        NULL);
   } else {
     g_assert_not_reached ();
   }
