@@ -184,12 +184,11 @@ ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
   g_free (name);
   GST_DEBUG_OBJECT (self->element,
       "%" GST_PTR_FORMAT " - Track! %" GST_PTR_FORMAT, self->decodebin, track);
+  GstCaps *caps = NULL;
   if (GES_IS_VIDEO_SOURCE (self->element)) {
-    g_object_set (decodebin, "caps", gst_caps_new_empty_simple ("video/x-raw"),
-        NULL);
+    caps = gst_caps_new_empty_simple ("video/x-raw");
   } else if (GES_IS_AUDIO_SOURCE (self->element)) {
-    g_object_set (decodebin, "caps", gst_caps_new_empty_simple ("audio/x-raw"),
-        NULL);
+    caps = gst_caps_new_empty_simple ("audio/x-raw");
   } else {
     g_assert_not_reached ();
   }
@@ -197,7 +196,9 @@ ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
   g_signal_connect (decodebin, "source-setup",
       G_CALLBACK (source_setup_cb), self);
 
-  g_object_set (decodebin, "uri", self->uri, "stream-id", wanted_id, NULL);
+  g_object_set (decodebin, "uri", self->uri, "stream-id", wanted_id, "caps",
+      caps, NULL);
+  gst_caps_unref (caps);
 
   return decodebin;
 }
