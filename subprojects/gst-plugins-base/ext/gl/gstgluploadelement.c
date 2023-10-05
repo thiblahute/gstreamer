@@ -44,8 +44,6 @@ static gboolean gst_gl_upload_element_get_unit_size (GstBaseTransform * trans,
     GstCaps * caps, gsize * size);
 static GstCaps *_gst_gl_upload_element_transform_caps (GstBaseTransform * bt,
     GstPadDirection direction, GstCaps * caps, GstCaps * filter);
-static GstCaps * _gst_gl_upload_element_fixate_caps (GstBaseTransform *
-    bt, GstPadDirection direction, GstCaps * caps, GstCaps * othercaps);
 static gboolean _gst_gl_upload_element_set_caps (GstBaseTransform * bt,
     GstCaps * in_caps, GstCaps * out_caps);
 static gboolean gst_gl_upload_element_filter_meta (GstBaseTransform * trans,
@@ -105,7 +103,6 @@ gst_gl_upload_element_class_init (GstGLUploadElementClass * klass)
   GstCaps *upload_caps;
 
   bt_class->transform_caps = _gst_gl_upload_element_transform_caps;
-  bt_class->fixate_caps = _gst_gl_upload_element_fixate_caps;
   bt_class->set_caps = _gst_gl_upload_element_set_caps;
   bt_class->filter_meta = gst_gl_upload_element_filter_meta;
   bt_class->propose_allocation = _gst_gl_upload_element_propose_allocation;
@@ -161,37 +158,6 @@ gst_gl_upload_element_get_unit_size (GstBaseTransform * trans, GstCaps * caps,
     *size = GST_VIDEO_INFO_SIZE (&info);
 
   return TRUE;
-}
-
-static GstCaps *
-_gst_gl_upload_element_fixate_caps (GstBaseTransform *
-    base, GstPadDirection direction, GstCaps * incaps, GstCaps * outcaps)
-{
-  GST_INFO("Fixating incaps: \n - %" GST_PTR_FORMAT "\noutcaps:\n - %" GST_PTR_FORMAT "\n\n---> Doing studd now\n\n", incaps, outcaps);
-  if (direction == GST_PAD_SINK) {
-    for (gint i = 0; i < gst_caps_get_size (outcaps); i++) {
-      for (gint j = 0; j < gst_caps_get_size (incaps); j++) {
-        if (gst_structure_can_intersect (gst_caps_get_structure (incaps, j),
-                gst_caps_get_structure (outcaps, i))) {
-
-          outcaps = gst_caps_make_writable (outcaps);
-          for (gint k = 0; k < gst_caps_get_size(outcaps); k++) {
-            if (k != i) {
-              gst_caps_remove_structure (outcaps, k);
-            }
-          }
-
-          GST_INFO("-=-----> Fixated: %" GST_PTR_FORMAT, outcaps);
-          return gst_caps_fixate (outcaps);
-        }
-      }
-    }
-
-    return gst_caps_new_empty ();
-  }
-
-  GST_INFO("-=-----> FIXATING BY SRCPAD");
-  return gst_caps_fixate (outcaps);
 }
 
 static GstCaps *
