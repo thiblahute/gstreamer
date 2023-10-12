@@ -155,8 +155,18 @@ _should_enable_playbinpoolsrc (GESSource * self)
   if (g_once_init_enter (&once)) {
     env = g_getenv ("GES_ENABLE_PLAYBINPOOLSRC");
 
-    if (env) {
-      _ges_enable_playbinpoolsrc = g_strcmp0 (env, "1") == 0;
+    if (env && !g_strcmp0 (env, "1")) {
+      GstPluginFeature *feature =
+          gst_registry_find_feature (gst_registry_get (), "playbinpoolsrc",
+          GST_TYPE_ELEMENT_FACTORY);
+
+      if (feature) {
+        _ges_enable_playbinpoolsrc = TRUE;
+        gst_object_unref (feature);
+      }
+
+      GST_INFO ("playbinpoolsrc %sabled (factory: %p)",
+          _ges_enable_playbinpoolsrc ? "en" : "dis", feature);
     }
 
     g_once_init_leave (&once, 1);
