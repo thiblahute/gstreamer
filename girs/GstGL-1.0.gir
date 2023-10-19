@@ -3468,6 +3468,9 @@ display's object lock held.</doc>
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/gl/gstgldisplay.h">Mesa3D surfaceless display using the EGL_PLATFORM_SURFACELESS_MESA
 extension.</doc>
       </member>
+      <member name="surfaceless" value="4096" c:identifier="GST_GL_DISPLAY_TYPE_EGL_SURFACELESS" glib:nick="surfaceless">
+        <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/gl/gstgldisplay.h">Mesa3D surfaceless display</doc>
+      </member>
       <member name="any" value="4294967295" c:identifier="GST_GL_DISPLAY_TYPE_ANY" glib:nick="any">
         <doc xml:space="preserve" filename="../subprojects/gst-plugins-base/gst-libs/gst/gl/gstgldisplay.h">any display type</doc>
       </member>
