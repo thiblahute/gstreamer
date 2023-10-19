@@ -50,14 +50,21 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
 {
   gboolean entered_window = FALSE;
   GstClockTime window_dur = 60 * GST_SECOND;
-  GstClockTime window_start =
-      stack_start >= window_dur ? stack_start - window_dur : 0;
+  GstClockTime window_start;
   GstClockTime window_stop = stack_end + window_dur;
+  gint max_preloaded_sources = MAX_PRELOADED_SOURCES;
 
   g_mutex_lock (&self->lock);
   if (!self->pooled_sources)
     goto done;
 
+  GST_LOG_OBJECT (self->timeline, "We are rendering: %d", self->rendering);
+  if (self->rendering) {
+    window_start = stack_start;
+    max_preloaded_sources = max_preloaded_sources / 2;
+  } else {
+    window_start = stack_start >= window_dur ? stack_start - window_dur : 0;
+  }
 
   for (gint i = 0; i < self->pooled_sources->len; i++) {
     PooledSource *source =
@@ -79,6 +86,9 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
       continue;
 
     gboolean res = TRUE;
+    GST_LOG_OBJECT (self->timeline,
+        "Preparing %s [%" GST_TIMEP_FORMAT "- %" GST_TIMEP_FORMAT "]",
+        GST_OBJECT_NAME (source->element), &source->start, &source->end);
     g_signal_emit_by_name (self->pool, "prepare-pipeline", source->element,
         &res);
     if (res) {
@@ -86,8 +96,9 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
       g_array_append_val (self->prepared_sources, *source);
     }
 
-    if (self->prepared_sources->len > MAX_PRELOADED_SOURCES) {
-      GST_INFO ("4 sources prepared already.");
+    if (self->prepared_sources->len >= max_preloaded_sources) {
+      GST_INFO_OBJECT (self->timeline, "%d sources prepared already.",
+          max_preloaded_sources);
       break;
     }
   }
@@ -105,6 +116,10 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
         || (source->start > window_stop);
     if (!in_window) {
       gboolean res;
+      GST_LOG_OBJECT (self->timeline,
+          "Unpreparing pipeline for %s [%" GST_TIMEP_FORMAT "- %"
+          GST_TIMEP_FORMAT "]", GST_OBJECT_NAME (source->element),
+          &source->start, &source->end);
       g_signal_emit_by_name (self->pool, "unprepare-pipeline", source->element,
           &res);
       g_array_append_val (unprepare_source_indexes, i);
@@ -188,6 +203,17 @@ ges_pipeline_pool_clear (GESPipelinePoolManager * self)
   g_mutex_unlock (&self->lock);
 
   gst_object_unref (self->pool);
+}
+
+void
+ges_pipeline_pool_manager_set_rendering (GESPipelinePoolManager * self,
+    gboolean rendering)
+{
+  GST_LOG_OBJECT (self->timeline, "Set rendering %d", rendering);
+
+  g_mutex_lock (&self->lock);
+  self->rendering = rendering;
+  g_mutex_unlock (&self->lock);
 }
 
 void

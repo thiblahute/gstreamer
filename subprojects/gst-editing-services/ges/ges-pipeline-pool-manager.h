@@ -27,6 +27,7 @@ typedef struct {
     GObject *pool;
     gboolean has_subtimelines;
 
+    gboolean rendering;
 } GESPipelinePoolManager;
 
 void ges_pipeline_pool_manager_init   (GESPipelinePoolManager *self, GESTimeline *timeline);
@@ -38,3 +39,5 @@ void ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager 
                                                          GstClockTime stack_start,
                                                          GstClockTime stack_stop);
 void ges_pipeline_pool_manager_unprepare_all            (GESPipelinePoolManager *self);
+
+void ges_pipeline_pool_manager_set_rendering (GESPipelinePoolManager * self, gboolean rendering);

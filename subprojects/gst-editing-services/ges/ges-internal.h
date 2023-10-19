@@ -184,6 +184,8 @@ ges_timeline_remove_clip (GESTimeline * timeline, GESClip * clip);
 
 G_GNUC_INTERNAL void
 ges_timeline_set_smart_rendering (GESTimeline * timeline, gboolean rendering_smartly);
+G_GNUC_INTERNAL void
+ges_timeline_set_rendering (GESTimeline * timeline, gboolean rendering);
 
 G_GNUC_INTERNAL gboolean
 ges_timeline_get_smart_rendering (GESTimeline *timeline);
