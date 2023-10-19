@@ -1407,6 +1407,9 @@ ges_pipeline_set_mode (GESPipeline * pipeline, GESPipelineFlags mode)
   }
 
   if (pipeline->priv->timeline) {
+    ges_timeline_set_rendering (pipeline->priv->timeline,
+        ((mode & GES_PIPELINE_MODE_SMART_RENDER) != 0) ||
+        ((mode & GES_PIPELINE_MODE_RENDER) != 0));
     ges_timeline_set_smart_rendering (pipeline->priv->timeline,
         (mode & GES_PIPELINE_MODE_SMART_RENDER) != 0);
   }

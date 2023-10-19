@@ -525,6 +525,14 @@ ges_timeline_handle_message (GstBin * bin, GstMessage * message)
             gst_structure_get_string (mstructure, "reason"));
       }
       GST_OBJECT_UNLOCK (timeline);
+    } else if (gst_structure_has_name (mstructure,
+            "GESTimelineQueryIsRendering")) {
+      if (GST_MESSAGE_SRC (message) != (GstObject *) bin) {
+        ges_timeline_set_rendering (GES_TIMELINE (GST_MESSAGE_SRC (message)),
+            timeline->priv->pool_manager.rendering);
+
+        goto forward;
+      }
     } else {
       goto forward;
     }
@@ -538,6 +546,14 @@ ges_timeline_handle_message (GstBin * bin, GstMessage * message)
 
 forward:
   GST_BIN_CLASS (parent_class)->handle_message (bin, message);
+}
+
+static void
+ges_timeline_post_query_is_rendering (GESTimeline * timeline)
+{
+  gst_element_post_message ((GstElement *) timeline,
+      gst_message_new_element ((GstObject *) timeline,
+          gst_structure_new_empty ("GESTimelineQueryIsRendering")));
 }
 
 static void
@@ -555,6 +571,15 @@ ges_timeline_change_state (GstElement * element, GstStateChange transition)
 {
   GstStateChangeReturn res;
   GESTimeline *timeline = GES_TIMELINE (element);
+
+
+  switch (transition) {
+    case GST_STATE_CHANGE_READY_TO_PAUSED:
+      ges_timeline_post_query_is_rendering (timeline);
+      break;
+    default:
+      break;
+  }
 
   res = GST_ELEMENT_CLASS (ges_timeline_parent_class)->change_state (element,
       transition);
@@ -2176,6 +2201,13 @@ GNode *
 timeline_get_tree (GESTimeline * timeline)
 {
   return timeline->priv->tree;
+}
+
+void
+ges_timeline_set_rendering (GESTimeline * timeline, gboolean rendering)
+{
+  ges_pipeline_pool_manager_set_rendering (&timeline->priv->pool_manager,
+      rendering);
 }
 
 void
