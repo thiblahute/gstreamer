@@ -300,8 +300,7 @@ ges_track_element_set_asset (GESExtractable * extractable, GESAsset * asset)
     return;
   }
 
-  tmp = g_strdup_printf ("%s:%s", G_OBJECT_TYPE_NAME (object),
-      GST_OBJECT_NAME (nleobject));
+  tmp = g_strdup_printf ("nle%s", GES_TIMELINE_ELEMENT_NAME (object));
   gst_object_set_name (GST_OBJECT (nleobject), tmp);
   g_free (tmp);
 
