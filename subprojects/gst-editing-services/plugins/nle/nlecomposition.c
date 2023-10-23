@@ -211,6 +211,14 @@ struct _NleCompositionPrivate
 
   guint seek_seqnum;
 
+  /* When seeking in PAUSED we should avoid updating stack when current one is EOS
+   * as it is more likely that the user will keep seeking around than actually
+   * needing to playback that next stack */
+  GMutex seek_in_paused_lock;   /* { protects following fields */
+  gboolean got_buffer_for_stack;
+  gboolean seeking_in_paused;
+  gboolean needs_pipeline_update;       /* } */
+
   /* Both protected with object lock */
   gchar *id;
   gboolean drop_tags;
@@ -630,6 +638,13 @@ _seek_pipeline_func (NleComposition * comp, SeekData * seekd)
   if (!initializing_stack) {
     segment_start = cur;
     segment_stop = stop;
+    GST_OBJECT_LOCK (comp);
+    if (GST_STATE (comp) == GST_STATE_PAUSED) {
+      g_mutex_lock (&priv->seek_in_paused_lock);
+      comp->priv->seeking_in_paused = TRUE;
+      g_mutex_unlock (&priv->seek_in_paused_lock);
+    }
+    GST_OBJECT_UNLOCK (comp);
   } else {
     /* During plain playback (no seek), the segment->stop doesn't
      * evolve when going from stack to stack, only the start does
@@ -1489,7 +1504,8 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
   NleCompositionPrivate *priv = comp->priv;
   GstEvent *event;
 
-  if (GST_IS_BUFFER (info->data) || (GST_IS_QUERY (info->data)
+  gboolean is_buffer = GST_IS_BUFFER (info->data);
+  if (is_buffer || (GST_IS_QUERY (info->data)
           && GST_QUERY_IS_SERIALIZED (info->data))) {
 
     if (priv->stack_initialization_seek) {
@@ -1518,6 +1534,10 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
       _restart_task (comp);
     }
 
+    if (is_buffer) {
+      priv->got_buffer_for_stack = TRUE;
+    }
+
     return GST_PAD_PROBE_OK;
   }
 
@@ -1535,6 +1555,10 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
         GST_INFO_OBJECT (comp, "Done seeking initialization stack.");
         gst_clear_event (&priv->stack_initialization_seek);
       }
+
+      g_mutex_lock (&priv->seek_in_paused_lock);
+      priv->got_buffer_for_stack = FALSE;
+      g_mutex_unlock (&priv->seek_in_paused_lock);
 
       if (gst_event_get_seqnum (event) != comp->priv->flush_seqnum) {
         GST_INFO_OBJECT (comp, "Dropping FLUSH_STOP %d -- %d",
@@ -1673,13 +1697,22 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
         return GST_PAD_PROBE_OK;
       }
 
-      if (priv->next_eos_seqnum == seqnum)
-        _add_update_compo_action (comp, G_CALLBACK (_update_pipeline_func),
-            COMP_UPDATE_STACK_ON_EOS);
-      else
+      if (priv->next_eos_seqnum == seqnum) {
+        g_mutex_lock (&priv->seek_in_paused_lock);
+        if (priv->got_buffer_for_stack && priv->seeking_in_paused) {
+          priv->needs_pipeline_update = TRUE;
+          GST_INFO_OBJECT (comp, "PAUSED, not updating stack");
+        } else {
+          GST_INFO_OBJECT (comp, "NOT PAUSED, UPDATING stack");
+          _add_update_compo_action (comp, G_CALLBACK (_update_pipeline_func),
+              COMP_UPDATE_STACK_ON_EOS);
+        }
+        g_mutex_unlock (&priv->seek_in_paused_lock);
+      } else {
         GST_INFO_OBJECT (comp,
             "Got an EOS but it seqnum %i != next eos seqnum %i", seqnum,
             priv->next_eos_seqnum);
+      }
 
       retval = GST_PAD_PROBE_DROP;
     }
@@ -2837,6 +2870,23 @@ nle_composition_change_state (GstElement * element, GstStateChange transition)
       _remove_seek_actions (comp);
       _deactivate_stack (comp, TRUE);
       comp->priv->tearing_down_stack = TRUE;
+
+      g_mutex_lock (&comp->priv->seek_in_paused_lock);
+      comp->priv->seeking_in_paused = FALSE;
+      comp->priv->needs_pipeline_update = FALSE;
+      comp->priv->got_buffer_for_stack = FALSE;
+      g_mutex_unlock (&comp->priv->seek_in_paused_lock);
+
+      break;
+    case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
+      g_mutex_lock (&comp->priv->seek_in_paused_lock);
+      comp->priv->seeking_in_paused = FALSE;
+      if (comp->priv->needs_pipeline_update) {
+        comp->priv->needs_pipeline_update = FALSE;
+        _add_update_compo_action (comp, G_CALLBACK (_update_pipeline_func),
+            COMP_UPDATE_STACK_ON_EOS);
+      }
+      g_mutex_unlock (&comp->priv->seek_in_paused_lock);
       break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       _stop_task (comp);
