@@ -207,6 +207,11 @@ struct _NleCompositionPrivate
 
   guint seek_seqnum;
 
+  /* When in PAUSED we should not update task when current one is done */
+  gboolean is_paused;
+  gboolean got_buffer;
+  gboolean needs_pipeline_update;
+
   /* Both protected with object lock */
   gchar *id;
   gboolean drop_tags;
@@ -1470,7 +1475,8 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
   NleCompositionPrivate *priv = comp->priv;
   GstEvent *event;
 
-  if (GST_IS_BUFFER (info->data) || (GST_IS_QUERY (info->data)
+  gboolean is_buffer = GST_IS_BUFFER (info->data);
+  if (is_buffer || (GST_IS_QUERY (info->data)
           && GST_QUERY_IS_SERIALIZED (info->data))) {
 
     if (priv->stack_initialization_seek) {
@@ -1499,6 +1505,10 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
       _restart_task (comp);
     }
 
+    if (is_buffer) {
+      priv->got_buffer = TRUE;
+    }
+
     return GST_PAD_PROBE_OK;
   }
 
@@ -1517,6 +1527,7 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
         gst_clear_event (&priv->stack_initialization_seek);
       }
 
+      priv->got_buffer = FALSE;
       if (gst_event_get_seqnum (event) != comp->priv->flush_seqnum) {
         GST_INFO_OBJECT (comp, "Dropping FLUSH_STOP %d -- %d",
             gst_event_get_seqnum (event), priv->flush_seqnum);
@@ -1654,13 +1665,20 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
         return GST_PAD_PROBE_OK;
       }
 
-      if (priv->next_eos_seqnum == seqnum)
-        _add_update_compo_action (comp, G_CALLBACK (_update_pipeline_func),
-            COMP_UPDATE_STACK_ON_EOS);
-      else
+      if (priv->next_eos_seqnum == seqnum) {
+        if (priv->got_buffer && priv->is_paused) {
+          priv->needs_pipeline_update = TRUE;
+          GST_INFO_OBJECT (comp, "PAUSED, not updating stack");
+        } else {
+          GST_INFO_OBJECT (comp, "NOT PAUSED, UPDATING stack");
+          _add_update_compo_action (comp, G_CALLBACK (_update_pipeline_func),
+              COMP_UPDATE_STACK_ON_EOS);
+        }
+      } else {
         GST_INFO_OBJECT (comp,
             "Got an EOS but it seqnum %i != next eos seqnum %i", seqnum,
             priv->next_eos_seqnum);
+      }
 
       retval = GST_PAD_PROBE_DROP;
     }
@@ -2810,6 +2828,18 @@ nle_composition_change_state (GstElement * element, GstStateChange transition)
       _remove_seek_actions (comp);
       _deactivate_stack (comp, TRUE);
       comp->priv->tearing_down_stack = TRUE;
+      comp->priv->is_paused = TRUE;
+      break;
+    case GST_STATE_CHANGE_READY_TO_PAUSED:
+      comp->priv->is_paused = TRUE;
+      break;
+    case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
+      comp->priv->is_paused = FALSE;
+      if (comp->priv->needs_pipeline_update) {
+        comp->priv->needs_pipeline_update = FALSE;
+        _add_update_compo_action (comp, G_CALLBACK (_update_pipeline_func),
+            COMP_UPDATE_STACK_ON_EOS);
+      }
       break;
     case GST_STATE_CHANGE_READY_TO_NULL:
       _stop_task (comp);
