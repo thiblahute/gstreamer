@@ -381,12 +381,11 @@ _assert_proper_thread (NleComposition * comp)
   }
 }
 
+/* Called with the ACTIONS_LOCK taken */
 static void
-_remove_actions_for_type (NleComposition * comp, GCallback callback)
+_remove_actions_for_type_unlocked (NleComposition * comp, GCallback callback)
 {
   GList *tmp;
-
-  ACTIONS_LOCK (comp);
 
   GST_LOG_OBJECT (comp, "finding action[callback=%s], action count = %d",
       GST_DEBUG_FUNCPTR_NAME (callback), g_list_length (comp->priv->actions));
@@ -407,7 +406,13 @@ _remove_actions_for_type (NleComposition * comp, GCallback callback)
     if (removed)
       g_list_free (removed);
   }
+}
 
+static void
+_remove_actions_for_type (NleComposition * comp, GCallback callback)
+{
+  ACTIONS_LOCK (comp);
+  _remove_actions_for_type_unlocked (comp, callback);
   ACTIONS_UNLOCK (comp);
 }
 
@@ -957,6 +962,12 @@ create_seek_data (NleComposition * comp, GstEvent * event)
 }
 
 static void
+_remove_seek_actions_unlocked (NleComposition * comp)
+{
+  _remove_actions_for_type_unlocked (comp, G_CALLBACK (_seek_pipeline_func));
+}
+
+static void
 _remove_seek_actions (NleComposition * comp)
 {
   _remove_actions_for_type (comp, G_CALLBACK (_seek_pipeline_func));
@@ -969,9 +980,9 @@ _add_seek_action (NleComposition * comp, GstEvent * event)
   GList *tmp;
   guint32 seqnum = gst_event_get_seqnum (event);
 
-  _remove_seek_actions (comp);
 
   ACTIONS_LOCK (comp);
+  _remove_seek_actions_unlocked (comp);
   /* Check if this is our current seqnum */
   if (seqnum == comp->priv->next_eos_seqnum) {
     GST_DEBUG_OBJECT (comp, "Not adding Action, same seqnum as previous seek");
