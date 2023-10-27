@@ -171,7 +171,7 @@ execute make install
 ##
 
 build "ffmpeg"
-download "https://www.ffmpeg.org/releases/ffmpeg-6.0.tar.gz"
+download "https://www.ffmpeg.org/releases/ffmpeg-4.4.4.tar.gz"
 
 # shellcheck disable=SC2086
 ./configure \
