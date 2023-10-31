@@ -3205,7 +3205,8 @@ gst_adaptive_demux_send_initial_events (GstAdaptiveDemux * demux,
   gst_pad_push_event (slot->pad, event);
 
   /* Send EVENT_STREAM_COLLECTION */
-  event = gst_event_new_stream_collection (demux->output_period->collection);
+  event =
+      gst_event_new_stream_collection (gst_object_ref (demux->output_period->collection));
   GST_DEBUG_OBJECT (demux, "Sending stream-collection for track '%s'",
       track->stream_id);
   gst_pad_push_event (slot->pad, event);
