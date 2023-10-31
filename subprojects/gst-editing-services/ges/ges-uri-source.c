@@ -353,4 +353,5 @@ _deinit_playbin_pool_src (void)
       "pool");
   g_signal_emit_by_name (pool, "deinit");
   gst_object_unref (pool);
+  gst_object_unref (playbinpoolsrc);
 }
