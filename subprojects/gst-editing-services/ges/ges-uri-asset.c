@@ -455,6 +455,19 @@ _set_meta_foreach (const GstTagList * tags, const gchar * tag,
   }
 }
 
+static gboolean
+cleanup_discoverer (gpointer _unused)
+{
+  GESDiscovererManager *manager;
+
+  manager = ges_discoverer_manager_get_default ();
+
+  ges_discoverer_manager_cleanup_current (manager);
+  gst_object_unref (manager);
+
+  return G_SOURCE_REMOVE;
+}
+
 static void
 discoverer_discovered_cb (GstDiscoverer * _object,
     GstDiscovererInfo * info, GError * err, gpointer user_data)
@@ -490,6 +503,8 @@ discoverer_discovered_cb (GstDiscoverer * _object,
 
   if (error)
     g_error_free (error);
+
+  g_timeout_add_seconds (0, cleanup_discoverer, NULL);
 }
 
 static void
