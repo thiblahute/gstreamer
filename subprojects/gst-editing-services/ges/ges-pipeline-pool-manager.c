@@ -313,4 +313,5 @@ ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
   g_object_set (self->pool, "cleanup-timeout", 0, NULL);
   g_signal_connect (self->pool, "prepared-pipeline-removed",
       G_CALLBACK (ges_pipeline_pool_manager_prepare_pipeline_removed), self);
+  gst_object_unref (playbinpoolsrc);
 }
