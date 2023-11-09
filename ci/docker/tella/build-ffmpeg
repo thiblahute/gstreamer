@@ -162,7 +162,7 @@ fi
 ## FDK_AAC
 ##
 download "https://sourceforge.net/projects/opencore-amr/files/fdk-aac/fdk-aac-2.0.2.tar.gz/download?use_mirror=gigenet" "fdk-aac-2.0.2.tar.gz"
-execute ./configure --disable-shared --enable-static --enable-pic
+execute ./configure --enable-shared --enable-pic
 execute make -j $MJOBS
 execute make install
 

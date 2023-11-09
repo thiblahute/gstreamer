@@ -149,11 +149,8 @@ WORKDIR /gstreamer
 # Configure, build and install GStreamer
 RUN meson builddir \
   --prefix /usr \
-  -Ddebug=false \
-  -Doptimization=3 \
   -Db_lto=true \
-  -Dbuildtype=release \
-  -Dgst-full-libraries=app,video \
+  -Dbuildtype=debugoptimized \
   -Dintrospection=enabled \
   -Dgstreamer:tools=enabled \
   -Dpython=disabled \
