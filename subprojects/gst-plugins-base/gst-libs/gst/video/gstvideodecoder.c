@@ -309,6 +309,7 @@ GST_DEBUG_CATEGORY (videodecoder_debug);
 #define DEFAULT_DISCARD_CORRUPTED_FRAMES FALSE
 #define DEFAULT_AUTOMATIC_REQUEST_SYNC_POINTS FALSE
 #define DEFAULT_AUTOMATIC_REQUEST_SYNC_POINT_FLAGS (GST_VIDEO_DECODER_REQUEST_SYNC_POINT_DISCARD_INPUT | GST_VIDEO_DECODER_REQUEST_SYNC_POINT_CORRUPT_OUTPUT)
+#define DEFAULT_OUTPUT_OUT_OF_SEGMENT FALSE
 
 /* Used for request_sync_point_frame_number. These are out of range for the
  * frame numbers and can be given special meaning */
@@ -324,6 +325,7 @@ enum
   PROP_DISCARD_CORRUPTED_FRAMES,
   PROP_AUTOMATIC_REQUEST_SYNC_POINTS,
   PROP_AUTOMATIC_REQUEST_SYNC_POINT_FLAGS,
+  PROP_OUTPUT_OUT_OF_SEGMENT,
 };
 
 struct _GstVideoDecoderPrivate
@@ -414,6 +416,8 @@ struct _GstVideoDecoderPrivate
 
   gboolean automatic_request_sync_points;
   GstVideoDecoderRequestSyncPointFlags automatic_request_sync_point_flags;
+
+  gboolean output_out_of_segment;
 
   guint32 system_frame_number;
   guint32 decode_frame_number;
@@ -716,6 +720,24 @@ gst_video_decoder_class_init (GstVideoDecoderClass * klass)
           DEFAULT_AUTOMATIC_REQUEST_SYNC_POINT_FLAGS,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstVideoDecoder:output-out-of-segment:
+   *
+   * If set to %TRUE the decoder will not clip frames in segment (see
+   * gst_segment_clip for more details), meaning that, after an accurate seeks
+   * for example, frames between the seek position and the first sync point will
+   * be outputed.
+   *
+   * Since: 1.24
+   */
+  g_object_class_install_property (gobject_class,
+      PROP_OUTPUT_OUT_OF_SEGMENT,
+      g_param_spec_boolean ("output-out-of-segment",
+          "Output Out Of Segment",
+          "Whether to output frames that are outside of  the configured segment",
+          DEFAULT_OUTPUT_OUT_OF_SEGMENT,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   meta_tag_video_quark = g_quark_from_static_string (GST_META_TAG_VIDEO_STR);
 }
 
@@ -778,6 +800,7 @@ gst_video_decoder_init (GstVideoDecoder * decoder, GstVideoDecoderClass * klass)
       DEFAULT_AUTOMATIC_REQUEST_SYNC_POINTS;
   decoder->priv->automatic_request_sync_point_flags =
       DEFAULT_AUTOMATIC_REQUEST_SYNC_POINT_FLAGS;
+  decoder->priv->output_out_of_segment = DEFAULT_OUTPUT_OUT_OF_SEGMENT;
 
   gst_video_decoder_reset (decoder, TRUE, TRUE);
 }
@@ -995,6 +1018,9 @@ gst_video_decoder_get_property (GObject * object, guint property_id,
     case PROP_AUTOMATIC_REQUEST_SYNC_POINT_FLAGS:
       g_value_set_flags (value, priv->automatic_request_sync_point_flags);
       break;
+    case PROP_OUTPUT_OUT_OF_SEGMENT:
+      g_value_set_boolean (value, priv->output_out_of_segment);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -1026,6 +1052,9 @@ gst_video_decoder_set_property (GObject * object, guint property_id,
       break;
     case PROP_AUTOMATIC_REQUEST_SYNC_POINT_FLAGS:
       priv->automatic_request_sync_point_flags = g_value_get_flags (value);
+      break;
+    case PROP_OUTPUT_OUT_OF_SEGMENT:
+      priv->output_out_of_segment = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -3624,7 +3653,15 @@ gst_video_decoder_clip_and_push_buf (GstVideoDecoder * decoder, GstBuffer * buf)
   }
 
   segment = &decoder->output_segment;
-  if (gst_segment_clip (segment, GST_FORMAT_TIME, start, stop, &cstart, &cstop)) {
+  gboolean in_segment =
+      gst_segment_clip (segment, GST_FORMAT_TIME, start, stop, &cstart, &cstop);
+  if (decoder->priv->output_out_of_segment && !in_segment) {
+    cstart = start;
+    cstop = stop;
+    GST_LOG_OBJECT (decoder, "Outputting frame event if it is out of segment");
+  }
+
+  if (decoder->priv->output_out_of_segment || in_segment) {
     GST_BUFFER_PTS (buf) = cstart;
 
     if (stop != GST_CLOCK_TIME_NONE && GST_CLOCK_TIME_IS_VALID (duration))
