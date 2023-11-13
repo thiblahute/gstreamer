@@ -1,6 +1,8 @@
 #include "ges-pipeline-pool-manager.h"
 #include "ges-internal.h"
 
+#include <gst/video/video.h>
+
 
 #undef GST_CAT_DEFAULT
 #define GST_CAT_DEFAULT ges_pipeline_pool_manager_debug
@@ -280,6 +282,27 @@ done:
   g_rec_mutex_unlock (&self->lock);
 }
 
+static void
+deep_element_added_cb (GstBin * _pipeline, GstBin * _sub_bin,
+    GstElement * element)
+{
+  if (!GST_IS_VIDEO_DECODER (element)) {
+    return;
+  }
+
+  GST_DEBUG_OBJECT (element, "Output out of segment frames!");
+  g_object_set (element, "output-out-of-segment", TRUE, NULL);
+}
+
+
+static void
+new_pipeline_cb (GObject * pool, GstElement * pipeline)
+{
+  GST_DEBUG_OBJECT (pipeline, "Connecting %" GST_PTR_FORMAT, pool);
+  g_signal_connect (pipeline, "deep-element-added",
+      G_CALLBACK (deep_element_added_cb), NULL);
+}
+
 void
 ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
     GESTimeline * timeline)
@@ -292,7 +315,6 @@ ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
 
     g_once_init_leave ((gsize *) & init, 1);
   }
-
 
   GstElement *playbinpoolsrc =
       gst_element_factory_make ("playbinpoolsrc", NULL);
@@ -313,5 +335,7 @@ ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
   g_object_set (self->pool, "cleanup-timeout", 0, NULL);
   g_signal_connect (self->pool, "prepared-pipeline-removed",
       G_CALLBACK (ges_pipeline_pool_manager_prepare_pipeline_removed), self);
+  g_signal_connect (self->pool, "new-pipeline", G_CALLBACK (new_pipeline_cb),
+      NULL);
   gst_object_unref (playbinpoolsrc);
 }
