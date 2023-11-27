@@ -1278,6 +1278,7 @@ ges_asset_request (GType extractable_type, const gchar * id, GError ** error)
         case ASSET_INITIALIZED:
           break;
         case ASSET_INITIALIZING:
+          GST_ERROR ("Asset is initializing");
           asset = NULL;
           break;
         case ASSET_PROXIED:
@@ -1292,6 +1293,8 @@ ges_asset_request (GType extractable_type, const gchar * id, GError ** error)
               asset = proxy;
             } while ((proxy = ges_asset_get_proxy (asset)));
           }
+          if (!asset)
+            GST_ERROR ("Proxied asset not found");
           break;
         case ASSET_NEEDS_RELOAD:
           GST_DEBUG_OBJECT (asset, "Asset in cache and needs reload");
@@ -1326,8 +1329,10 @@ ges_asset_request (GType extractable_type, const gchar * id, GError ** error)
       asset = g_initable_new (asset_type,
           NULL, error, "id", real_id, "extractable-type",
           extractable_type, NULL);
+      if (!asset)
+        GST_WARNING ("Unable to extract asset");
     } else {
-      GST_INFO ("Tried to create an Asset for type %s but no ->init method",
+      GST_WARNING ("Tried to create an Asset for type %s but no ->init method",
           g_type_name (extractable_type));
     }
     g_type_class_unref (klass);
