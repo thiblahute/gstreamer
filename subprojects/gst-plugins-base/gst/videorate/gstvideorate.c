@@ -771,6 +771,15 @@ gst_video_rate_push_buffer (GstVideoRate * videorate, GstBuffer * outbuf,
       "old is best, dup, pushing buffer outgoing ts %" GST_TIME_FORMAT,
       GST_TIME_ARGS (push_ts));
 
+  if (!gst_segment_clip (&videorate->segment, GST_FORMAT_TIME,
+          GST_BUFFER_PTS (outbuf),
+          GST_BUFFER_PTS (outbuf) + GST_BUFFER_DURATION (outbuf), NULL, NULL)) {
+    GST_INFO_OBJECT (videorate, "Out buffer is out of segment, marking as EOS");
+    gst_buffer_unref (outbuf);
+
+    return GST_FLOW_EOS;
+  }
+
   if (videorate->drop_out_of_segment
       && !gst_segment_clip (&videorate->segment, GST_FORMAT_TIME,
           GST_BUFFER_PTS (outbuf),
@@ -781,7 +790,6 @@ gst_video_rate_push_buffer (GstVideoRate * videorate, GstBuffer * outbuf,
 
     return res;
   }
-
   res = gst_pad_push (GST_BASE_TRANSFORM_SRC_PAD (videorate), outbuf);
 
   return res;
@@ -1037,7 +1045,8 @@ gst_video_rate_sink_event (GstBaseTransform * trans, GstEvent * event)
               "Resetting rolled back caps %" GST_PTR_FORMAT, rolled_back_caps);
           if (!gst_pad_send_event (GST_BASE_TRANSFORM_SINK_PAD (videorate),
                   gst_event_new_caps (rolled_back_caps)
-              ) && !GST_PAD_IS_FLUSHING (GST_BASE_TRANSFORM_SINK_PAD (videorate))) {
+              )
+              && !GST_PAD_IS_FLUSHING (GST_BASE_TRANSFORM_SINK_PAD (videorate))) {
 
             GST_WARNING_OBJECT (videorate,
                 "Could not resend caps after closing " " segment");
