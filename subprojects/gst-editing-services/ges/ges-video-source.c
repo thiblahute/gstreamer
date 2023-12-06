@@ -116,7 +116,7 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
   GstElement *positioner, *videoflip, *capsfilter, *videorate;
   const gchar *positioner_props[]
       = { "alpha", "posx", "fposx", "posy", "fposy", "width", "fwidth",
-    "height", "fheight", "operator", NULL
+    "height", "fheight", "operator", "zorder", NULL
   };
   const gchar *videoflip_props[] = { "video-direction", NULL };
   gchar *ename = NULL;
@@ -199,7 +199,7 @@ ges_video_source_create_element (GESTrackElement * trksrc)
     return NULL;
 
   sub_element = source_class->create_source (GES_SOURCE (trksrc));
-  ges_source_set_source_element(GES_SOURCE (trksrc), sub_element);
+  ges_source_set_source_element (GES_SOURCE (trksrc), sub_element);
 
 
   self = (GESVideoSource *) trksrc;
