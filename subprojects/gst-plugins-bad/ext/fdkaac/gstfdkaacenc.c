@@ -552,6 +552,8 @@ gst_fdkaacenc_set_format (GstAudioEncoder * enc, GstAudioInfo * info)
   gst_audio_encoder_set_hard_min (enc, FALSE);
   self->outbuf_size = enc_info.maxOutBufBytes;
   self->samples_per_frame = enc_info.frameLength;
+  /* FIXME:: Add a property to specify if we should include sbr delay? */
+  self->delay = enc_info.nDelayCore;
 
   src_caps = gst_caps_new_simple ("audio/mpeg",
       "mpegversion", G_TYPE_INT, mpegversion,
@@ -684,6 +686,12 @@ gst_fdkaacenc_handle_frame (GstAudioEncoder * enc, GstBuffer * inbuf)
 
   gst_buffer_unmap (outbuf, &omap);
   gst_buffer_set_size (outbuf, out_args.numOutBytes);
+
+  if (self->delay) {
+    gst_buffer_add_audio_clipping_meta (outbuf, GST_FORMAT_DEFAULT, self->delay,
+        0);
+    self->delay = 0;
+  }
 
   ret = gst_audio_encoder_finish_frame (enc, outbuf, self->samples_per_frame);
   outbuf = NULL;

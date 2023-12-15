@@ -79,7 +79,7 @@ struct _GstFdkAacEnc {
   HANDLE_AACENCODER enc;
   gint bitrate;
 
-  guint outbuf_size, samples_per_frame;
+  guint outbuf_size, samples_per_frame, delay;
   gboolean need_reorder;
   const GstAudioChannelPosition *aac_positions;
   gboolean is_drained;
