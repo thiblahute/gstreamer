@@ -744,9 +744,9 @@ ges_pipeline_change_state (GstElement * element, GstStateChange transition)
 
       if (queue) {
         GST_INFO_OBJECT (self, "Setting playsink video queue max-size-time to"
-            " 2 seconds.");
+            " 3 seconds.");
         g_object_set (G_OBJECT (queue), "max-size-buffers", 0,
-            "max-size-bytes", 0, "max-size-time", (gint64) 2 * GST_SECOND,
+            "max-size-bytes", 0, "max-size-time", (gint64) 3 * GST_SECOND,
             NULL);
         gst_object_unref (queue);
       }
