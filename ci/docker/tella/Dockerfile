@@ -14,6 +14,9 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
   curl \
   flex \
   gcc \
+  autoconf \
+  automake \
+  libtool \
   gettext \
   git \
   gperf \
@@ -43,6 +46,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
   libwebpmux3 \
   libx264-dev \
   libx265-dev \
+  libfdk-aac-dev \
   nasm \
   python3-dev \
   python3-pip \
@@ -50,7 +54,11 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
   wget \
   xdg-dbus-proxy \
   yasm \
-  zlib1g-dev && \
+  zlib1g-dev \
+  gdb \
+  fontconfig \
+  alien \
+  && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
   pip3 install meson==0.63.0 --no-binary :all: && \
@@ -245,11 +253,12 @@ RUN meson builddir \
   -Drs=disabled && \
   ninja -C builddir
 
-RUN mkdir /opt/gstreamer && DESTDIR=/opt/gstreamer ninja -C builddir install && rm -rf builddir
+RUN ninja -C builddir install && rm -rf builddir
 
-# Make ffmpeg output available under /opt/gstreamer for easy copying
-COPY --from=ffmpeg /opt/ffmpeg /opt/gstreamer/usr
-COPY --from=cairo /opt/cairo /opt/gstreamer
-COPY --from=pango /opt/pango /opt/gstreamer
-COPY --from=gdk-pixbuf /opt/gdk-pixbuf /opt/gstreamer
-COPY --from=librsvg /opt/librsvg /opt/gstreamer
+# Generate the GStreamer plugins registry file and make it read-only.
+ENV GST_REGISTRY=/etc/gstreamer/registry-1.0.bin
+RUN mkdir -p /etc/gstreamer
+RUN gst-inspect-1.0
+RUN chmod a+r /etc/gstreamer/registry-1.0.bin
+ENV GST_REGISTRY_UPDATE=no
+ENV GST_REGISTRY_FORK=no
