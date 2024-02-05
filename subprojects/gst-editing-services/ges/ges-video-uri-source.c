@@ -111,6 +111,7 @@ ges_video_uri_source_get_natural_size (GESVideoSource * source, gint * width,
   guint par_n, par_d;
   GstDiscovererVideoInfo *info =
       _get_video_stream_info (GES_VIDEO_URI_SOURCE (source));
+  gchar *propname = NULL;
 
   if (!info)
     return FALSE;
@@ -132,12 +133,15 @@ ges_video_uri_source_get_natural_size (GESVideoSource * source, gint * width,
     }
   }
 
+  propname = g_strdup_printf ("%s::video-direction",
+      g_type_name (gst_element_factory_get_element_type
+          (ges_get_video_flip_factory ())));
   if (!ges_timeline_element_lookup_child (GES_TIMELINE_ELEMENT (source),
-          "GstVideoFlip::video-direction", NULL, NULL))
+          propname, NULL, NULL))
     goto done;
 
   ges_timeline_element_get_child_properties (GES_TIMELINE_ELEMENT (source),
-      "GstVideoFlip::video-direction", &videoflip_method, NULL);
+      propname, &videoflip_method, NULL);
 
   /* Rotating 90 degrees, either way, rotate */
   if (videoflip_method == 1 || videoflip_method == 3)
@@ -164,6 +168,7 @@ ges_video_uri_source_get_natural_size (GESVideoSource * source, gint * width,
 
 done:
   g_free (rotation_info);
+  g_free (propname);
   return TRUE;
 
 rotate:
@@ -233,7 +238,7 @@ ges_video_uri_source_create_filters (GESVideoSource * source,
   if (gst_discoverer_video_info_is_interlaced (info)) {
     const gchar *deinterlace_props[] = { "mode", "fields", "tff", NULL };
     GstElement *deinterlace =
-        gst_element_factory_make ("deinterlace", "deinterlace");
+        gst_element_factory_create (ges_get_deinterlace_factory (), NULL);
 
     if (deinterlace == NULL) {
       post_missing_element_message (ges_track_element_get_nleobject
@@ -245,8 +250,8 @@ ges_video_uri_source_create_filters (GESVideoSource * source,
               "deinterlace"), ("deinterlacing won't work"));
     } else {
       /* Right after the queue */
-      g_ptr_array_insert (elements, 1, gst_element_factory_make ("videoconvert",
-              NULL));
+      g_ptr_array_insert (elements, 1,
+          gst_element_factory_create (ges_get_videoconvert_factory (), NULL));
       g_ptr_array_insert (elements, 2, deinterlace);
       ges_track_element_add_children_props (GES_TRACK_ELEMENT (source),
           deinterlace, NULL, NULL, deinterlace_props);

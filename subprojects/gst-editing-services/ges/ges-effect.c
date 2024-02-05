@@ -317,7 +317,9 @@ ges_effect_create_element (GESTrackElement * object)
   GError *error = NULL;
   GESEffect *self = GES_EFFECT (object);
   const gchar *blacklisted_factories[] =
-      { "audioconvert", "audioresample", "videoconvert", NULL };
+      { "audioconvert", "audioresample", "videoconvert", "autovideoconvert",
+    "videoconvertscale", NULL
+  };
 
   GESTrackType type = ges_track_element_get_track_type (object);
 
