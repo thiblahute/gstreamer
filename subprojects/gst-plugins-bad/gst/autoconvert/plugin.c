@@ -24,6 +24,7 @@
 
 #include "gstautoconvert.h"
 #include "gstautovideoconvert.h"
+#include "gstautovideoconvertscale.h"
 #include "gstautovideoflip.h"
 #include "gstautodeinterlace.h"
 
@@ -34,6 +35,7 @@ plugin_init (GstPlugin * plugin)
 
   ret |= GST_ELEMENT_REGISTER (autoconvert, plugin);
   ret |= GST_ELEMENT_REGISTER (autovideoconvert, plugin);
+  ret |= GST_ELEMENT_REGISTER (autovideoconvertscale, plugin);
   ret |= GST_ELEMENT_REGISTER (autodeinterlace, plugin);
   ret |= GST_ELEMENT_REGISTER (autovideoflip, plugin);
   gst_type_mark_as_plugin_api (GST_TYPE_BASE_AUTO_CONVERT, 0);
