@@ -130,24 +130,20 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
       G_MAXUINT - GES_TIMELINE_ELEMENT_PRIORITY (self), NULL);
   g_ptr_array_add (elements, positioner);
 
-  if (needs_converters)
-    g_ptr_array_add (elements, gst_element_factory_make ("videoconvert", NULL));
-
   /* If there's image-orientation tag, make sure the image is correctly oriented
    * before we scale it. */
-  videoflip = gst_element_factory_make ("videoflip", "track-element-videoflip");
+  videoflip =
+      gst_element_factory_create (ges_get_video_flip_factory (),
+      "track-element-videoflip");
   g_object_set (videoflip, "video-direction", GST_VIDEO_ORIENTATION_AUTO, NULL);
   g_ptr_array_add (elements, videoflip);
 
-
   if (needs_converters) {
     ename =
-        g_strdup_printf ("ges%s-videoscale", GES_TIMELINE_ELEMENT_NAME (self));
-    g_ptr_array_add (elements, gst_element_factory_make ("videoscale", ename));
-    g_free (ename);
-    ename = g_strdup_printf ("ges%s-convert", GES_TIMELINE_ELEMENT_NAME (self));
-    g_ptr_array_add (elements, gst_element_factory_make ("videoconvert",
-            ename));
+        g_strdup_printf ("ges%s-videoconvertscale",
+        GES_TIMELINE_ELEMENT_NAME (self));
+    g_ptr_array_add (elements,
+        gst_element_factory_create (ges_get_videoconvert_scale_factory (), ename));
     g_free (ename);
   }
   ename = g_strdup_printf ("ges%s-rate", GES_TIMELINE_ELEMENT_NAME (self));

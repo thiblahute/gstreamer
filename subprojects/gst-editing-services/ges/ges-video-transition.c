@@ -349,8 +349,10 @@ ges_video_transition_create_element (GESTrackElement * object)
 
   topbin = gst_bin_new ("transition-bin");
 
-  iconva = gst_element_factory_make ("videoconvert", "tr-csp-a");
-  iconvb = gst_element_factory_make ("videoconvert", "tr-csp-b");
+  iconva =
+      gst_element_factory_create (ges_get_videoconvert_factory (), "tr-csp-a");
+  iconvb =
+      gst_element_factory_create (ges_get_videoconvert_factory (), "tr-csp-b");
   priv->positioner =
       gst_element_factory_make ("framepositioner", "frame_tagger");
   g_object_set (priv->positioner, "zorder",

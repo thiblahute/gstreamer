@@ -36,7 +36,12 @@
 #include "ges.h"
 #include <gst/base/base.h>
 
+static gboolean use_autoconverters = FALSE;
 static GstElementFactory *compositor_factory = NULL;
+static GstElementFactory *videoconvert_factory = NULL;
+static GstElementFactory *videoconvert_scale_factory = NULL;
+static GstElementFactory *deinterlace_factory = NULL;
+static GstElementFactory *videoflip_factory = NULL;
 
 /**
  * ges_timeline_new_audio_video:
@@ -299,7 +304,6 @@ ges_util_structure_get_clocktime (GstStructure * structure, const gchar * name,
   return found;
 }
 
-
 GstElementFactory *
 ges_get_compositor_factory (void)
 {
@@ -368,4 +372,95 @@ ges_nle_object_commit (GstElement * nlesource, gboolean recurse)
   g_signal_emit_by_name (nlesource, "commit", recurse, &ret);
 
   return ret;
+}
+
+gboolean
+ges_use_auto_converters (void)
+{
+  static gboolean checked = FALSE;
+
+  if (checked)
+    return use_autoconverters;
+
+  checked = TRUE;
+
+  const gchar *envvar = g_getenv ("GST_USE_AUTOCONVERT");
+
+  use_autoconverters = !g_strcmp0 (envvar, "1") ||
+    !g_strcmp0 (envvar, "yes") ||
+    !g_strcmp0 (envvar, "true") ||
+    !g_strcmp0 (envvar, "on") ||
+    !g_strcmp0 (envvar, "y");
+
+
+  return use_autoconverters;
+}
+
+GstElementFactory *
+ges_get_videoconvert_factory (void)
+{
+  if (videoconvert_factory)
+    return videoconvert_factory;
+
+  if (ges_use_auto_converters()) {
+    videoconvert_factory = gst_element_factory_find ("autovideoconvert");
+    if (!videoconvert_factory) {
+      GST_ERROR ("Trying to use autoconverters but they are not present on the system");
+    }
+  }
+
+  if (!videoconvert_factory) {
+    videoconvert_factory = gst_element_factory_find ("videoconvert");
+  }
+
+  return videoconvert_factory;
+}
+
+GstElementFactory *
+ges_get_videoconvert_scale_factory (void)
+{
+  if (videoconvert_scale_factory)
+    return videoconvert_scale_factory;
+
+  if (ges_use_auto_converters()) {
+    videoconvert_scale_factory = gst_element_factory_find ("autovideoconvertscale");
+  }
+  if (!videoconvert_scale_factory) {
+    videoconvert_scale_factory = gst_element_factory_find ("videoconvertscale");
+  }
+
+  return videoconvert_scale_factory;
+}
+
+GstElementFactory *
+ges_get_deinterlace_factory (void)
+{
+  if (deinterlace_factory)
+    return deinterlace_factory;
+
+  if (ges_use_auto_converters()) {
+    deinterlace_factory = gst_element_factory_find ("autodeinterlace");
+  }
+  if (!deinterlace_factory){
+    deinterlace_factory = gst_element_factory_find ("deinterlace");
+  }
+
+  return deinterlace_factory;
+}
+
+GstElementFactory *
+ges_get_video_flip_factory (void)
+{
+  if (videoflip_factory)
+    return videoflip_factory;
+
+  if (ges_use_auto_converters()) {
+    videoflip_factory = gst_element_factory_find ("autovideoflip");
+  }
+
+  if (!videoflip_factory){
+    videoflip_factory = gst_element_factory_find ("videoflip");
+  }
+
+  return videoflip_factory;
 }

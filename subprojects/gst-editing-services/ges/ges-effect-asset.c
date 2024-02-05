@@ -306,7 +306,7 @@ ges_effect_from_description (const gchar * bin_desc, GESTrackType type,
 
   if (type == GES_TRACK_TYPE_VIDEO) {
     valid_caps = gst_caps_from_string ("video/x-raw(ANY)");
-    converter_str = "videoconvert";
+    converter_str = GST_OBJECT_NAME (ges_get_videoconvert_factory ());
   } else if (type == GES_TRACK_TYPE_AUDIO) {
     valid_caps = gst_caps_from_string ("audio/x-raw(ANY)");
     converter_str = "audioconvert ! audioresample ! audioconvert";
