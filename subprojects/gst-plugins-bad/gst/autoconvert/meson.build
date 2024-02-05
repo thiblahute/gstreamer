@@ -3,6 +3,7 @@ autocon_sources = [
   'gstautoconvert.c',
   'gstautovideo.c',
   'gstautovideoconvert.c',
+  'gstautovideoconvertscale.c',
   'gstautodeinterlace.c',
   'gstautovideoflip.c',
   'plugin.c',

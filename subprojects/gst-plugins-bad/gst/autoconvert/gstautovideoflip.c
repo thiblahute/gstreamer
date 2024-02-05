@@ -236,21 +236,21 @@ gst_auto_video_flip_init (GstAutoVideoFlip * self)
   static const GstAutoVideoFilterGenerator gen[] = {
     {
       .first_elements = { "bayer2rgb", NULL},
-      .colorspace_converters = { "videoconvertscale", NULL },
+      .colorspace_converters = { "videoconvert", NULL },
       .last_elements = { NULL } ,
       .filters = { "videoflip", NULL },
       .rank = GST_RANK_MARGINAL,
     },
     {
       .first_elements = { NULL, },
-      .colorspace_converters = { "videoconvertscale", NULL },
+      .colorspace_converters = { "videoconvert", NULL },
       .last_elements = { NULL },
       .filters = {  "videoflip" },
       .rank = GST_RANK_SECONDARY,
     },
     {
       .first_elements = { NULL, },
-      .colorspace_converters = { "videoconvertscale", NULL },
+      .colorspace_converters = { "videoconvert", NULL },
       .last_elements = { "rgb2bayer", NULL },
       .filters = {  "videoflip" },
       .rank = GST_RANK_MARGINAL,
@@ -270,7 +270,7 @@ gst_auto_video_flip_init (GstAutoVideoFlip * self)
       .rank = GST_RANK_PRIMARY,
     },
     {
-      .first_elements = { "videoconvertscale", "glupload", NULL },
+      .first_elements = { "videoconvert", "glupload", NULL },
       .colorspace_converters = { NULL },
       .last_elements = { NULL },
       .filters = { "glvideoflip", NULL },
@@ -285,14 +285,14 @@ gst_auto_video_flip_init (GstAutoVideoFlip * self)
     },
     { /* CUDA -> GL */
       .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
-      .colorspace_converters = { "glcolorconvert",  "glcolorscale", "glcolorconvert", NULL },
+      .colorspace_converters = { "glcolorconvert",  "glcolor", "glcolorconvert", NULL },
       .last_elements = { NULL },
       .filters = { "glvideoflip", NULL },
       .rank = GST_RANK_PRIMARY - 1,
     },
     { /* CUDA -> CUDA */
       .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
-      .colorspace_converters = { "glcolorconvert",  "glcolorscale", "glcolorconvert", NULL },
+      .colorspace_converters = { "glcolorconvert", NULL },
       .last_elements = { "cudaupload", "capsfilter caps=video/x-raw(memory:CUDAMemory)", NULL },
       .filters = { "glvideoflip", NULL },
       .rank = GST_RANK_SECONDARY - 1,
@@ -306,7 +306,7 @@ gst_auto_video_flip_init (GstAutoVideoFlip * self)
     },
     { /* CUDA -> Software */
       .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
-      .colorspace_converters = { "glcolorconvert",  "glcolorscale", "glcolorconvert", NULL },
+      .colorspace_converters = { "glcolorconvert", NULL },
       .last_elements = { "gldownload", NULL },
       .filters = { "glvideoflip", NULL },
       .rank = GST_RANK_MARGINAL,
