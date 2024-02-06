@@ -278,14 +278,14 @@ gst_auto_video_flip_init (GstAutoVideoFlip * self)
     },
     {
       .first_elements = { NULL },
-      .colorspace_converters = { NULL },
+      .colorspace_converters = { "glcolorconvert", NULL },
       .last_elements = { "gldownload", NULL },
       .filters = { "glvideoflip", NULL },
       .rank = GST_RANK_MARGINAL + 1,
     },
     { /* CUDA -> GL */
       .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
-      .colorspace_converters = { "glcolorconvert",  "glcolor", "glcolorconvert", NULL },
+      .colorspace_converters = { "glcolorconvert",  NULL },
       .last_elements = { NULL },
       .filters = { "glvideoflip", NULL },
       .rank = GST_RANK_PRIMARY - 1,
