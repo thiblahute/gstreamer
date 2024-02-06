@@ -330,14 +330,14 @@ gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
         .rank = GST_RANK_SECONDARY,
       },
       {
-        .first_elements = { NULL, },
+        .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
         .colorspace_converters = { "videoconvert", NULL },
         .last_elements = { "rgb2bayer", NULL },
         .filters = { "deinterlace", NULL },
         .rank = GST_RANK_SECONDARY,
       },
       {
-        .first_elements = { NULL, },
+        .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
         .colorspace_converters = { "videoconvert", NULL },
         .last_elements = { NULL, },
         .filters = { "deinterlace", NULL },
@@ -426,14 +426,14 @@ gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
           .rank = GST_RANK_SECONDARY,
         },
         {
-          .first_elements = { NULL, },
+          .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
           .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { "rgb2bayer", NULL },
           .filters = { "deinterlace", NULL },
           .rank = GST_RANK_SECONDARY,
         },
         {
-          .first_elements = { NULL, },
+          .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
           .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { NULL, },
           .filters = { "deinterlace", NULL },
@@ -468,7 +468,7 @@ gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
           .rank = GST_RANK_MARGINAL,
         },
         { /* Software -> cuda */
-          .first_elements = { NULL },
+          .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL },
           .colorspace_converters = { "videoconvert", NULL },
           .last_elements = { "cudaupload", "capsfilter caps=video/x-raw(memory:CUDAMemory)", NULL },
           .filters = { "deinterlace", NULL },

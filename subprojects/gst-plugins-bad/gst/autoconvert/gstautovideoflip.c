@@ -242,14 +242,14 @@ gst_auto_video_flip_init (GstAutoVideoFlip * self)
       .rank = GST_RANK_MARGINAL,
     },
     {
-      .first_elements = { NULL, },
+      .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
       .colorspace_converters = { "videoconvert", NULL },
       .last_elements = { NULL },
       .filters = {  "videoflip" },
       .rank = GST_RANK_SECONDARY,
     },
     {
-      .first_elements = { NULL, },
+      .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
       .colorspace_converters = { "videoconvert", NULL },
       .last_elements = { "rgb2bayer", NULL },
       .filters = {  "videoflip" },
@@ -270,7 +270,7 @@ gst_auto_video_flip_init (GstAutoVideoFlip * self)
       .rank = GST_RANK_PRIMARY,
     },
     {
-      .first_elements = { "videoconvert", "glupload", NULL },
+      .first_elements = { "capsfilter caps=\"video/x-raw\"", "videoconvert", "glupload", NULL },
       .colorspace_converters = { NULL },
       .last_elements = { NULL },
       .filters = { "glvideoflip", NULL },
