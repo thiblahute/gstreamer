@@ -88,9 +88,9 @@ gst_auto_video_convert_init (GstAutoVideoConvert * autovideoconvert)
     {
       .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
       .colorspace_converters = { "videoconvert", NULL },
-      .last_elements = { NULL, },
+      .last_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
       .filters = { NULL },
-      .rank = GST_RANK_SECONDARY,
+      .rank = GST_RANK_PRIMARY + 1,
     },
     {
       .first_elements = { NULL, },
@@ -119,6 +119,13 @@ gst_auto_video_convert_init (GstAutoVideoConvert * autovideoconvert)
       .last_elements = { NULL },
       .filters = { NULL },
       .rank = GST_RANK_MARGINAL + 2,
+    },
+    {
+      .first_elements = { "gldownload", NULL },
+      .colorspace_converters = { "videoconvert", NULL },
+      .last_elements = { "capsfilter caps=\"video/x-raw\"", NULL },
+      .filters = { NULL },
+      .rank = GST_RANK_MARGINAL,
     },
     { /* Worst case we upload/download as required */
       .first_elements = { "glupload", "gldownload", NULL },
