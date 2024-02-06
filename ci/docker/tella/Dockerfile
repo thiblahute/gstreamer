@@ -65,9 +65,9 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
   pip3 install ninja tomli
 
 # Install rust toolchain
-RUN curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain nightly -y
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN cargo install cargo-c --git https://github.com/evaporei/cargo-c.git
+RUN cargo install cargo-c
 
 FROM deps as cairo
 
