@@ -150,12 +150,17 @@ static gboolean
 _should_enable_playbinpoolsrc (GESSource * self)
 {
   static gsize once = 0;
-  const gchar *env;
+  const gchar *envvar;
 
   if (g_once_init_enter (&once)) {
-    env = g_getenv ("GES_ENABLE_PLAYBINPOOLSRC");
+    envvar = g_getenv ("GES_ENABLE_PLAYBINPOOLSRC");
 
-    if (env && !g_strcmp0 (env, "1")) {
+    gboolean playbinpoolsrc_enabled = !g_strcmp0 (envvar, "1") ||
+        !g_strcmp0 (envvar, "yes") ||
+        !g_strcmp0 (envvar, "true") ||
+        !g_strcmp0 (envvar, "on") || !g_strcmp0 (envvar, "y");
+
+    if (playbinpoolsrc_enabled) {
       GstPluginFeature *feature =
           gst_registry_find_feature (gst_registry_get (), "playbinpoolsrc",
           GST_TYPE_ELEMENT_FACTORY);
@@ -163,11 +168,15 @@ _should_enable_playbinpoolsrc (GESSource * self)
       if (feature) {
         _ges_enable_playbinpoolsrc = TRUE;
         gst_object_unref (feature);
+      } else {
+        GST_ERROR
+            ("playbinpoolsrc is not available while enabled, disabling it");
       }
 
-      GST_INFO ("playbinpoolsrc %sabled (factory: %p)",
-          _ges_enable_playbinpoolsrc ? "en" : "dis", feature);
     }
+
+    GST_INFO ("playbinpoolsrc %sabled",
+        _ges_enable_playbinpoolsrc ? "en" : "dis");
 
     g_once_init_leave (&once, 1);
   }
