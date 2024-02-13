@@ -137,7 +137,8 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
         g_strdup_printf ("ges%s-videoconvertscale",
         GES_TIMELINE_ELEMENT_NAME (self));
     g_ptr_array_add (elements,
-        gst_element_factory_create (ges_get_videoconvert_scale_factory (), ename));
+        gst_element_factory_create (ges_get_videoconvert_scale_factory (),
+            ename));
     g_free (ename);
 
     /* If there's image-orientation tag, make sure the image is correctly oriented
@@ -224,20 +225,28 @@ _lookup_child (GESTimelineElement * object,
   gboolean res;
 
   gchar *clean_name;
+  gboolean use_autoconverters = ges_use_auto_converters ();
 
-  if (!g_strcmp0 (prop_name, "deinterlace-fields"))
-    clean_name = g_strdup ("GstDeinterlace::fields");
-  else if (!g_strcmp0 (prop_name, "deinterlace-mode"))
-    clean_name = g_strdup ("GstDeinterlace::mode");
-  else if (!g_strcmp0 (prop_name, "deinterlace-tff"))
-    clean_name = g_strdup ("GstDeinterlace::tff");
-  else if (!g_strcmp0 (prop_name, "tff") ||
-      !g_strcmp0 (prop_name, "fields") || !g_strcmp0 (prop_name, "mode")) {
-    GST_DEBUG_OBJECT (object, "Not allowed to use GstDeinterlace %s"
+  if (!g_strcmp0 (prop_name, "deinterlace-fields")) {
+    clean_name =
+        g_strdup_printf ("%s::fields",
+        use_autoconverters ? "GstAutoDeinterlace" : "GstDeinterlace");
+  } else if (!g_strcmp0 (prop_name, "deinterlace-mode")) {
+    clean_name =
+        g_strdup_printf ("%s::mode",
+        use_autoconverters ? "GstAutoDeinterlace" : "GstDeinterlace");
+  } else if (!g_strcmp0 (prop_name, "deinterlace-tff")) {
+    clean_name =
+        g_strdup_printf ("%s::tff",
+        use_autoconverters ? "GstAutoDeinterlace" : "GstDeinterlace");
+  } else if (!g_strcmp0 (prop_name, "tff") || !g_strcmp0 (prop_name, "fields") || !g_strcmp0 (prop_name, "mode")) {
+    GST_DEBUG_OBJECT (object,
+        "Not allowed to use GstDeinterlace %s"
         " property without prefixing its name", prop_name);
     return FALSE;
-  } else
+  } else {
     clean_name = g_strdup (prop_name);
+  }
 
   res =
       GES_TIMELINE_ELEMENT_CLASS (ges_video_source_parent_class)->lookup_child
