@@ -205,9 +205,12 @@ ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
       "%" GST_PTR_FORMAT " - Track! %" GST_PTR_FORMAT, self->decodebin, track);
   GstCaps *caps = NULL;
   if (GES_IS_VIDEO_SOURCE (self->element)) {
-    caps =
-        gst_caps_from_string
-        ("video/x-raw(memory:DMABuf);video/x-raw(memory:CUDAMemory);video/x-raw(memory:GLMemory);video/x-raw;");
+    if (ges_use_auto_converters ())
+      caps = gst_caps_from_string ("video/x-raw(ANY)");
+    else
+      caps = gst_caps_new_empty_simple ("video/x-raw");
+
+    GST_DEBUG ("Using caps: %" GST_PTR_FORMAT " for playbinpoolsrc", caps);
   } else if (GES_IS_AUDIO_SOURCE (self->element)) {
     caps = gst_caps_new_empty_simple ("audio/x-raw");
   } else {
