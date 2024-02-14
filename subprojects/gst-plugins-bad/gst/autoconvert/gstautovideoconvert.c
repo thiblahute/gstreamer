@@ -183,6 +183,13 @@ gst_auto_video_convert_init (GstAutoVideoConvert * autovideoconvert)
       .filters = { NULL },
       .rank = GST_RANK_MARGINAL,
     },
+    {
+      .first_elements = { "gldownload", NULL },
+      .colorspace_converters = { "videoconvert", NULL },
+      .last_elements = { "glupload", NULL },
+      .filters = { NULL },
+      .rank = GST_RANK_NONE,
+    },
     { /* Worst case we upload/download as required */
       .first_elements = { NULL},
       .colorspace_converters = { NULL },
