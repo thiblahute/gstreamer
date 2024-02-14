@@ -283,19 +283,26 @@ gst_auto_video_flip_init (GstAutoVideoFlip * self)
       .filters = { "glvideoflip", NULL },
       .rank = GST_RANK_MARGINAL + 1,
     },
+    { /* FIXME: Generically make it so we go through cudaconvert for formats not supported by `glcolorconvert` */
+      .first_elements = { "capsfilter caps=" CUDA_CONVERT_FORMATS_UNHANDLED_BY_GL, "cudaupload", "cudaconvert", NULL },
+      .colorspace_converters = { NULL },
+      .last_elements = { "glcolorconvert", "capsfilter caps=video/x-raw(memory:GLMemory)", NULL },
+      .filters = { "cudadownload", "glvideoflip", NULL },
+      .rank = GST_RANK_PRIMARY - 1,
+    },
     { /* CUDA -> GL */
       .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
       .colorspace_converters = { "glcolorconvert",  NULL },
       .last_elements = { NULL },
       .filters = { "glvideoflip", NULL },
-      .rank = GST_RANK_PRIMARY - 1,
+      .rank = GST_RANK_PRIMARY - 2,
     },
     { /* CUDA -> CUDA */
       .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
       .colorspace_converters = { "glcolorconvert", NULL },
       .last_elements = { "cudaupload", "capsfilter caps=video/x-raw(memory:CUDAMemory)", NULL },
       .filters = { "glvideoflip", NULL },
-      .rank = GST_RANK_SECONDARY - 1,
+      .rank = GST_RANK_SECONDARY - 2,
     },
     { /* Software -> CUDA (uploading as soon as possible) */
       .first_elements = { "glupload", NULL },

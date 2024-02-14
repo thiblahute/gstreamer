@@ -382,12 +382,19 @@ gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
         .filters = { NULL },
         .rank = GST_RANK_MARGINAL,
       },
+      { /* FIXME: Generically make it so we go through cudaconvert for formats not supported by `glcolorconvert` */
+        .first_elements = { "capsfilter caps=" CUDA_CONVERT_FORMATS_UNHANDLED_BY_GL, "cudaupload", "cudaconvert", NULL },
+        .colorspace_converters = { NULL },
+        .last_elements = { "glcolorconvert", "capsfilter caps=video/x-raw(memory:GLMemory)", NULL },
+        .filters = { "cudadownload", "gldeinterlace", NULL },
+        .rank = GST_RANK_PRIMARY - 1,
+      },
       { /* CUDA -> GL */
         .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
         .colorspace_converters = { "glcolorconvert",  NULL },
         .last_elements = { NULL },
         .filters = { "gldeinterlace", NULL },
-        .rank = GST_RANK_PRIMARY - 1,
+        .rank = GST_RANK_PRIMARY - 2,
       },
       { /* CUDA -> CUDA */
         .first_elements = { "capsfilter caps=video/x-raw(memory:CUDAMemory)", "cudadownload", NULL },
