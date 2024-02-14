@@ -66,6 +66,11 @@ gst_auto_video_convert_class_init (GstAutoVideoConvertClass * klass)
       "Thibault Saunier <tsaunier@igalia.com>");
 }
 
+#define CUDA_CONVERT_FORMATS_UNHANDLED_BY_GL \
+    "video/x-raw(memory:CUDAMemory),format={I420_10LE,I422_10LE,I422_12LE,Y444_16LE};" \
+    "video/x-raw(memory:GLMemory),format={I420_10LE,I422_10LE,I422_12LE,Y444_16LE};" \
+    "video/x-raw,format={I420_10LE,I422_10LE,I422_12LE,Y444_16LE};"
+
 static void
 gst_auto_video_convert_init (GstAutoVideoConvert * autovideoconvert)
 {
@@ -142,7 +147,7 @@ gst_auto_video_convert_init (GstAutoVideoConvert * autovideoconvert)
       .rank = GST_RANK_PRIMARY,
     },
     { /* FIXME: Generically make it so we go through cudaconvert for formats not supported by `glcolorconvert` */
-      .first_elements = { "capsfilter caps=\"video/x-raw(ANY),format={I420_10LE,I422_10LE,I422_12LE}\"", "cudaupload", NULL },
+      .first_elements = { "capsfilter caps=" CUDA_CONVERT_FORMATS_UNHANDLED_BY_GL, "cudaupload", NULL },
       .colorspace_converters = { "cudaconvert", NULL },
       .last_elements = { "cudadownload", "capsfilter caps=\"video/x-raw(memory:GLMemory),format={ARGB,RGBA}\"", NULL },
       .filters = { NULL },

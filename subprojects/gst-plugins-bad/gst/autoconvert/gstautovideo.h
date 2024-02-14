@@ -37,4 +37,9 @@ typedef struct
 
 void gst_auto_video_register_well_known_bins (GstBaseAutoConvert *self, const GstAutoVideoFilterGenerator *gen);
 
+#define CUDA_CONVERT_FORMATS_UNHANDLED_BY_GL \
+    "video/x-raw(memory:CUDAMemory),format={I420_10LE,I422_10LE,I422_12LE,Y444_16LE};" \
+    "video/x-raw(memory:GLMemory),format={I420_10LE,I422_10LE,I422_12LE,Y444_16LE};" \
+    "video/x-raw,format={I420_10LE,I422_10LE,I422_12LE,Y444_16LE};"
+
 G_END_DECLS
