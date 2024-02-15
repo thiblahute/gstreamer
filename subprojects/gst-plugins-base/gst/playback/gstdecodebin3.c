@@ -1978,22 +1978,26 @@ handle_stream_collection (GstDecodebin3 * dbin,
 #ifndef GST_DISABLE_GST_DEBUG
   /* Just some debugging */
   upstream_id = gst_stream_collection_get_upstream_id (collection);
-  GST_DEBUG ("Received Stream Collection. Upstream_id : %s", upstream_id);
-  GST_DEBUG ("From input %p", input);
-  GST_DEBUG ("  %d streams", gst_stream_collection_get_size (collection));
+  GST_DEBUG_OBJECT (dbin, "Received Stream Collection. Upstream_id : %s",
+      upstream_id);
+  GST_DEBUG_OBJECT (dbin, "From input %p", input);
+  GST_DEBUG_OBJECT (dbin, "  %d streams",
+      gst_stream_collection_get_size (collection));
   for (i = 0; i < gst_stream_collection_get_size (collection); i++) {
     GstStream *stream = gst_stream_collection_get_stream (collection, i);
     GstTagList *taglist;
     GstCaps *caps;
 
-    GST_DEBUG ("   Stream '%s'", gst_stream_get_stream_id (stream));
-    GST_DEBUG ("     type  : %s",
+    GST_DEBUG_OBJECT (dbin, "   Stream '%s'",
+        gst_stream_get_stream_id (stream));
+    GST_DEBUG_OBJECT (dbin, "     type  : %s",
         gst_stream_type_get_name (gst_stream_get_stream_type (stream)));
-    GST_DEBUG ("     flags : 0x%x", gst_stream_get_stream_flags (stream));
+    GST_DEBUG_OBJECT (dbin, "     flags : 0x%x",
+        gst_stream_get_stream_flags (stream));
     taglist = gst_stream_get_tags (stream);
-    GST_DEBUG ("     tags  : %" GST_PTR_FORMAT, taglist);
+    GST_DEBUG_OBJECT (dbin, "     tags  : %" GST_PTR_FORMAT, taglist);
     caps = gst_stream_get_caps (stream);
-    GST_DEBUG ("     caps  : %" GST_PTR_FORMAT, caps);
+    GST_DEBUG_OBJECT (dbin, "     caps  : %" GST_PTR_FORMAT, caps);
     if (taglist)
       gst_tag_list_unref (taglist);
     if (caps)
@@ -2257,7 +2261,9 @@ get_output_for_slot (MultiQueueSlot * slot)
 
   stream_id = gst_stream_get_stream_id (slot->active_stream);
   caps = gst_stream_get_caps (slot->active_stream);
-  GST_DEBUG_OBJECT (dbin, "stream %s , %" GST_PTR_FORMAT, stream_id, caps);
+  GST_DEBUG_OBJECT (dbin,
+      "stream %s , %" GST_PTR_FORMAT "(upstream selected: %d) our caps: %"
+      GST_PTR_FORMAT, stream_id, caps, dbin->upstream_selected, dbin->caps);
   gst_caps_unref (caps);
 
   /* 0. Emit autoplug-continue signal for pending caps ? */
@@ -2682,7 +2688,7 @@ create_new_slot (GstDecodebin3 * dbin, GstStreamType type)
       GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM | GST_PAD_PROBE_TYPE_QUERY_DOWNSTREAM,
       (GstPadProbeCallback) multiqueue_src_probe, slot, NULL);
 
-  GST_DEBUG ("Created new slot %u (%p) (%s:%s)", slot->id, slot,
+  GST_DEBUG_OBJECT (dbin, "Created new slot %u (%p) (%s:%s)", slot->id, slot,
       GST_DEBUG_PAD_NAME (slot->src_pad));
 
   dbin->slots = g_list_append (dbin->slots, slot);
