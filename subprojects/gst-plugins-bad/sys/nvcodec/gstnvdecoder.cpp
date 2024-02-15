@@ -1083,11 +1083,15 @@ gst_nv_decoder_get_supported_codec_profiles (GValue * profiles,
           GST_NV_DECODER_FORMAT_FLAG_420_8BITS) {
         g_value_set_static_string (&val, "main");
         gst_value_list_append_value (profiles, &val);
+        g_value_set_static_string (&val, "main-intra");
+        gst_value_list_append_value (profiles, &val);
       }
 
       if ((flags & GST_NV_DECODER_FORMAT_FLAG_420_10BITS) ==
           GST_NV_DECODER_FORMAT_FLAG_420_10BITS) {
         g_value_set_static_string (&val, "main-10");
+        gst_value_list_append_value (profiles, &val);
+        g_value_set_static_string (&val, "main-10-intra");
         gst_value_list_append_value (profiles, &val);
       }
 
@@ -1095,11 +1099,15 @@ gst_nv_decoder_get_supported_codec_profiles (GValue * profiles,
           GST_NV_DECODER_FORMAT_FLAG_420_12BITS) {
         g_value_set_static_string (&val, "main-12");
         gst_value_list_append_value (profiles, &val);
+        g_value_set_static_string (&val, "main-12-intra");
+        gst_value_list_append_value (profiles, &val);
       }
 
       if ((flags & GST_NV_DECODER_FORMAT_FLAG_444_8BITS) ==
           GST_NV_DECODER_FORMAT_FLAG_444_8BITS) {
         g_value_set_static_string (&val, "main-444");
+        gst_value_list_append_value (profiles, &val);
+        g_value_set_static_string (&val, "main-444-intra");
         gst_value_list_append_value (profiles, &val);
       }
 
@@ -1107,11 +1115,15 @@ gst_nv_decoder_get_supported_codec_profiles (GValue * profiles,
           GST_NV_DECODER_FORMAT_FLAG_444_10BITS) {
         g_value_set_static_string (&val, "main-444-10");
         gst_value_list_append_value (profiles, &val);
+        g_value_set_static_string (&val, "main-444-10-intra");
+        gst_value_list_append_value (profiles, &val);
       }
 
       if ((flags & GST_NV_DECODER_FORMAT_FLAG_444_12BITS) ==
           GST_NV_DECODER_FORMAT_FLAG_444_12BITS) {
         g_value_set_static_string (&val, "main-444-12");
+        gst_value_list_append_value (profiles, &val);
+        g_value_set_static_string (&val, "main-444-12-intra");
         gst_value_list_append_value (profiles, &val);
       }
 
