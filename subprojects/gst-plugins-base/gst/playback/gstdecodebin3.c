@@ -1670,7 +1670,8 @@ update_requested_selection (GstDecodebin3 * dbin)
   SELECTION_LOCK (dbin);
   if (dbin->pending_select_streams) {
     GST_DEBUG_OBJECT (dbin,
-        "No need to create pending selection, SELECT_STREAMS underway");
+        "No need to create pending selection, SELECT_STREAMS %d underway",
+        dbin->select_streams_seqnum);
     goto beach;
   }
 
@@ -3276,8 +3277,11 @@ handle_stream_switch (GstDecodebin3 * dbin, GList * select_streams,
   GList *slots_to_reassign = NULL;
 
   SELECTION_LOCK (dbin);
-  if (G_UNLIKELY (seqnum != dbin->select_streams_seqnum)) {
-    GST_DEBUG_OBJECT (dbin, "New SELECT_STREAMS has arrived in the meantime");
+  if (G_UNLIKELY (dbin->select_streams_seqnum != GST_SEQNUM_INVALID
+          && seqnum != dbin->select_streams_seqnum)) {
+    GST_INFO_OBJECT (dbin,
+        "New SELECT_STREAMS has arrived in the meantime %d != %d", seqnum,
+        dbin->select_streams_seqnum);
     SELECTION_UNLOCK (dbin);
     return TRUE;
   }
