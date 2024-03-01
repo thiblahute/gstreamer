@@ -356,9 +356,9 @@ ges_discoverer_manager_cleanup_current (GESDiscovererManager * self)
 {
   g_return_if_fail (GES_IS_DISCOVERER_MANAGER (self));
 
-  g_mutex_lock (&self->lock);
+  g_rec_mutex_lock (&self->lock);
   g_hash_table_remove (self->discoverers, g_thread_self ());
-  g_mutex_unlock (&self->lock);
+  g_rec_mutex_unlock (&self->lock);
 }
 
 static GstDiscovererInfo *
