@@ -1269,28 +1269,27 @@ _create_pipeline (GESLauncher * self, const gchar * serialized_timeline)
   if (!ges_pipeline_set_timeline (self->priv->pipeline, self->priv->timeline))
     goto failure;
 
-  const gchar *envvar = g_getenv ("GES_ENABLE_PLAYBINPOOLSRC");
-  gboolean use_playbinpoolsrc = !g_strcmp0 (envvar, "1") ||
-    !g_strcmp0 (envvar, "yes") ||
-    !g_strcmp0 (envvar, "true") ||
-    !g_strcmp0 (envvar, "on") ||
-    !g_strcmp0 (envvar, "y");
+  const gchar *envvar = g_getenv ("GES_ENABLE_URIDECODEPOOLSRC");
+  gboolean use_uridecodepoolsrc = !g_strcmp0 (envvar, "1") ||
+      !g_strcmp0 (envvar, "yes") ||
+      !g_strcmp0 (envvar, "true") ||
+      !g_strcmp0 (envvar, "on") || !g_strcmp0 (envvar, "y");
 
-  if (use_playbinpoolsrc) {
-    GstElement *playbinpoolsrc =
-        gst_element_factory_make ("playbinpoolsrc", NULL);
+  if (use_uridecodepoolsrc) {
+    GstElement *uridecodepoolsrc =
+        gst_element_factory_make ("uridecodepoolsrc", NULL);
 
-    if (playbinpoolsrc) {
+    if (uridecodepoolsrc) {
       GstBus *bus = gst_element_get_bus (GST_ELEMENT (self->priv->timeline));
       GObject *pool =
-          gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (playbinpoolsrc),
+          gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (uridecodepoolsrc),
           "pool");
 
       GST_DEBUG_OBJECT (self, "Setting pool bus to %" GST_PTR_FORMAT, bus);
       g_object_set (pool, "bus", bus, NULL);
 
       g_object_unref (pool);
-      g_object_unref (playbinpoolsrc);
+      g_object_unref (uridecodepoolsrc);
       g_object_unref (bus);
     }
   }
