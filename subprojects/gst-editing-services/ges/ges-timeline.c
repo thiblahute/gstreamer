@@ -465,26 +465,7 @@ ges_timeline_handle_message (GstBin * bin, GstMessage * message)
     GstMessage *amessage = NULL;
     const GstStructure *mstructure = gst_message_get_structure (message);
 
-    if (gst_structure_has_name (mstructure, "NleCompositionNewStack")) {
-      GstClockTime stack_start, stack_end;
-      GESTrack *track =
-          GES_TRACK (gst_object_get_parent (GST_MESSAGE_SRC (message)));
-
-      if (!gst_structure_get (mstructure,
-              "stack-start", GST_TYPE_CLOCK_TIME, &stack_start,
-              "stack-end", GST_TYPE_CLOCK_TIME, &stack_end, NULL)) {
-
-        g_error ("Invalid NleCompositionNewStack %s",
-            gst_structure_to_string (mstructure));
-      }
-
-      ges_pipeline_pool_manager_prepare_pipelines_around (&timeline->
-          priv->pool_manager, track, stack_start, stack_end);
-
-      gst_object_unref (track);
-
-    } else if (gst_structure_has_name (mstructure, "NleCompositionStartUpdate")) {
-
+    if (gst_structure_has_name (mstructure, "NleCompositionStartUpdate")) {
       if (g_strcmp0 (gst_structure_get_string (mstructure, "reason"), "Seek")) {
         GST_INFO_OBJECT (timeline,
             "A composition is starting an update because of %s"
@@ -506,6 +487,23 @@ ges_timeline_handle_message (GstBin * bin, GstMessage * message)
       GST_OBJECT_UNLOCK (timeline);
 
     } else if (gst_structure_has_name (mstructure, "NleCompositionUpdateDone")) {
+      GstClockTime stack_start, stack_end;
+      GESTrack *track =
+          GES_TRACK (gst_object_get_parent (GST_MESSAGE_SRC (message)));
+
+      if (!gst_structure_get (mstructure,
+              "stack-start", GST_TYPE_CLOCK_TIME, &stack_start,
+              "stack-end", GST_TYPE_CLOCK_TIME, &stack_end, NULL)) {
+
+        g_error ("Invalid NleCompositionNewStack %s",
+            gst_structure_to_string (mstructure));
+      }
+
+      ges_pipeline_pool_manager_prepare_pipelines_around (&timeline->
+          priv->pool_manager, track, stack_start, stack_end);
+
+      gst_object_unref (track);
+
       if (g_strcmp0 (gst_structure_get_string (mstructure, "reason"), "Seek")) {
         GST_INFO_OBJECT (timeline,
             "A composition is done updating because of %s"
