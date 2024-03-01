@@ -54,9 +54,20 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
   GstClockTime window_stop = stack_end + window_dur;
   gint max_preloaded_sources = MAX_PRELOADED_SOURCES;
 
+
+
+  if (!GES_IS_VIDEO_TRACK (track)) {
+    GST_DEBUG_OBJECT (self->timeline,
+        "Not preparing neighboors anything for %s track",
+        G_OBJECT_TYPE_NAME (track));
+
+    return;
+  }
+
   g_mutex_lock (&self->lock);
   if (!self->pooled_sources)
     goto done;
+
 
   GST_LOG_OBJECT (self->timeline, "We are rendering: %d", self->rendering);
   if (self->rendering) {
