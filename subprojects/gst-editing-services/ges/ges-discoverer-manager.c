@@ -19,7 +19,7 @@ static void
 ges_discoverer_data_free (GESDiscovererData * data)
 {
   GST_LOG ("Freeing discoverer %" GST_PTR_FORMAT, data->discoverer);
-  g_assert (data->n_uri == 0 && self);
+  g_assert (data->n_uri == 0 || !self);
   gst_discoverer_stop (data->discoverer);
   g_signal_handler_disconnect (data->discoverer, data->load_serialized_info_id);
   g_signal_handler_disconnect (data->discoverer, data->source_setup_id);
