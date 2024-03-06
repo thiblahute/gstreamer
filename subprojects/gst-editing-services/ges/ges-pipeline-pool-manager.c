@@ -55,7 +55,6 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
   gint max_preloaded_sources = MAX_PRELOADED_SOURCES;
 
 
-
   if (!GES_IS_VIDEO_TRACK (track)) {
     GST_DEBUG_OBJECT (self->timeline,
         "Not preparing neighboors anything for %s track",
@@ -64,9 +63,16 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     return;
   }
 
-  g_mutex_lock (&self->lock);
-  if (!self->pooled_sources)
-    goto done;
+  GST_LOG_OBJECT (self->timeline, "Preparing pipelines around %" GST_TIME_FORMAT
+      " - %" GST_TIME_FORMAT " window: [%" GST_TIMEP_FORMAT " - %"
+      GST_TIMEP_FORMAT "]" " in %d soures", GST_TIME_ARGS (stack_start),
+      GST_TIME_ARGS (stack_end), &window_start, &window_stop,
+      self->pooled_sources->len);
+  g_rec_mutex_lock (&self->lock);
+  if (!self->pooled_sources) {
+    g_rec_mutex_unlock (&self->lock);
+    return;
+  }
 
 
   GST_LOG_OBJECT (self->timeline, "We are rendering: %d", self->rendering);
@@ -93,8 +99,9 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
       break;
     }
 
-    if (source->track != track)
+    if (source->track != track) {
       continue;
+    }
 
     gboolean res = TRUE;
     GST_LOG_OBJECT (self->timeline,
@@ -110,12 +117,21 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     if (self->prepared_sources->len >= max_preloaded_sources) {
       GST_INFO_OBJECT (self->timeline, "%d sources prepared already.",
           max_preloaded_sources);
+#ifndef GST_DISABLE_GST_DEBUG
+      if (gst_debug_category_get_threshold (GST_CAT_DEFAULT) >= GST_LEVEL_DEBUG) {
+        for (gint i = 0; i < self->prepared_sources->len; i++) {
+          PooledSource *source =
+              &g_array_index (self->prepared_sources, PooledSource, i);
+          GST_DEBUG_OBJECT (self->timeline,
+              "Prepared: %s [%" GST_TIMEP_FORMAT "- %" GST_TIMEP_FORMAT "]",
+              GST_OBJECT_NAME (source->element), &source->start, &source->end);
+        }
+      }
+#endif
       break;
     }
   }
 
-  GArray *unprepare_source_indexes =
-      g_array_new (self->prepared_sources->len, FALSE, sizeof (gint));
   for (gint i = 0; i < self->prepared_sources->len; i++) {
     PooledSource *source =
         &g_array_index (self->prepared_sources, PooledSource, i);
@@ -133,23 +149,15 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
           &source->start, &source->end);
       g_signal_emit_by_name (self->pool, "unprepare-pipeline", source->element,
           &res);
-      g_array_append_val (unprepare_source_indexes, i);
     }
   }
-
-  for (gint i = unprepare_source_indexes->len - 1; i >= 0; i--) {
-    g_array_remove_index_fast (self->prepared_sources,
-        unprepare_source_indexes->data[i]);
-  }
-
-done:
-  g_mutex_unlock (&self->lock);
+  g_rec_mutex_unlock (&self->lock);
 }
 
 void
 ges_pipeline_pool_manager_unprepare_all (GESPipelinePoolManager * self)
 {
-  g_mutex_lock (&self->lock);
+  g_rec_mutex_lock (&self->lock);
   if (!self->prepared_sources)
     goto done;
 
@@ -162,7 +170,7 @@ ges_pipeline_pool_manager_unprepare_all (GESPipelinePoolManager * self)
   }
   g_array_remove_range (self->prepared_sources, 0, self->prepared_sources->len);
 done:
-  g_mutex_unlock (&self->lock);
+  g_rec_mutex_unlock (&self->lock);
 }
 
 /* With self->lock taken */
@@ -206,13 +214,13 @@ list_pooled_sources (GNode * node, GESPipelinePoolManager * self)
 void
 ges_pipeline_pool_clear (GESPipelinePoolManager * self)
 {
-  g_mutex_lock (&self->lock);
+  g_rec_mutex_lock (&self->lock);
   if (self->pooled_sources) {
     g_array_free (self->pooled_sources, TRUE);
     g_array_free (self->prepared_sources, TRUE);
   }
   gst_clear_object (&self->pool);
-  g_mutex_unlock (&self->lock);
+  g_rec_mutex_unlock (&self->lock);
 
 }
 
@@ -222,15 +230,33 @@ ges_pipeline_pool_manager_set_rendering (GESPipelinePoolManager * self,
 {
   GST_LOG_OBJECT (self->timeline, "Set rendering %d", rendering);
 
-  g_mutex_lock (&self->lock);
+  g_rec_mutex_lock (&self->lock);
   self->rendering = rendering;
-  g_mutex_unlock (&self->lock);
+  g_rec_mutex_unlock (&self->lock);
+}
+
+static void
+ges_pipeline_pool_manager_prepare_pipeline_removed (GObject * pool,
+    GstElement * src, GESPipelinePoolManager * self)
+{
+  g_rec_mutex_lock (&self->lock);
+  for (gint i = 0; i < self->prepared_sources->len; i++) {
+    PooledSource *source =
+        &g_array_index (self->prepared_sources, PooledSource, i);
+    if (source->element == src) {
+      GST_DEBUG_OBJECT (self->timeline, "Removing prepared source %s",
+          GST_OBJECT_NAME (src));
+      g_array_remove_index (self->prepared_sources, i);
+      break;
+    }
+  }
+  g_rec_mutex_unlock (&self->lock);
 }
 
 void
 ges_pipeline_pool_manager_commit (GESPipelinePoolManager * self)
 {
-  g_mutex_lock (&self->lock);
+  g_rec_mutex_lock (&self->lock);
   if (!self->pooled_sources)
     goto done;
 
@@ -243,7 +269,7 @@ ges_pipeline_pool_manager_commit (GESPipelinePoolManager * self)
     g_array_remove_range (self->pooled_sources, 0, self->pooled_sources->len);
 
 done:
-  g_mutex_unlock (&self->lock);
+  g_rec_mutex_unlock (&self->lock);
 }
 
 void
@@ -277,4 +303,6 @@ ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
       gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (uridecodepoolsrc),
       "pool");
   g_object_set (self->pool, "cleanup-timeout", 0, NULL);
+  g_signal_connect (self->pool, "prepared-pipeline-removed",
+      G_CALLBACK (ges_pipeline_pool_manager_prepare_pipeline_removed), self);
 }

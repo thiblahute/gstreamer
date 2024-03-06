@@ -20,7 +20,7 @@
 #pragma once
 
 typedef struct {
-    GMutex lock;
+    GRecMutex lock;
     GArray *pooled_sources;
     GArray *prepared_sources;
     GESTimeline *timeline;
