@@ -211,9 +211,9 @@ ges_pipeline_pool_clear (GESPipelinePoolManager * self)
     g_array_free (self->pooled_sources, TRUE);
     g_array_free (self->prepared_sources, TRUE);
   }
+  gst_clear_object (&self->pool);
   g_mutex_unlock (&self->lock);
 
-  gst_object_unref (self->pool);
 }
 
 void
