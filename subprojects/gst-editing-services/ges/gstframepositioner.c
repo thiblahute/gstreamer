@@ -837,7 +837,13 @@ gst_frame_positioner_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
     gst_object_sync_values (GST_OBJECT (trans), timestamp);
   }
 
-  meta = ges_buffer_add_frame_composition_meta (buf);
+  meta =
+      (GESFrameCompositionMeta *) gst_buffer_get_meta (buf,
+      ges_frame_composition_meta_api_get_type ());
+  if (!meta) {
+    meta = ges_buffer_add_frame_composition_meta (buf);
+  }
+
 
   GST_OBJECT_LOCK (framepositioner);
   meta->alpha = framepositioner->alpha;
