@@ -831,10 +831,15 @@ gst_frame_positioner_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
 {
   GESFrameCompositionMeta *meta;
   GstFramePositioner *framepositioner = GST_FRAME_POSITIONNER (trans);
-  GstClockTime timestamp = GST_BUFFER_PTS (buf);
+  GstClockTime stream_time =
+      gst_segment_to_stream_time (&trans->segment, GST_FORMAT_TIME,
+      GST_BUFFER_PTS (buf));
 
-  if (GST_CLOCK_TIME_IS_VALID (timestamp)) {
-    gst_object_sync_values (GST_OBJECT (trans), timestamp);
+  if (GST_CLOCK_TIME_IS_VALID (stream_time)) {
+    gst_object_sync_values (GST_OBJECT (trans), stream_time);
+  } else {
+    GST_WARNING_OBJECT (framepositioner,
+        "Got invalid timestamp on buffer %" GST_PTR_FORMAT, buf);
   }
 
   meta =
