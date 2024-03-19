@@ -123,13 +123,6 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
 
   g_ptr_array_add (elements, gst_element_factory_make ("queue", NULL));
 
-  /* That positioner will add metadata to buffers according to its
-     properties, acting like a proxy for our smart-mixer dynamic pads. */
-  positioner = gst_element_factory_make ("framepositioner", NULL);
-  g_object_set (positioner, "zorder",
-      G_MAXUINT - GES_TIMELINE_ELEMENT_PRIORITY (self), NULL);
-  g_ptr_array_add (elements, positioner);
-
   if (needs_converters) {
     GstElementFactory *videoflip_factory = ges_get_video_flip_factory ();
 
@@ -166,6 +159,12 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
   g_free (ename);
   g_ptr_array_add (elements, capsfilter);
 
+  /* That positioner will add metadata to buffers according to its
+     properties, acting like a proxy for our smart-mixer dynamic pads. */
+  positioner = gst_element_factory_make ("framepositioner", NULL);
+  g_object_set (positioner, "zorder",
+      G_MAXUINT - GES_TIMELINE_ELEMENT_PRIORITY (self), NULL);
+  g_ptr_array_add (elements, positioner);
   ges_frame_positioner_set_source_and_filter (GST_FRAME_POSITIONNER
       (positioner), trksrc, capsfilter);
 
