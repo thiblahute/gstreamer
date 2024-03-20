@@ -218,6 +218,8 @@ ges_pipeline_pool_clear (GESPipelinePoolManager * self)
   if (self->pooled_sources) {
     g_array_free (self->pooled_sources, TRUE);
     g_array_free (self->prepared_sources, TRUE);
+    self->prepared_sources  = NULL;
+    self->pooled_sources = NULL;
   }
   gst_clear_object (&self->pool);
   g_rec_mutex_unlock (&self->lock);
@@ -240,6 +242,12 @@ ges_pipeline_pool_manager_prepare_pipeline_removed (GObject * pool,
     GstElement * src, GESPipelinePoolManager * self)
 {
   g_rec_mutex_lock (&self->lock);
+  if (!self->prepared_sources) {
+    g_rec_mutex_unlock (&self->lock);
+
+    return;
+  }
+
   for (gint i = 0; i < self->prepared_sources->len; i++) {
     PooledSource *source =
         &g_array_index (self->prepared_sources, PooledSource, i);
@@ -261,12 +269,12 @@ ges_pipeline_pool_manager_commit (GESPipelinePoolManager * self)
     goto done;
 
   GNode *tree = timeline_get_tree (self->timeline);
-  self->has_subtimelines = FALSE;
   g_array_remove_range (self->pooled_sources, 0, self->pooled_sources->len);
   g_node_traverse (tree, G_IN_ORDER, G_TRAVERSE_LEAVES, -1,
       (GNodeTraverseFunc) list_pooled_sources, self);
   if (self->has_subtimelines)
     g_array_remove_range (self->pooled_sources, 0, self->pooled_sources->len);
+  self->has_subtimelines = FALSE;
 
 done:
   g_rec_mutex_unlock (&self->lock);
