@@ -343,24 +343,6 @@ ges_discoverer_manager_set_timeout (GESDiscovererManager * self,
   g_rec_mutex_unlock (&self->lock);
 }
 
-/**
- * ges_discoverer_manager_cleanup_current:
- * @self: The #GESDiscovererManager
- *
- * Clean-up the #GstDiscoverer corresponding to the current thread.
- *
- * Since: 1.24
- */
-void
-ges_discoverer_manager_cleanup_current (GESDiscovererManager * self)
-{
-  g_return_if_fail (GES_IS_DISCOVERER_MANAGER (self));
-
-  g_rec_mutex_lock (&self->lock);
-  g_hash_table_remove (self->discoverers, g_thread_self ());
-  g_rec_mutex_unlock (&self->lock);
-}
-
 static GstDiscovererInfo *
 proxy_load_serialized_info_cb (GESDiscovererManager * self, const gchar * uri)
 {

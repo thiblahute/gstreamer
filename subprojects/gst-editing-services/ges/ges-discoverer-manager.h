@@ -28,7 +28,5 @@ GES_API GESDiscovererManager *  ges_discoverer_manager_get_default    (void);
 GES_API void                    ges_discoverer_manager_set_use_cache  (GESDiscovererManager *self,
                                                                        gboolean use_cache);
 GES_API gboolean                ges_discoverer_manager_get_use_cache  (GESDiscovererManager *self);
-GES_API void                    ges_discoverer_manager_cleanup_current(GESDiscovererManager *self);
-
 
 G_END_DECLS

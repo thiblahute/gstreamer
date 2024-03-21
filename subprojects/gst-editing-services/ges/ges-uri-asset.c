@@ -462,7 +462,6 @@ cleanup_discoverer (gpointer _unused)
 
   manager = ges_discoverer_manager_get_default ();
 
-  ges_discoverer_manager_cleanup_current (manager);
   gst_object_unref (manager);
 
   return G_SOURCE_REMOVE;
