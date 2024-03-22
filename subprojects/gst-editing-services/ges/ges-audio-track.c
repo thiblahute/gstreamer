@@ -139,6 +139,34 @@ create_element_for_raw_audio_gap (GESTrack * track)
  ****************************************************/
 
 static void
+ges_audio_track_constructed (GObject * object)
+{
+  GESTrack *self = GES_TRACK (object);
+
+  if (!ges_track_get_caps (self)) {
+    GstCaps *caps = gst_caps_from_string (DEFAULT_CAPS);
+    ges_track_set_caps (self, caps);
+    gst_caps_unref (caps);
+  }
+
+  ges_track_set_create_element_for_gap_func (self,
+      create_element_for_raw_audio_gap);
+
+  GstCaps *current_restriction_caps = ges_track_get_restriction_caps (self);
+  if (!current_restriction_caps) {
+    GstCaps *restriction_caps = gst_caps_from_string (DEFAULT_RESTRICTION_CAPS);
+    ges_track_set_restriction_caps (self, restriction_caps);
+
+    gst_caps_unref (restriction_caps);
+  } else {
+    gst_caps_unref (current_restriction_caps);
+  }
+
+  G_OBJECT_CLASS (ges_audio_track_parent_class)->constructed (object);
+}
+
+
+static void
 ges_audio_track_init (GESAudioTrack * self)
 {
   self->priv = ges_audio_track_get_instance_private (self);
@@ -160,6 +188,7 @@ ges_audio_track_class_init (GESAudioTrackClass * klass)
  */
 
   object_class->finalize = ges_audio_track_finalize;
+  object_class->constructed = ges_audio_track_constructed;
 
   GES_TRACK_CLASS (klass)->get_mixing_element = ges_smart_adder_new;
 }
@@ -187,20 +216,6 @@ ges_audio_track_class_init (GESAudioTrackClass * klass)
 GESAudioTrack *
 ges_audio_track_new (void)
 {
-  GESAudioTrack *ret;
-  GstCaps *caps = gst_caps_from_string (DEFAULT_CAPS);
-  GstCaps *restriction_caps = gst_caps_from_string (DEFAULT_RESTRICTION_CAPS);
-
-  ret = g_object_new (GES_TYPE_AUDIO_TRACK, "caps", caps,
-      "track-type", GES_TRACK_TYPE_AUDIO, NULL);
-
-  ges_track_set_create_element_for_gap_func (GES_TRACK (ret),
-      create_element_for_raw_audio_gap);
-
-  ges_track_set_restriction_caps (GES_TRACK (ret), restriction_caps);
-
-  gst_caps_unref (caps);
-  gst_caps_unref (restriction_caps);
-
-  return ret;
+  return g_object_new (GES_TYPE_AUDIO_TRACK, "track-type", GES_TRACK_TYPE_AUDIO,
+      NULL);
 }

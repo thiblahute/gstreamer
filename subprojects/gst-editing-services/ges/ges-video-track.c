@@ -141,6 +141,32 @@ ges_video_track_finalize (GObject * object)
 }
 
 static void
+ges_video_track_constructed (GObject * object)
+{
+  GESTrack *self = GES_TRACK (object);
+  if (!ges_track_get_caps (self)) {
+    GstCaps *caps = gst_caps_new_empty_simple ("video/x-raw");
+    ges_track_set_caps (self, caps);
+    gst_caps_unref (caps);
+  }
+
+  ges_track_set_create_element_for_gap_func (self,
+      create_element_for_raw_video_gap);
+
+  GstCaps *current_restriction_caps = ges_track_get_restriction_caps (self);
+  if (!current_restriction_caps) {
+    GstCaps *restriction_caps = gst_caps_from_string (DEFAULT_RESTRICTION_CAPS);
+    ges_track_set_restriction_caps (self, restriction_caps);
+
+    gst_caps_unref (restriction_caps);
+  } else {
+    gst_caps_unref (current_restriction_caps);
+  }
+
+  G_OBJECT_CLASS (ges_video_track_parent_class)->constructed (object);
+}
+
+static void
 ges_video_track_class_init (GESVideoTrackClass * klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
@@ -148,6 +174,7 @@ ges_video_track_class_init (GESVideoTrackClass * klass)
  */
 
   object_class->finalize = ges_video_track_finalize;
+  object_class->constructed = ges_video_track_constructed;
 
   GES_TRACK_CLASS (klass)->get_mixing_element = ges_smart_mixer_new;
 }
@@ -172,18 +199,10 @@ GESVideoTrack *
 ges_video_track_new (void)
 {
   GESVideoTrack *ret;
-  GstCaps *caps = gst_caps_new_empty_simple ("video/x-raw");
-  GstCaps *restriction_caps = gst_caps_from_string (DEFAULT_RESTRICTION_CAPS);
 
-  ret = g_object_new (GES_TYPE_VIDEO_TRACK, "track-type", GES_TRACK_TYPE_VIDEO,
-      "caps", caps, NULL);
-
-  ges_track_set_create_element_for_gap_func (GES_TRACK (ret),
-      create_element_for_raw_video_gap);
-  ges_track_set_restriction_caps (GES_TRACK (ret), restriction_caps);
-
-  gst_caps_unref (caps);
-  gst_caps_unref (restriction_caps);
+  ret =
+      g_object_new (GES_TYPE_VIDEO_TRACK, "track-type", GES_TRACK_TYPE_VIDEO,
+      NULL);
 
   return ret;
 }

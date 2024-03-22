@@ -129,7 +129,6 @@ G_DEFINE_TYPE_WITH_CODE (GESTrack, ges_track, GST_TYPE_BIN,
 
 static void composition_duration_cb (GstElement * composition, GParamSpec * arg
     G_GNUC_UNUSED, GESTrack * obj);
-static void ges_track_set_caps (GESTrack * track, const GstCaps * caps);
 
 /* Private methods/functions/callbacks */
 static void
@@ -692,6 +691,9 @@ ges_track_constructed (GObject * object)
   } else {
     GST_INFO_OBJECT (self, "No way to create a main mixer");
   }
+
+  g_assert (self->priv->caps);
+  G_OBJECT_CLASS (ges_track_parent_class)->constructed (object);
 }
 
 static void
@@ -1006,18 +1008,21 @@ ges_track_set_caps (GESTrack * track, const GstCaps * caps)
   CHECK_THREAD (track);
 
   GST_DEBUG ("track:%p, caps:%" GST_PTR_FORMAT, track, caps);
-  g_return_if_fail (GST_IS_CAPS (caps));
 
   priv = track->priv;
 
   if (priv->caps)
     gst_caps_unref (priv->caps);
-  priv->caps = gst_caps_copy (caps);
+  priv->caps = caps ? gst_caps_copy (caps) : NULL;
 
-  for (i = 0; i < (int) gst_caps_get_size (priv->caps); i++)
-    gst_caps_set_features (priv->caps, i, gst_caps_features_new_any ());
+  if (caps) {
+    for (i = 0; i < (int) gst_caps_get_size (priv->caps); i++)
+      gst_caps_set_features (priv->caps, i, gst_caps_features_new_any ());
 
-  g_object_set (priv->composition, "caps", caps, NULL);
+    if (priv->composition) {
+      g_object_set (priv->composition, "caps", caps, NULL);
+    }
+  }
   /* FIXME : update all trackelements ? */
 }
 

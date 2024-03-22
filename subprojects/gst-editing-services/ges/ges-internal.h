@@ -520,6 +520,7 @@ ges_source_get_rendering_smartly                      (GESSource *source);
 G_GNUC_INTERNAL void ges_track_set_smart_rendering     (GESTrack* track, gboolean rendering_smartly);
 G_GNUC_INTERNAL GstElement * ges_track_get_composition (GESTrack *track);
 G_GNUC_INTERNAL void ges_track_select_subtimeline_streams (GESTrack *track, GstStreamCollection *collection, GstElement *subtimeline);
+G_GNUC_INTERNAL void ges_track_set_caps (GESTrack * track, const GstCaps * caps);
 
 
 /*********************************************
