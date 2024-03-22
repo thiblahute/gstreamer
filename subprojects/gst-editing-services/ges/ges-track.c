@@ -629,17 +629,11 @@ ges_track_constructed (GObject * object)
   G_OBJECT_CLASS (ges_track_parent_class)->constructed (object);
 
   if (self->type == GES_TRACK_TYPE_VIDEO) {
-    componame =
-        g_strdup_printf ("video_%s", GST_OBJECT_NAME (self->priv->composition));
-    capsfiltername =
-        g_strdup_printf ("video_restriction_%s",
-        GST_OBJECT_NAME (self->priv->capsfilter));
+    componame = g_strdup_printf ("%s-composition", GST_OBJECT_NAME (self));
+    capsfiltername = g_strdup_printf ("%s-restriction", GST_OBJECT_NAME (self));
   } else if (self->type == GES_TRACK_TYPE_AUDIO) {
-    componame =
-        g_strdup_printf ("audio_%s", GST_OBJECT_NAME (self->priv->composition));
-    capsfiltername =
-        g_strdup_printf ("audio_restriction_%s",
-        GST_OBJECT_NAME (self->priv->capsfilter));
+    componame = g_strdup_printf ("%s-composition", GST_OBJECT_NAME (self));
+    capsfiltername = g_strdup_printf ("%s-restriction", GST_OBJECT_NAME (self));
   }
 
   if (componame) {
