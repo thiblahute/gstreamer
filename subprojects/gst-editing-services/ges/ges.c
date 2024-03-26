@@ -260,6 +260,8 @@ ges_deinit (void)
   initialized_thread = NULL;
   G_UNLOCK (init_lock);
 
+  _deinit_playbin_pool_src ();
+
   GST_INFO ("deinitialized GES");
 
   return;
