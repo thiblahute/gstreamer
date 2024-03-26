@@ -1037,7 +1037,7 @@ gst_video_rate_sink_event (GstBaseTransform * trans, GstEvent * event)
               "Resetting rolled back caps %" GST_PTR_FORMAT, rolled_back_caps);
           if (!gst_pad_send_event (GST_BASE_TRANSFORM_SINK_PAD (videorate),
                   gst_event_new_caps (rolled_back_caps)
-              )) {
+              ) && !GST_PAD_IS_FLUSHING (GST_BASE_TRANSFORM_SINK_PAD (videorate))) {
 
             GST_WARNING_OBJECT (videorate,
                 "Could not resend caps after closing " " segment");
