@@ -148,6 +148,14 @@ _release_pad (GstElement * element, GstPad * pad)
 
   LOCK (element);
   g_hash_table_remove (GES_SMART_ADDER (element)->pads_infos, pad);
+  GstPad *peer = gst_pad_get_peer (pad);
+  if (peer) {
+    gst_pad_unlink (peer, pad);
+
+    gst_object_unref (peer);
+  }
+  gst_pad_set_active (pad, FALSE);
+  gst_element_remove_pad (element, pad);
   UNLOCK (element);
 }
 
