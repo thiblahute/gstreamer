@@ -1169,7 +1169,7 @@ ignore_acceptcaps_failure:
     return TRUE;
   }
 
-  GST_WARNING_OBJECT (self, "Got query %s while no element was"
+  GST_INFO_OBJECT (self, "Got query %s while no element was"
       " selected, letting through",
       gst_query_type_get_name (GST_QUERY_TYPE (query)));
   return gst_pad_peer_query (self->srcpad, query);
@@ -1296,7 +1296,7 @@ gst_base_auto_convert_src_event (GstPad * pad, GstObject * parent,
     ret = gst_pad_push_event (internal_sinkpad, event);
     gst_object_unref (internal_sinkpad);
   } else if (GST_EVENT_TYPE (event) != GST_EVENT_RECONFIGURE) {
-    GST_WARNING_OBJECT (self,
+    GST_INFO_OBJECT (self,
         "Got upstream event while no element was selected, forwarding.");
     ret = gst_pad_push_event (self->sinkpad, event);
   } else
