@@ -131,8 +131,6 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
   g_ptr_array_add (elements, positioner);
 
   if (needs_converters) {
-    GstElementFactory *videoflip_factory = ges_get_video_flip_factory ();
-
     ename =
         g_strdup_printf ("ges%s-videoconvertscale",
         GES_TIMELINE_ELEMENT_NAME (self));
@@ -143,14 +141,12 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
 
     /* If there's image-orientation tag, make sure the image is correctly oriented
      * before we scale it. */
-    videoflip = gst_element_factory_create (videoflip_factory,
+    videoflip =
+        gst_element_factory_create (ges_get_video_flip_factory (),
         "track-element-videoflip");
     g_object_set (videoflip, "video-direction", GST_VIDEO_ORIENTATION_AUTO,
         NULL);
     g_ptr_array_add (elements, videoflip);
-
-    ges_track_element_add_children_props (trksrc, videoflip, NULL, NULL,
-        videoflip_props);
   }
 
   ename = g_strdup_printf ("ges%s-rate", GES_TIMELINE_ELEMENT_NAME (self));
@@ -171,6 +167,8 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
 
   ges_track_element_add_children_props (trksrc, positioner, NULL, NULL,
       positioner_props);
+  ges_track_element_add_children_props (trksrc, videoflip, NULL, NULL,
+      videoflip_props);
 
   self->priv->positioner = GST_FRAME_POSITIONNER (positioner);
   self->priv->positioner->scale_in_compositor =

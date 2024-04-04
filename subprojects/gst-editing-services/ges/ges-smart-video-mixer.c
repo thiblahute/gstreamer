@@ -472,15 +472,14 @@ static void
 ges_smart_mixer_constructed (GObject * obj)
 {
   GstPad *pad;
-  GstElement *identity, *videoconvert = NULL;
+  GstElement *identity, *videoconvert;
   GESSmartMixer *self = GES_SMART_MIXER (obj);
   gchar *cname = g_strdup_printf ("%s-compositor", GST_OBJECT_NAME (self));
-  GstElementFactory *mixer_factory = ges_get_compositor_factory ();
 
   G_OBJECT_CLASS (ges_smart_mixer_parent_class)->constructed (obj);
 
-  self->mixer = gst_element_factory_create (mixer_factory, cname);
-
+  self->mixer =
+      gst_element_factory_create (ges_get_compositor_factory (), cname);
   self->ABI.abi.has_operator =
       gst_compositor_operator_get_type_and_default_value (NULL) != G_TYPE_NONE;
   g_free (cname);
@@ -502,21 +501,14 @@ ges_smart_mixer_constructed (GObject * obj)
   g_object_set (identity, "drop-allocation", TRUE, NULL);
   g_assert (identity);
 
-  gst_bin_add_many (GST_BIN (self), self->mixer, identity, NULL);
-  /* We know that glvideomixer plugs a glconvert internally so we do not need
-   * conversion after it */
-  if (g_strcmp0 (GST_OBJECT_NAME (mixer_factory), "glvideomixer")) {
-    videoconvert =
-        gst_element_factory_create (ges_get_videoconvert_factory (), NULL);
-    g_assert (videoconvert);
-    gst_bin_add (GST_BIN (self), videoconvert);
-    gst_element_link_many (self->mixer, identity, videoconvert, NULL);
-    pad = gst_element_get_static_pad (videoconvert, "src");
-  } else {
-    gst_element_link (self->mixer, identity);
-    pad = gst_element_get_static_pad (identity, "src");
-  }
+  videoconvert =
+      gst_element_factory_create (ges_get_videoconvert_factory (), NULL);
+  g_assert (videoconvert);
 
+  gst_bin_add_many (GST_BIN (self), self->mixer, identity, videoconvert, NULL);
+  gst_element_link_many (self->mixer, identity, videoconvert, NULL);
+
+  pad = gst_element_get_static_pad (videoconvert, "src");
   self->srcpad = gst_ghost_pad_new ("src", pad);
   gst_pad_set_active (self->srcpad, TRUE);
   gst_object_unref (pad);
