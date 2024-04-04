@@ -38,7 +38,7 @@ GST_DEBUG_CATEGORY_STATIC (uri_source_debug);
 
 static GstStaticCaps default_raw_caps = GST_STATIC_CAPS (DEFAULT_RAW_CAPS);
 
-static gboolean _ges_enable_playbinpoolsrc = FALSE;
+static gboolean _ges_enable_uridecodepoolsrc = FALSE;
 
 static inline gboolean
 are_raw_caps (const GstCaps * caps)
@@ -147,45 +147,45 @@ source_setup_cb (GstElement * decodebin, GstElement * source,
 }
 
 static gboolean
-_should_enable_playbinpoolsrc (GESSource * self)
+_should_enable_uridecodepoolsrc (GESSource * self)
 {
   static gsize once = 0;
   const gchar *envvar;
 
   if (g_once_init_enter (&once)) {
-    envvar = g_getenv ("GES_ENABLE_PLAYBINPOOLSRC");
+    envvar = g_getenv ("GES_ENABLE_URIDECODEPOOLSRC");
 
-    gboolean playbinpoolsrc_enabled = !g_strcmp0 (envvar, "1") ||
+    gboolean uridecodepoolsrc_enabled = !g_strcmp0 (envvar, "1") ||
         !g_strcmp0 (envvar, "yes") ||
         !g_strcmp0 (envvar, "true") ||
         !g_strcmp0 (envvar, "on") || !g_strcmp0 (envvar, "y");
 
-    if (playbinpoolsrc_enabled) {
+    if (uridecodepoolsrc_enabled) {
       GstPluginFeature *feature =
-          gst_registry_find_feature (gst_registry_get (), "playbinpoolsrc",
+          gst_registry_find_feature (gst_registry_get (), "uridecodepoolsrc",
           GST_TYPE_ELEMENT_FACTORY);
 
       if (feature) {
-        _ges_enable_playbinpoolsrc = TRUE;
+        _ges_enable_uridecodepoolsrc = TRUE;
         gst_object_unref (feature);
       } else {
         GST_ERROR
-            ("playbinpoolsrc is not available while enabled, disabling it");
+            ("uridecodepoolsrc is not available while enabled, disabling it");
       }
 
     }
 
-    GST_INFO ("playbinpoolsrc %sabled",
-        _ges_enable_playbinpoolsrc ? "en" : "dis");
+    GST_INFO ("uridecodepoolsrc %sabled",
+        _ges_enable_uridecodepoolsrc ? "en" : "dis");
 
     g_once_init_leave (&once, 1);
   }
 
-  return _ges_enable_playbinpoolsrc;
+  return _ges_enable_uridecodepoolsrc;
 }
 
 static GstElement *
-ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
+ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
 {
   GESTrack *track;
   GstElement *decodebin;
@@ -196,10 +196,10 @@ ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
 
   track = ges_track_element_get_track (self->element);
 
-  gchar *name = g_strdup_printf ("%s-playbinpoolsrc",
+  gchar *name = g_strdup_printf ("%s-uridecodepoolsrc",
       GES_TIMELINE_ELEMENT_NAME (self->element));
   self->decodebin = decodebin =
-      gst_element_factory_make ("playbinpoolsrc", name);
+      gst_element_factory_make ("uridecodepoolsrc", name);
   g_free (name);
   GST_DEBUG_OBJECT (self->element,
       "%" GST_PTR_FORMAT " - Track! %" GST_PTR_FORMAT, self->decodebin, track);
@@ -210,7 +210,7 @@ ges_uri_source_create_playbinpoolsrc (GESUriSource * self)
     else
       caps = gst_caps_new_empty_simple ("video/x-raw");
 
-    GST_DEBUG ("Using caps: %" GST_PTR_FORMAT " for playbinpoolsrc", caps);
+    GST_DEBUG ("Using caps: %" GST_PTR_FORMAT " for uridecodepoolsrc", caps);
   } else if (GES_IS_AUDIO_SOURCE (self->element)) {
     caps = gst_caps_new_empty_simple ("audio/x-raw");
   } else {
@@ -234,8 +234,8 @@ ges_uri_source_create_source (GESUriSource * self)
   GstElement *decodebin;
   const GstCaps *caps = NULL;
 
-  if (_should_enable_playbinpoolsrc (GES_SOURCE (self->element)))
-    return ges_uri_source_create_playbinpoolsrc (self);
+  if (_should_enable_uridecodepoolsrc (GES_SOURCE (self->element)))
+    return ges_uri_source_create_uridecodepoolsrc (self);
 
   track = ges_track_element_get_track (self->element);
 
@@ -277,7 +277,7 @@ ges_uri_source_track_set_cb (GESTrackElement * element,
       "Setting %" GST_PTR_FORMAT "caps to: %" GST_PTR_FORMAT, self->decodebin,
       caps);
 
-  if (!_should_enable_playbinpoolsrc (GES_SOURCE (self->element)))
+  if (!_should_enable_uridecodepoolsrc (GES_SOURCE (self->element)))
     g_object_set (self->decodebin, "caps", caps, NULL);
 }
 
@@ -302,7 +302,7 @@ ges_uri_source_init (GESTrackElement * element, GESUriSource * self)
 gboolean
 ges_uri_source_select_pad (GESSource * self, GstPad * pad)
 {
-  if (_should_enable_playbinpoolsrc (self))
+  if (_should_enable_uridecodepoolsrc (self))
     return TRUE;
 
   gboolean res = TRUE;
@@ -340,18 +340,18 @@ ges_uri_source_select_pad (GESSource * self, GstPad * pad)
 void
 _deinit_playbin_pool_src (void)
 {
-  if (!_ges_enable_playbinpoolsrc)
+  if (!_ges_enable_uridecodepoolsrc)
     return;
 
-  GstElement *playbinpoolsrc =
-      gst_element_factory_make ("playbinpoolsrc", NULL);
-  if (!playbinpoolsrc)
+  GstElement *uridecodepoolsrc =
+      gst_element_factory_make ("uridecodepoolsrc", NULL);
+  if (!uridecodepoolsrc)
     return;
 
   GObject *pool =
-      gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (playbinpoolsrc),
+      gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (uridecodepoolsrc),
       "pool");
   g_signal_emit_by_name (pool, "deinit");
   gst_object_unref (pool);
-  gst_object_unref (playbinpoolsrc);
+  gst_object_unref (uridecodepoolsrc);
 }

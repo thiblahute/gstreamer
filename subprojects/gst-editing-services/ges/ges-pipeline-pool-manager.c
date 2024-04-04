@@ -196,7 +196,7 @@ list_pooled_sources (GNode * node, GESPipelinePoolManager * self)
     GstElement *source_element =
         ges_source_get_source_element (GES_SOURCE (node->data));
     if (!g_strcmp0 (GST_OBJECT_NAME (gst_element_get_factory (source_element)),
-            "playbinpoolsrc")) {
+            "uridecodepoolsrc")) {
       PooledSource s = {
         .element = gst_object_ref (source_element),
         .track = ges_track_element_get_track (node->data),
@@ -220,7 +220,7 @@ ges_pipeline_pool_clear (GESPipelinePoolManager * self)
   if (self->pooled_sources) {
     g_array_free (self->pooled_sources, TRUE);
     g_array_free (self->prepared_sources, TRUE);
-    self->prepared_sources  = NULL;
+    self->prepared_sources = NULL;
     self->pooled_sources = NULL;
   }
   gst_clear_object (&self->pool);
@@ -316,10 +316,10 @@ ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
     g_once_init_leave ((gsize *) & init, 1);
   }
 
-  GstElement *playbinpoolsrc =
-      gst_element_factory_make ("playbinpoolsrc", NULL);
+  GstElement *uridecodepoolsrc =
+      gst_element_factory_make ("uridecodepoolsrc", NULL);
 
-  if (!playbinpoolsrc)
+  if (!uridecodepoolsrc)
     return;
 
   self->timeline = timeline;
@@ -330,12 +330,12 @@ ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
   g_array_set_clear_func (self->prepared_sources,
       (GDestroyNotify) pooled_source_clear);
   self->pool =
-      gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (playbinpoolsrc),
+      gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (uridecodepoolsrc),
       "pool");
   g_object_set (self->pool, "cleanup-timeout", 0, NULL);
   g_signal_connect (self->pool, "prepared-pipeline-removed",
       G_CALLBACK (ges_pipeline_pool_manager_prepare_pipeline_removed), self);
   g_signal_connect (self->pool, "new-pipeline", G_CALLBACK (new_pipeline_cb),
       NULL);
-  gst_object_unref (playbinpoolsrc);
+  gst_object_unref (uridecodepoolsrc);
 }
