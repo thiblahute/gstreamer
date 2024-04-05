@@ -376,7 +376,6 @@ done:
   GST_DEBUG_OBJECT (pos, "setting caps %" GST_PTR_FORMAT, caps);
 
   g_object_set (pos->capsfilter, "caps", caps, NULL);
-
   gst_caps_unref (caps);
 }
 
@@ -703,52 +702,68 @@ gst_frame_positioner_set_property (GObject * object, guint property_id,
   switch (property_id) {
     case PROP_ALPHA:
       framepositioner->alpha = g_value_get_double (value);
+      GST_OBJECT_UNLOCK (framepositioner);
       break;
     case PROP_POSX:
       framepositioner->posx = g_value_get_int (value);
       framepositioner->user_positioned = TRUE;
+      GST_OBJECT_UNLOCK (framepositioner);
       break;
     case PROP_FPOSX:
       framepositioner->posx = g_value_get_float (value);
       framepositioner->user_positioned = TRUE;
+      GST_OBJECT_UNLOCK (framepositioner);
       break;
     case PROP_POSY:
       framepositioner->posy = g_value_get_int (value);
       framepositioner->user_positioned = TRUE;
+      GST_OBJECT_UNLOCK (framepositioner);
       break;
     case PROP_FPOSY:
       framepositioner->posy = g_value_get_float (value);
       framepositioner->user_positioned = TRUE;
+      GST_OBJECT_UNLOCK (framepositioner);
       break;
     case PROP_ZORDER:
       framepositioner->zorder = g_value_get_uint (value);
+      GST_OBJECT_UNLOCK (framepositioner);
       break;
     case PROP_WIDTH:
       framepositioner->user_positioned = TRUE;
       framepositioner->width = g_value_get_int (value);
+      GST_OBJECT_UNLOCK (framepositioner);
+
       gst_frame_positioner_update_properties (framepositioner, track_mixing,
           0, 0);
       break;
     case PROP_FWIDTH:
       framepositioner->user_positioned = TRUE;
       framepositioner->width = g_value_get_float (value);
+      GST_OBJECT_UNLOCK (framepositioner);
+
       gst_frame_positioner_update_properties (framepositioner, track_mixing,
           0, 0);
       break;
     case PROP_HEIGHT:
       framepositioner->user_positioned = TRUE;
       framepositioner->height = g_value_get_int (value);
+      GST_OBJECT_UNLOCK (framepositioner);
+
       gst_frame_positioner_update_properties (framepositioner, track_mixing,
           0, 0);
       break;
     case PROP_FHEIGHT:
       framepositioner->user_positioned = TRUE;
       framepositioner->height = g_value_get_float (value);
+      GST_OBJECT_UNLOCK (framepositioner);
+
       gst_frame_positioner_update_properties (framepositioner, track_mixing,
           0, 0);
       break;
     case PROP_OPERATOR:
       framepositioner->operator = g_value_get_enum (value);
+      GST_OBJECT_UNLOCK (framepositioner);
+
       gst_frame_positioner_update_properties (framepositioner, track_mixing,
           0, 0);
       break;
@@ -756,7 +771,6 @@ gst_frame_positioner_set_property (GObject * object, guint property_id,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
   }
-  GST_OBJECT_UNLOCK (framepositioner);
 }
 
 void
