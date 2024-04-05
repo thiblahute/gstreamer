@@ -134,6 +134,8 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     }
   }
 
+  GPtrArray *to_remove = g_ptr_array_sized_new (self->prepared_sources->len);
+  g_ptr_array_set_free_func (to_remove, (GDestroyNotify) gst_object_unref);
   for (gint i = 0; i < self->prepared_sources->len; i++) {
     PooledSource *source =
         &g_array_index (self->prepared_sources, PooledSource, i);
@@ -144,16 +146,26 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     gboolean in_window = (source->start >= window_start)
         || (source->start > window_stop);
     if (!in_window) {
-      gboolean res;
       GST_LOG_OBJECT (self->timeline,
-          "Unpreparing pipeline for %s [%" GST_TIMEP_FORMAT "- %"
-          GST_TIMEP_FORMAT "]", GST_OBJECT_NAME (source->element),
+          "%d Unpreparing pipeline for %s [%" GST_TIMEP_FORMAT "- %"
+          GST_TIMEP_FORMAT "]", i, GST_OBJECT_NAME (source->element),
           &source->start, &source->end);
-      g_signal_emit_by_name (self->pool, "unprepare-pipeline", source->element,
-          &res);
+      g_ptr_array_add (to_remove, gst_object_ref (source->element));
+      GST_ERROR_OBJECT (self->timeline, "Unprepared %s",
+          GST_OBJECT_NAME (source->element));
     }
   }
   g_rec_mutex_unlock (&self->lock);
+
+  for (guint i = 0; i < to_remove->len; i++) {
+    GstElement *element = g_ptr_array_index (to_remove, i);
+    gboolean res;
+    g_signal_emit_by_name (self->pool, "unprepare-pipeline", element, &res);
+    GST_LOG_OBJECT (self->timeline, "Unprepared %s: result %s",
+        GST_OBJECT_NAME (element), res ? "TRUE" : "FALSE");
+  }
+
+  g_ptr_array_unref (to_remove);
 }
 
 void
