@@ -142,6 +142,7 @@ ges_video_scale_init (GESVideoScale * self)
 
   scale = gst_element_factory_make ("videoscale", NULL);
   g_object_set (scale, "add-borders", FALSE, NULL);
+  g_object_set (scale, "n-threads", 0, NULL);
   self->capsfilter = gst_element_factory_make ("capsfilter", NULL);
 
   gst_bin_add_many (GST_BIN (self), scale, self->capsfilter, NULL);
