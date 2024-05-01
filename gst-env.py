@@ -258,6 +258,9 @@ def is_bash_completion_available(options):
 
 def get_subprocess_env(options, gst_version):
     env = os.environ.copy()
+    for key in list(env.keys()):
+        if key.endswith("%%"):
+            del env[key]
 
     env["CURRENT_GST"] = os.path.normpath(SCRIPTDIR)
     env["GST_VERSION"] = gst_version
