@@ -61,7 +61,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
   && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
-  pip3 install meson==0.63.0 --no-binary :all: && \
+  pip3 install meson==1.4.0 --no-binary :all: && \
   pip3 install ninja tomli
 
 # Install rust toolchain
@@ -132,7 +132,7 @@ RUN ["/build-ffmpeg", "--build"]
 # FROM ffmpeg as ffmpeg-test
 # COPY --from=ffmpeg /opt/ffmpeg /usr
 
-# And then: docker build . -f ci/docker/tella/Dockerfile --target ffmpeg-test --platform linux/arm64/v8 -t 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image:ffmpeg   
+# And then: docker build . -f ci/docker/tella/Dockerfile --target ffmpeg-test --platform linux/arm64/v8 -t 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image:ffmpeg
 # docker run --rm 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image:ffmpeg ffmpeg
 
 FROM deps as gstreamer
