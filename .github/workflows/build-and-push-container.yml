@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - tla
-      - multiarch
+      - tla_rebased
 
 env:
   ECR_REPOSITORY: 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image
