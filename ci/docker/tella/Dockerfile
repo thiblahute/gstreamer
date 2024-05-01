@@ -159,7 +159,7 @@ RUN meson builddir \
   --prefix /usr \
   -Db_lto=true \
   -Dbuildtype=debugoptimized \
-  -Dintrospection=enabled \
+  -Dintrospection=disabled \
   -Dgstreamer:tools=enabled \
   -Dpython=disabled \
   -Dorc=enabled \
@@ -218,7 +218,6 @@ RUN meson builddir \
   -Dgst-plugins-good:png=enabled \
   -Dgst-plugins-good:replaygain=enabled \
   -Dgst-plugins-good:smpte=enabled \
-  -Dgst-plugins-good:soup=enabled \
   -Dgst-plugins-good:spectrum=enabled \
   -Dgst-plugins-good:udp=enabled \
   -Dgst-plugins-good:v4l2=disabled \
@@ -227,17 +226,21 @@ RUN meson builddir \
   -Dgst-plugins-good:videofilter=enabled \
   -Dgst-plugins-good:videomixer=enabled \
   -Dgst-plugins-good:ximagesrc=disabled \
+  -Dgst-plugins-good:soup=enabled \
+  -Dgst-plugins-good:wavenc=enabled \
   -Dbad=enabled \
+  -Dgst-plugins-bad:applemedia=disabled \
   -Dgst-plugins-bad:bz2=disabled \
   -Dgst-plugins-bad:closedcaption=disabled \
   -Dgst-plugins-bad:codec2json=disabled \
   -Dgst-plugins-bad:curl=disabled \
   -Dgst-plugins-bad:drm=disabled \
+  -Dgst-plugins-bad:faac=disabled \
+  -Dgst-plugins-bad:fdkaac=enabled \
   -Dgst-plugins-bad:kms=disabled \
   -Dgst-plugins-bad:librfb=disabled \
   -Dgst-plugins-bad:mpegtsdemux=enabled \
   -Dgst-plugins-bad:mpegtsmux=enabled \
-  -Dgst-plugins-bad:msdk=disabled \
   -Dgst-plugins-bad:msdk=disabled \
   -Dgst-plugins-bad:nvcodec=disabled \
   -Dgst-plugins-bad:openh264=disabled \
