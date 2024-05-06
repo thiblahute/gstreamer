@@ -47,6 +47,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
   libx264-dev \
   libx265-dev \
   libfdk-aac-dev \
+  librsvg2-dev \
   nasm \
   python3-dev \
   python3-pip \
@@ -69,61 +70,6 @@ RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN cargo install cargo-c
 
-FROM deps as cairo
-
-# Build cairo
-RUN curl -L --silent -o cairo-1.17.8.tar.xz https://cairographics.org/snapshots/cairo-1.17.8.tar.xz && \
-  tar -xf cairo-1.17.8.tar.xz && \
-  cd cairo-1.17.8 && \
-  meson setup builddir --prefix=/usr --buildtype=release --default-library=shared && \
-  ninja -C builddir && \
-  mkdir /opt/cairo && \
-  DESTDIR=/opt/cairo ninja -C builddir install && \
-  cd .. && \
-  rm -rf cairo-1.17.8 && \
-  rm cairo-1.17.8.tar.xz
-
-FROM deps as pango
-
-COPY --from=cairo /opt/cairo /
-RUN curl -L --silent -o pango-1.50.6.tar.xz https://download.gnome.org/sources/pango/1.50/pango-1.50.6.tar.xz && \
-  tar -xf pango-1.50.6.tar.xz && \
-  cd pango-1.50.6 && \
-  meson setup builddir --prefix=/usr --buildtype=release --default-library=shared && \
-  ninja -C builddir && \
-  mkdir /opt/pango && \
-  DESTDIR=/opt/pango ninja -C builddir install && \
-  cd .. && \
-  rm -rf pango-1.50.6 && \
-  rm pango-1.50.6.tar.xz
-
-FROM deps as gdk-pixbuf
-RUN curl -L --silent -o gdk-pixbuf-2.42.8.tar.xz https://download.gnome.org/sources/gdk-pixbuf/2.42/gdk-pixbuf-2.42.8.tar.xz && \
-  tar -xf gdk-pixbuf-2.42.8.tar.xz && \
-  cd gdk-pixbuf-2.42.8 && \
-  meson setup builddir --prefix=/usr --buildtype=release --default-library=shared && \
-  ninja -C builddir && \
-  mkdir /opt/gdk-pixbuf && \
-  DESTDIR=/opt/gdk-pixbuf ninja -C builddir install && \
-  cd .. && \
-  rm -rf gdk-pixbuf-2.42.8 && \
-  rm gdk-pixbuf-2.42.8.tar.xz
-
-FROM deps as librsvg
-COPY --from=cairo /opt/cairo /
-COPY --from=pango /opt/pango /
-COPY --from=gdk-pixbuf /opt/gdk-pixbuf /
-
-# Build librsvg
-RUN curl -L --silent -o librsvg-2.52.5.tar.xz https://download.gnome.org/sources/librsvg/2.52/librsvg-2.52.5.tar.xz && \
-  tar -xf librsvg-2.52.5.tar.xz && \
-  cd librsvg-2.52.5 && \
-  ./configure CFLAGS=-O2 --prefix=/usr --enable-shared --disable-static --disable-introspection --disable-tools --disable-maintainer-mode --disable-dependency-tracking --disable-gtk-doc && \
-  make DESTDIR=/opt/librsvg install && \
-  cd .. && \
-  rm -rf librsvg-2.52.5 && \
-  rm librsvg-2.52.5.tar.xz
-
 # Build FFmpeg
 FROM deps as ffmpeg
 COPY ci/docker/tella/build-ffmpeg /
@@ -139,10 +85,6 @@ FROM deps as gstreamer
 
 # Copy deps to /usr so GStreamer build can pick it up
 COPY --from=ffmpeg /opt/ffmpeg /usr
-COPY --from=cairo /opt/cairo /
-COPY --from=pango /opt/pango /
-COPY --from=librsvg /opt/librsvg /
-COPY --from=gdk-pixbuf /opt/gdk-pixbuf /
 
 COPY ci/fuzzing  /gstreamer/ci/fuzzing
 COPY data /gstreamer/data
