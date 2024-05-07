@@ -49,6 +49,12 @@ struct _GESDiscovererManager
   GRecMutex lock;
   GstClockTime timeout;
 
+
+  GThread *cleanup_thread;
+  GMutex cleanup_thread_mutex;
+  GCond cleanup_thread_cond;
+  gboolean finalized;
+
   gboolean use_cache;
 };
 
@@ -118,25 +124,17 @@ static void
 ges_discoverer_manager_finalize (GObject * object)
 {
   GESDiscovererManager *self = GES_DISCOVERER_MANAGER (object);
-  GHashTableIter iter;
-  GESDiscovererData *discoverer_data;
-  GMainContext *context = g_main_context_get_thread_default ();
 
-  if (!context)
-    context = g_main_context_default ();
+
+  g_mutex_lock (&self->cleanup_thread_mutex);
+  self->finalized = TRUE;
+  g_cond_signal (&self->cleanup_thread_cond);
+  g_mutex_unlock (&self->cleanup_thread_mutex);
+  g_thread_join (self->cleanup_thread);
 
   g_rec_mutex_lock (&self->lock);
-  g_hash_table_iter_init (&iter, self->discoverers);
-  while (g_hash_table_iter_next (&iter, NULL, (gpointer *) & discoverer_data)) {
-    GSource *source;
-
-    while ((source =
-            g_main_context_find_source_by_user_data (context,
-                discoverer_data))) {
-      g_source_destroy (source);
-    }
-  }
-
+  g_thread_unref (self->cleanup_thread);
+  self->cleanup_thread = NULL;
   g_hash_table_unref (self->discoverers);
   g_rec_mutex_unlock (&self->lock);
 
@@ -234,6 +232,46 @@ ges_discoverer_manager_class_init (GESDiscovererManagerClass * klass)
       G_SIGNAL_RUN_LAST,
       0, NULL, NULL, NULL, G_TYPE_NONE, 2, GST_TYPE_DISCOVERER_INFO,
       G_TYPE_ERROR);
+}
+
+static void
+ges_discoverer_manager_cleanup_discoverers (GESDiscovererManager * self)
+{
+  while (TRUE) {
+    GHashTableIter iter;
+    GESDiscovererData *discoverer_data;
+
+    gint64 end_time = g_get_monotonic_time () + G_TIME_SPAN_SECOND;
+
+    g_mutex_lock (&self->cleanup_thread_mutex);
+    g_cond_wait_until (&self->cleanup_thread_cond, &self->cleanup_thread_mutex,
+        end_time);
+    g_mutex_unlock (&self->cleanup_thread_mutex);
+
+    if (self->finalized) {
+      return;
+    }
+
+    g_rec_mutex_lock (&self->lock);
+    g_hash_table_iter_init (&iter, self->discoverers);
+    while (g_hash_table_iter_next (&iter, NULL, (gpointer *) & discoverer_data)) {
+      if (discoverer_data->n_uri == 0) {
+        GST_LOG_OBJECT (self,
+            "Discoverer %" GST_PTR_FORMAT " has no more URIs, removing",
+            discoverer_data->discoverer);
+        g_hash_table_iter_remove (&iter);
+      }
+    }
+
+    gboolean not_discovering = g_hash_table_size (self->discoverers) == 0;
+    g_thread_unref (self->cleanup_thread);
+    self->cleanup_thread = NULL;
+    g_rec_mutex_unlock (&self->lock);
+
+    if (not_discovering) {
+      return;
+    }
+  }
 }
 
 void
@@ -359,43 +397,20 @@ source_setup_cb (GESDiscovererManager * self, GstElement * source)
   g_signal_emit (self, signals[DISCOVERER_SOURCE_SETUP], 0, source);
 }
 
-static gboolean
-cleanup_discoverer_cb (GESDiscovererData * discoverer_data)
+static void
+ges_discoverer_start_cleanup_thread_if_needed (GESDiscovererManager * self)
 {
-  GESDiscovererManager *self = g_weak_ref_get (&discoverer_data->manager);
-  gint res = G_SOURCE_CONTINUE;
-
-  if (!self) {
-    return G_SOURCE_REMOVE;
-  }
-
   g_rec_mutex_lock (&self->lock);
-  if (discoverer_data->n_uri > 0) {
-    GST_DEBUG_OBJECT (self, "Discoverer still has %d uris to discover",
-        discoverer_data->n_uri);
-    goto done;
+  if (!self->cleanup_thread) {
+    self->cleanup_thread = g_thread_new ("ges-discoverer-manager-cleanup",
+        (GThreadFunc) ges_discoverer_manager_cleanup_discoverers, self);
   }
-
-  GST_DEBUG_OBJECT (self, "Removing unused discoverer");
-
-  // Remove the discoverer if the one is use for that thread is still the
-  // one we have been asked to free, otherwise this one will be destroyed anyway
-  // once this source is removed
-  res = G_SOURCE_REMOVE;
-  if (g_hash_table_lookup (self->discoverers,
-          discoverer_data->thread) == discoverer_data) {
-    g_hash_table_remove (self->discoverers, discoverer_data->thread);
-  }
-
-done:
   g_rec_mutex_unlock (&self->lock);
-  g_object_unref (self);
 
-  return res;
 }
 
 static void
-proxy_discovered_cb (GESDiscovererManager * self,
+uri_discovered_cb (GESDiscovererManager * self,
     GstDiscovererInfo * info, GError * err, GstDiscoverer * discoverer)
 {
   g_signal_emit (self, signals[DISCOVERER_SIGNAL], 0, info, err);
@@ -405,14 +420,13 @@ proxy_discovered_cb (GESDiscovererManager * self,
       g_hash_table_lookup (self->discoverers, g_thread_self ());
   if (data) {
     data->n_uri--;
-    data = g_atomic_rc_box_acquire (data);
+  }
+
+  if (data) {
+    ges_discoverer_start_cleanup_thread_if_needed (self);
   }
   g_rec_mutex_unlock (&self->lock);
 
-  if (data) {
-    ges_timeout_add (1000, (GSourceFunc) cleanup_discoverer_cb, data,
-        (GDestroyNotify) ges_discoverer_data_unref);
-  }
 }
 
 static GESDiscovererData *
@@ -432,7 +446,7 @@ create_discoverer (GESDiscovererManager * self)
       G_CALLBACK (source_setup_cb), self);
   data->discovered_id =
       g_signal_connect_swapped (discoverer, "discovered",
-      G_CALLBACK (proxy_discovered_cb), self);
+      G_CALLBACK (uri_discovered_cb), self);
   g_object_set (discoverer, "use-cache", self->use_cache, NULL);
 
   gst_discoverer_start (discoverer);
