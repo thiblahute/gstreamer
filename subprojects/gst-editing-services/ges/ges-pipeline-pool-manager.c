@@ -226,21 +226,6 @@ list_pooled_sources (GNode * node, GESPipelinePoolManager * self)
 }
 
 void
-ges_pipeline_pool_clear (GESPipelinePoolManager * self)
-{
-  g_rec_mutex_lock (&self->lock);
-  if (self->pooled_sources) {
-    g_array_free (self->pooled_sources, TRUE);
-    g_array_free (self->prepared_sources, TRUE);
-    self->prepared_sources = NULL;
-    self->pooled_sources = NULL;
-  }
-  gst_clear_object (&self->pool);
-  g_rec_mutex_unlock (&self->lock);
-
-}
-
-void
 ges_pipeline_pool_manager_set_rendering (GESPipelinePoolManager * self,
     gboolean rendering)
 {
@@ -316,6 +301,26 @@ new_pipeline_cb (GObject * pool, GstElement * pipeline)
 }
 
 void
+ges_pipeline_pool_clear (GESPipelinePoolManager * self)
+{
+  g_rec_mutex_lock (&self->lock);
+  if (self->pooled_sources) {
+    g_array_free (self->pooled_sources, TRUE);
+    g_array_free (self->prepared_sources, TRUE);
+    self->prepared_sources = NULL;
+    self->pooled_sources = NULL;
+  }
+
+  g_signal_handlers_disconnect_by_func (self->pool,
+      G_CALLBACK (ges_pipeline_pool_manager_prepare_pipeline_removed), self);
+  g_signal_handlers_disconnect_by_func (self->pool,
+      G_CALLBACK (new_pipeline_cb), NULL);
+
+  gst_clear_object (&self->pool);
+  g_rec_mutex_unlock (&self->lock);
+}
+
+void
 ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
     GESTimeline * timeline)
 {
@@ -331,6 +336,7 @@ ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
   GstElement *uridecodepoolsrc =
       gst_element_factory_make ("uridecodepoolsrc", NULL);
 
+  g_rec_mutex_init (&self->lock);
   if (!uridecodepoolsrc)
     return;
 
