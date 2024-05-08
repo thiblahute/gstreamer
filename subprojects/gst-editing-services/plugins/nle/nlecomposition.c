@@ -3563,13 +3563,6 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
 
   if (priv->current) {
 
-    GST_INFO_OBJECT (comp, "New stack set and ready to run, probing src pad"
-        " and stopping children thread until we are actually ready with"
-        " that new stack");
-
-    comp->priv->updating_reason = update_reason;
-    comp->priv->seqnum_to_restart_task = seqnum;
-
     /* Subcomposition can preroll without sending initializing seeks
      * as the toplevel composition will send it anyway.
      *
@@ -3578,16 +3571,26 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
      */
 
     if (tear_down
+        && update_reason == COMP_UPDATE_STACK_INITIALIZE
         && !nle_composition_query_needs_topelevel_initializing_seek (comp))
       gst_clear_event (&toplevel_seek);
 
     if (toplevel_seek) {
+      GST_INFO_OBJECT (comp,
+          "New stack set and ready to run (reason: %s), probing src pad"
+          " and stopping children thread until we are actually ready with"
+          " that new stack - seqnum: %i",
+          UPDATE_PIPELINE_REASONS[update_reason], seqnum);
+
+      comp->priv->updating_reason = update_reason;
+      comp->priv->seqnum_to_restart_task = seqnum;
       if (!_pause_task (comp)) {
         gst_event_unref (toplevel_seek);
         return FALSE;
       }
     } else {
-      GST_INFO_OBJECT (comp, "Not pausing composition when first initializing");
+      GST_INFO_OBJECT (comp,
+          "NOT pausing controller thread as we will get a seek from parent composition");
     }
   }
 
