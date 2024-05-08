@@ -133,7 +133,9 @@ ges_discoverer_manager_finalize (GObject * object)
   g_thread_join (self->cleanup_thread);
 
   g_rec_mutex_lock (&self->lock);
-  g_thread_unref (self->cleanup_thread);
+  if (self->cleanup_thread) {
+    g_thread_unref (self->cleanup_thread);
+  }
   self->cleanup_thread = NULL;
   g_hash_table_unref (self->discoverers);
   g_rec_mutex_unlock (&self->lock);
