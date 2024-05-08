@@ -186,6 +186,33 @@ ges_smart_adder_finalize (GObject * object)
 }
 
 static void
+ges_smart_adder_constructed (GObject * object)
+{
+  GstPad *pad;
+  GESSmartAdder *self = GES_SMART_ADDER (object);
+
+  gchar *mixer_name = g_strdup_printf ("%s-mixer", GST_OBJECT_NAME (self));
+  self->adder = gst_element_factory_make ("audiomixer", mixer_name);
+  g_free (mixer_name);
+
+  gst_bin_add (GST_BIN (self), self->adder);
+  self->capsfilter =
+      gst_element_factory_make ("capsfilter", "smart-adder-capsfilter");
+  gst_bin_add (GST_BIN (self), self->capsfilter);
+
+  gst_element_link (self->adder, self->capsfilter);
+
+  pad = gst_element_get_static_pad (self->capsfilter, "src");
+  self->srcpad = gst_ghost_pad_new ("src", pad);
+  gst_pad_set_active (self->srcpad, TRUE);
+  gst_object_unref (pad);
+
+  gst_element_add_pad (GST_ELEMENT (self), self->srcpad);
+
+  G_OBJECT_CLASS (ges_smart_adder_parent_class)->constructed (object);
+}
+
+static void
 ges_smart_adder_class_init (GESSmartAdderClass * klass)
 {
 /*   GstBinClass *parent_class = GST_BIN_CLASS (klass);
@@ -206,31 +233,13 @@ ges_smart_adder_class_init (GESSmartAdderClass * klass)
 
   object_class->dispose = ges_smart_adder_dispose;
   object_class->finalize = ges_smart_adder_finalize;
+  object_class->constructed = ges_smart_adder_constructed;
 }
 
 static void
 ges_smart_adder_init (GESSmartAdder * self)
 {
-  GstPad *pad;
-
   g_mutex_init (&self->lock);
-
-  self->adder = gst_element_factory_make ("audiomixer", "smart-adder-adder");
-  gst_bin_add (GST_BIN (self), self->adder);
-
-  self->capsfilter =
-      gst_element_factory_make ("capsfilter", "smart-adder-capsfilter");
-  gst_bin_add (GST_BIN (self), self->capsfilter);
-
-  gst_element_link (self->adder, self->capsfilter);
-
-  pad = gst_element_get_static_pad (self->capsfilter, "src");
-  self->srcpad = gst_ghost_pad_new ("src", pad);
-  gst_pad_set_active (self->srcpad, TRUE);
-  gst_object_unref (pad);
-
-  gst_element_add_pad (GST_ELEMENT (self), self->srcpad);
-
   self->pads_infos = g_hash_table_new_full (g_direct_hash, g_direct_equal,
       NULL, (GDestroyNotify) destroy_pad);
 }

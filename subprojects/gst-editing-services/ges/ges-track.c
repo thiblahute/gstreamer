@@ -661,7 +661,9 @@ ges_track_constructed (GObject * object)
       return;
     }
 
-    nleobject = gst_element_factory_make ("nleoperation", "mixing-operation");
+    gchar *name = g_strdup_printf ("%s-mixer", GST_OBJECT_NAME (self));
+    nleobject = gst_element_factory_make ("nleoperation", name);
+    g_free (name);
     if (!gst_bin_add (GST_BIN (nleobject), mixer)) {
       GST_WARNING_OBJECT (self, "Could not add the mixer to our composition");
       gst_object_unref (mixer);
