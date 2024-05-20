@@ -1241,7 +1241,12 @@ reset_input (GstDecodebin3 * dbin, DecodebinInput * input)
 
     SELECTION_LOCK (dbin);
     stream = find_input_stream_for_pad (dbin, idpad);
-    remove_input_stream (dbin, stream);
+    if (stream) {
+      remove_input_stream (dbin, stream);
+    } else {
+      GST_INFO_OBJECT (dbin, "No stream found for identity %p",
+          input->identity);
+    }
     SELECTION_UNLOCK (dbin);
 
     gst_object_unref (idpad);
