@@ -1602,13 +1602,13 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
         event = info->data = gst_event_new_stream_start (priv->id);
         GST_INFO_OBJECT (comp, "forward stream-start %p (%s)", event, priv->id);
       } else {
-        GST_DEBUG_OBJECT (comp, "dropping stream-start %p", event);
+        GST_LOG_OBJECT (comp, "dropping stream-start %p", event);
         retval = GST_PAD_PROBE_DROP;
       }
       break;
     case GST_EVENT_STREAM_GROUP_DONE:
       if (GST_EVENT_SEQNUM (event) != comp->priv->real_eos_seqnum) {
-        GST_DEBUG_OBJECT (comp, "Dropping STREAM_GROUP_DONE %d != %d",
+        GST_LOG_OBJECT (comp, "Dropping STREAM_GROUP_DONE %d != %d",
             GST_EVENT_SEQNUM (event), comp->priv->real_eos_seqnum);
         retval = GST_PAD_PROBE_DROP;
       }
@@ -1664,7 +1664,7 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
     }
       break;
     case GST_EVENT_TAG:
-      GST_DEBUG_OBJECT (comp, "Dropping tag: %" GST_PTR_FORMAT, info->data);
+      GST_LOG_OBJECT (comp, "Dropping tag: %" GST_PTR_FORMAT, info->data);
       GST_OBJECT_LOCK (comp);
       if (comp->priv->drop_tags)
         retval = GST_PAD_PROBE_DROP;
