@@ -654,17 +654,19 @@ _seek_pipeline_func (NleComposition * comp, SeekData * seekd)
       "  flags:%d", UPDATE_PIPELINE_REASONS[reason], GST_TIME_ARGS (cur),
       GST_TIME_ARGS (stop), flags);
 
+  g_mutex_lock (&priv->seek_in_paused_lock);
+  comp->priv->needs_pipeline_update = FALSE;
   if (!initializing_stack) {
     segment_start = cur;
     segment_stop = stop;
     GST_OBJECT_LOCK (comp);
     if (GST_STATE (comp) == GST_STATE_PAUSED) {
-      g_mutex_lock (&priv->seek_in_paused_lock);
       comp->priv->seeking_in_paused = TRUE;
-      g_mutex_unlock (&priv->seek_in_paused_lock);
     }
     GST_OBJECT_UNLOCK (comp);
+    g_mutex_unlock (&priv->seek_in_paused_lock);
   } else {
+    g_mutex_unlock (&priv->seek_in_paused_lock);
     /* During plain playback (no seek), the segment->stop doesn't
      * evolve when going from stack to stack, only the start does
      * (in reverse playback, the logic is reversed) */
