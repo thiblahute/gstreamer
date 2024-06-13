@@ -180,6 +180,14 @@ GST_DEBUG_CATEGORY_STATIC (ges_timeline_debug);
 
 #define CHECK_THREAD(timeline) g_assert(timeline->priv->valid_thread == g_thread_self())
 
+typedef struct
+{
+  gboolean forwarded_flush_starts;
+  GHashTable *awaited_flush_stop_pads;
+
+  guint32 seqnum;
+} FlushingSeekInfo;
+
 struct _GESTimelinePrivate
 {
   GNode *tree;
@@ -245,6 +253,9 @@ struct _GESTimelinePrivate
   /* When the timeline is nested, this is the parent source that lead to the
    * creation of the timeline */
     GWeakRef /*<GESTrackElement> */ parent_source;
+
+  GMutex flushing_seek_info_lock;
+  GArray * /*<FlushingSeekInfo> */ flushing_seek_infos;
 };
 
 /* private structure to contain our track-related information */
@@ -302,6 +313,25 @@ static guint ges_timeline_signals[LAST_SIGNAL] = { 0 };
 static gint custom_find_track (TrackPrivate * tr_priv, GESTrack * track);
 
 static guint nb_assets = 0;
+
+static void
+track_private_free (TrackPrivate * tr_priv)
+{
+  if (tr_priv->probe_id) {
+    gst_pad_remove_probe (tr_priv->pad, tr_priv->probe_id);
+    tr_priv->probe_id = 0;
+  }
+
+  gst_clear_object (&tr_priv->pad);
+
+  g_free (tr_priv);
+}
+
+static void
+track_private_unref (TrackPrivate * tr_priv)
+{
+  g_atomic_rc_box_release_full (tr_priv, (GDestroyNotify) track_private_free);
+}
 
 /* GESExtractable implementation */
 static gchar *
@@ -433,6 +463,7 @@ ges_timeline_dispose (GObject * object)
   gst_clear_object (&priv->auto_transition_track);
   gst_clear_object (&priv->new_track);
   g_clear_error (&priv->track_selection_error);
+  g_clear_pointer (&priv->flushing_seek_infos, g_array_unref);
   priv->track_selection_error = NULL;
 
   G_OBJECT_CLASS (ges_timeline_parent_class)->dispose (object);
@@ -991,6 +1022,8 @@ ges_timeline_init (GESTimeline * self)
   g_rec_mutex_init (&priv->dyn_mutex);
   g_mutex_init (&priv->commited_lock);
   priv->valid_thread = g_thread_self ();
+  priv->flushing_seek_infos =
+      g_array_new (FALSE, TRUE, sizeof (FlushingSeekInfo));
 
   ges_pipeline_pool_manager_init (&priv->pool_manager, self);
 }
@@ -2084,12 +2117,60 @@ update_stream_object (TrackPrivate * tr_priv)
   return res;
 }
 
+/* WITH priv->flushing_seek_info_lock */
+static FlushingSeekInfo *
+get_seek_probe_info (GESTimeline * timeline, guint32 seqnum, gint * n)
+{
+  for (gint i = 0; i < timeline->priv->flushing_seek_infos->len; i++) {
+    FlushingSeekInfo *info =
+        &g_array_index (timeline->priv->flushing_seek_infos,
+        FlushingSeekInfo, i);
+
+    if (info->seqnum == seqnum) {
+      if (n)
+        *n = i;
+
+      return info;
+    }
+  }
+
+  return NULL;
+}
+
+typedef struct
+{
+  GESTimeline *timeline;
+  GstEvent *event;
+  FlushingSeekInfo *seek_probe_info;
+} ForwardFlushStartData;
+
+static gboolean
+forward_flush_start (GESTimeline * timeline, GstPad * pad,
+    ForwardFlushStartData * data)
+{
+  GstPad *peer = gst_pad_get_peer (pad);
+
+  g_hash_table_add (data->seek_probe_info->awaited_flush_stop_pads,
+      gst_object_ref (pad));
+
+  if (peer) {
+    if (!gst_pad_send_event (peer, gst_event_ref (data->event))) {
+      GST_ERROR_OBJECT (pad, "Failed to forward FLUSH_START event to peer");
+    }
+
+    gst_object_unref (peer);
+  }
+
+  return TRUE;
+}
+
 static GstPadProbeReturn
-_pad_probe_cb (GstPad * mixer_pad, GstPadProbeInfo * info,
+_pad_probe_cb (GstPad * track_pad, GstPadProbeInfo * info,
     TrackPrivate * tr_priv)
 {
   GstEvent *event = GST_PAD_PROBE_INFO_EVENT (info);
   GESTimeline *timeline = tr_priv->timeline;
+  guint32 seqnum = gst_event_get_seqnum (event);
 
   if (GST_EVENT_TYPE (event) == GST_EVENT_STREAM_START) {
     LOCK_DYN (timeline);
@@ -2106,10 +2187,107 @@ _pad_probe_cb (GstPad * mixer_pad, GstPadProbeInfo * info,
     gst_event_set_group_id (event, timeline->priv->stream_start_group_id);
     UNLOCK_DYN (timeline);
 
-    return GST_PAD_PROBE_REMOVE;
+    return GST_PAD_PROBE_OK;
+  } else if (GST_EVENT_TYPE (event) == GST_EVENT_FLUSH_START) {
+    g_mutex_lock (&timeline->priv->flushing_seek_info_lock);
+    FlushingSeekInfo *seek_probe_info =
+        get_seek_probe_info (timeline, seqnum, NULL);
+
+    if (!seek_probe_info) {
+      g_mutex_unlock (&timeline->priv->flushing_seek_info_lock);
+
+      GST_DEBUG_OBJECT (tr_priv->ghostpad,
+          "Got flush_start event, but no seek_probe_info found");
+
+      return GST_PAD_PROBE_OK;
+    }
+
+    if (!seek_probe_info->forwarded_flush_starts) {
+      ForwardFlushStartData data = {
+        .event = event,
+        .timeline = timeline,
+        .seek_probe_info = seek_probe_info,
+      };
+
+      g_assert (!seek_probe_info->awaited_flush_stop_pads);
+      seek_probe_info->awaited_flush_stop_pads =
+          g_hash_table_new_full (g_direct_hash, g_direct_equal, g_object_unref,
+          NULL);
+
+      GST_LOG_OBJECT (track_pad,
+          "Got FLUSH_START event after seek event, forwarding to all src pads.");
+      gst_element_foreach_src_pad (GST_ELEMENT (GST_OBJECT_PARENT
+              (tr_priv->ghostpad)),
+          (GstElementForeachPadFunc) forward_flush_start, &data);
+
+      seek_probe_info->forwarded_flush_starts = TRUE;
+    } else {
+      GST_LOG_OBJECT (track_pad,
+          "Got flush_start event, but already forwarded");
+    }
+    g_mutex_unlock (&timeline->priv->flushing_seek_info_lock);
+
+    GST_LOG_OBJECT (track_pad, "Dropping FLUSH_START event");
+    return GST_PAD_PROBE_DROP;
+  } else if (GST_EVENT_TYPE (event) == GST_EVENT_FLUSH_STOP) {
+    gint n = 0;
+
+    g_mutex_lock (&timeline->priv->flushing_seek_info_lock);
+    FlushingSeekInfo *seek_probe_info =
+        get_seek_probe_info (timeline, seqnum, &n);
+    if (!seek_probe_info) {
+      g_mutex_unlock (&timeline->priv->flushing_seek_info_lock);
+
+      /* Not seek related, ignoring */
+      return GST_PAD_PROBE_OK;
+    }
+
+    g_hash_table_remove (seek_probe_info->awaited_flush_stop_pads,
+        tr_priv->ghostpad);
+    if (g_hash_table_size (seek_probe_info->awaited_flush_stop_pads) == 0) {
+      g_hash_table_unref (seek_probe_info->awaited_flush_stop_pads);
+
+      GST_DEBUG_OBJECT (tr_priv->timeline, "Done seeking %d", seqnum);
+      g_array_remove_index (timeline->priv->flushing_seek_infos, n);
+    }
+    g_mutex_unlock (&timeline->priv->flushing_seek_info_lock);
   }
 
   return GST_PAD_PROBE_OK;
+}
+
+static gboolean
+ges_timeline_src_pad_event (GstPad * pad, GstObject * parent, GstEvent * event)
+{
+  GESTimeline *timeline = GES_TIMELINE (parent);
+  guint32 seqnum = gst_event_get_seqnum (event);
+
+  if (GST_EVENT_TYPE (event) == GST_EVENT_SEEK) {
+    GstSeekFlags flags;
+
+    gst_event_parse_seek (event, NULL, NULL, &flags, NULL, NULL, NULL, NULL);
+    if (flags & GST_SEEK_FLAG_FLUSH) {
+      GST_INFO_OBJECT (timeline, "Got FLUSHING seek event, "
+          "ensuring flushing synchronously between all tracks");
+
+      g_mutex_lock (&timeline->priv->flushing_seek_info_lock);
+      FlushingSeekInfo *info = get_seek_probe_info (timeline, seqnum, NULL);
+      if (!info) {
+        FlushingSeekInfo seek_probe_info = {
+          .seqnum = seqnum,
+          .forwarded_flush_starts = FALSE,
+          .awaited_flush_stop_pads = NULL,
+        };
+        GST_DEBUG_OBJECT (parent, "Start following seek with seqnum %d",
+            seqnum);
+        g_array_append_val (timeline->priv->flushing_seek_infos,
+            seek_probe_info);
+      }
+      g_mutex_unlock (&timeline->priv->flushing_seek_info_lock);
+    }
+  }
+
+  return gst_pad_event_default (pad, parent, event);
 }
 
 static void
@@ -2142,21 +2320,24 @@ _ghost_track_srcpad (TrackPrivate * tr_priv)
   GST_OBJECT_UNLOCK (track);
 
   /* ghost it ! */
-  GST_DEBUG ("Ghosting pad and adding it to ourself");
+  GST_DEBUG_OBJECT (tr_priv->timeline, "Ghosting pad and adding it to ourself");
   padname = g_strdup_printf ("track_%p_src", track);
   tr_priv->ghostpad = gst_ghost_pad_new (padname, pad);
   g_free (padname);
   gst_pad_set_active (tr_priv->ghostpad, TRUE);
   gst_element_add_pad (GST_ELEMENT (tr_priv->timeline), tr_priv->ghostpad);
+  gst_pad_set_event_function_full (tr_priv->ghostpad,
+      (GstPadEventFunction) ges_timeline_src_pad_event, tr_priv, NULL);
 
   if (no_more) {
-    GST_DEBUG ("Signaling no-more-pads");
+    GST_DEBUG_OBJECT (tr_priv->timeline, "Signaling no-more-pads");
     gst_element_no_more_pads (GST_ELEMENT (tr_priv->timeline));
   }
 
   tr_priv->probe_id = gst_pad_add_probe (pad,
-      GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM,
-      (GstPadProbeCallback) _pad_probe_cb, tr_priv, NULL);
+      GST_PAD_PROBE_TYPE_EVENT_DOWNSTREAM | GST_PAD_PROBE_TYPE_EVENT_FLUSH,
+      (GstPadProbeCallback) _pad_probe_cb, g_atomic_rc_box_acquire (tr_priv),
+      (GDestroyNotify) track_private_unref);
 
   UNLOCK_DYN (tr_priv->timeline);
 }
@@ -2632,7 +2813,7 @@ ges_timeline_add_track (GESTimeline * timeline, GESTrack * track)
     return FALSE;
   }
 
-  tr_priv = g_new0 (TrackPrivate, 1);
+  tr_priv = g_atomic_rc_box_new0 (TrackPrivate);
   tr_priv->timeline = timeline;
   tr_priv->track = track;
   tr_priv->track_element_added_sigid = g_signal_connect (track,
@@ -2715,7 +2896,6 @@ ges_timeline_remove_track (GESTimeline * timeline, GESTrack * track)
   }
 
   tr_priv = tmp->data;
-  gst_object_unref (tr_priv->pad);
   priv->priv_tracks = g_list_remove (priv->priv_tracks, tr_priv);
   UNLOCK_DYN (timeline);
 
@@ -2742,6 +2922,7 @@ ges_timeline_remove_track (GESTimeline * timeline, GESTrack * track)
     gst_pad_set_active (tr_priv->ghostpad, FALSE);
     gst_ghost_pad_set_target ((GstGhostPad *) tr_priv->ghostpad, NULL);
     gst_element_remove_pad (GST_ELEMENT (timeline), tr_priv->ghostpad);
+    tr_priv->ghostpad = NULL;
   }
 
   /* Signal track removal to all layers/objects */
@@ -2762,7 +2943,7 @@ ges_timeline_remove_track (GESTimeline * timeline, GESTrack * track)
 
   gst_object_unref (track);
 
-  g_free (tr_priv);
+  track_private_unref (tr_priv);
 
   return TRUE;
 }
