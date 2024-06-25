@@ -189,10 +189,10 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
 {
   GESTrack *track;
   GstElement *decodebin;
-  const gchar *wanted_id =
-      gst_discoverer_stream_info_get_stream_id
-      (ges_uri_source_asset_get_stream_info (GES_URI_SOURCE_ASSET
-          (ges_extractable_get_asset (GES_EXTRACTABLE (self->element)))));
+  GESUriSourceAsset *asset = GES_URI_SOURCE_ASSET
+      (ges_extractable_get_asset (GES_EXTRACTABLE (self->element)));
+  const gchar *wanted_id = gst_discoverer_stream_info_get_stream_id
+      (ges_uri_source_asset_get_stream_info (asset));
 
   track = ges_track_element_get_track (self->element);
 
@@ -220,8 +220,17 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
   g_signal_connect (decodebin, "source-setup",
       G_CALLBACK (source_setup_cb), self);
 
+
   g_object_set (decodebin, "uri", self->uri, "stream-id", wanted_id, "caps",
       caps, NULL);
+
+  GstElement *nlesrc = ges_track_element_get_nleobject (self->element);
+  if (!ges_uri_source_asset_is_image (asset)) {
+    g_object_bind_property (nlesrc, "inpoint", decodebin, "inpoint",
+        G_BINDING_SYNC_CREATE | G_BINDING_DEFAULT);
+    g_object_bind_property (nlesrc, "duration", decodebin, "duration",
+        G_BINDING_SYNC_CREATE | G_BINDING_DEFAULT);
+  }
   gst_caps_unref (caps);
 
   return decodebin;
