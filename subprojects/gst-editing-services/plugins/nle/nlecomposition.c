@@ -1510,6 +1510,11 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
     if (priv->stack_initialization_seek) {
       if (g_atomic_int_compare_and_exchange
           (&priv->stack_initialization_seek_sent, FALSE, TRUE)) {
+        if (GST_IS_QUERY (info->data) && GST_QUERY_TYPE (info->data) == GST_QUERY_DRAIN) {
+          GstStructure *structure = gst_query_writable_structure (info->data);
+          gst_structure_set (structure, "nle-will-seek", G_TYPE_BOOLEAN, TRUE, NULL);
+        }
+
         _add_action (comp, G_CALLBACK (_seek_pipeline_func),
             create_seek_data (comp,
                 gst_event_ref (priv->stack_initialization_seek)),
