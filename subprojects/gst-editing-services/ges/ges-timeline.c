@@ -184,6 +184,9 @@ typedef struct
 {
   gboolean forwarded_flush_starts;
   GHashTable *awaited_flush_stop_pads;
+  GList *awaited_seek_tracks;
+  GMutex waiting_for_seeks_lock;
+  GCond waiting_for_seeks_cond;
 
   guint32 seqnum;
 } FlushingSeekInfo;
@@ -2179,6 +2182,24 @@ _pad_probe_cb (GstPad * track_pad, GstPadProbeInfo * info,
       return GST_PAD_PROBE_OK;
     }
 
+    if (seek_probe_info->awaited_seek_tracks) {
+      GST_DEBUG_OBJECT (track_pad,
+        "Got FLUSH_START but we still wait for %d pads to receive the seek event, dropping it.",
+        g_list_length (seek_probe_info->awaited_seek_tracks));
+
+      /* We are blocking the thread on FLUSH_START(serialized) so we know that this pad
+       * won't receive a FLUSH_STOP event, so the FlushingSeekInfo won't be cleaned
+       */
+      g_mutex_unlock (&timeline->priv->flushing_seek_info_lock);
+
+      g_mutex_lock (&seek_probe_info->waiting_for_seeks_lock);
+      while (seek_probe_info->awaited_seek_tracks)
+        g_cond_wait (&seek_probe_info->waiting_for_seeks_cond, &seek_probe_info->waiting_for_seeks_lock);
+      g_mutex_unlock (&seek_probe_info->waiting_for_seeks_lock);
+
+      g_mutex_lock (&timeline->priv->flushing_seek_info_lock);
+    }
+
     if (!seek_probe_info->forwarded_flush_starts) {
       ForwardFlushStartData data = {
         .event = event,
@@ -2191,7 +2212,7 @@ _pad_probe_cb (GstPad * track_pad, GstPadProbeInfo * info,
           g_hash_table_new_full (g_direct_hash, g_direct_equal, g_object_unref,
           NULL);
 
-      GST_LOG_OBJECT (track_pad,
+      GST_DEBUG_OBJECT (track_pad,
           "Got FLUSH_START event after seek event, forwarding to all src pads.");
       gst_element_foreach_src_pad (GST_ELEMENT (GST_OBJECT_PARENT
               (tr_priv->ghostpad)),
@@ -2250,16 +2271,33 @@ ges_timeline_src_pad_event (GstPad * pad, GstObject * parent, GstEvent * event)
       g_mutex_lock (&timeline->priv->flushing_seek_info_lock);
       FlushingSeekInfo *info = get_seek_probe_info (timeline, seqnum, NULL);
       if (!info) {
+        GST_OBJECT_LOCK (timeline);
         FlushingSeekInfo seek_probe_info = {
           .seqnum = seqnum,
           .forwarded_flush_starts = FALSE,
+          .awaited_seek_tracks = g_list_copy_deep(GST_ELEMENT (timeline)->srcpads, (GCopyFunc) gst_object_ref, NULL),
           .awaited_flush_stop_pads = NULL,
         };
+        GST_OBJECT_UNLOCK (timeline);
+
+        seek_probe_info.awaited_seek_tracks = g_list_remove (seek_probe_info.awaited_seek_tracks, pad);
+        gst_object_unref (pad);
+
         GST_DEBUG_OBJECT (parent, "Start following seek with seqnum %d",
             seqnum);
         g_array_append_val (timeline->priv->flushing_seek_infos,
             seek_probe_info);
+      } else {
+        info->awaited_seek_tracks = g_list_remove (info->awaited_seek_tracks, pad);
+        gst_object_unref (pad);
+
+        if (!info->awaited_seek_tracks) {
+          g_mutex_lock (&info->waiting_for_seeks_lock);
+          g_cond_broadcast (&info->waiting_for_seeks_cond);
+          g_mutex_unlock (&info->waiting_for_seeks_lock);
+        }
       }
+
       g_mutex_unlock (&timeline->priv->flushing_seek_info_lock);
     }
   }
