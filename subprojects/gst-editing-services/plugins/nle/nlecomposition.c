@@ -1504,15 +1504,23 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
   GstEvent *event;
 
   gboolean is_buffer = GST_IS_BUFFER (info->data);
-  if (is_buffer || (GST_IS_QUERY (info->data)
-          && GST_QUERY_IS_SERIALIZED (info->data))) {
+  gboolean is_query = GST_IS_QUERY (info->data);
+  /* The `uridecodepoolsrc` elements is able to handle `inpoint` and `duration`
+   * and prerolls pipeline at the right point so they can be played right where
+   * `nle` needs them. To be able to detect that `nlecomposition` needs those
+   * pre confirgured segments, the `nlecomposition-initialization-seek` query is
+   * done downstream so that it can know how to behave. */
+  gboolean query_nlecomposition_initialization_seek = is_query &&
+    GST_QUERY_TYPE (info->data) == GST_QUERY_CUSTOM &&
+    gst_structure_has_name (gst_query_get_structure(GST_QUERY (info->data)), "nlecomposition-initialization-seek");
 
+  if (is_buffer || (is_query && GST_QUERY_IS_SERIALIZED (info->data)) || query_nlecomposition_initialization_seek) {
     if (priv->stack_initialization_seek) {
       if (g_atomic_int_compare_and_exchange
           (&priv->stack_initialization_seek_sent, FALSE, TRUE)) {
-        if (GST_IS_QUERY (info->data) && GST_QUERY_TYPE (info->data) == GST_QUERY_DRAIN) {
+        if (query_nlecomposition_initialization_seek) {
           GstStructure *structure = gst_query_writable_structure (info->data);
-          gst_structure_set (structure, "nle-will-seek", G_TYPE_BOOLEAN, TRUE, NULL);
+          gst_structure_set (structure, "nlecomposition-initialization-seek", GST_TYPE_EVENT, priv->stack_initialization_seek, NULL);
         }
 
         _add_action (comp, G_CALLBACK (_seek_pipeline_func),
