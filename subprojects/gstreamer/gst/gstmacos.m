@@ -47,19 +47,25 @@ gst_thread_func (ThreadArgs *args)
     ret = ((GstMainFunc) args->main_func) (args->argc, args->argv, args->user_data);
   }
 
-  /* Post a message so we'll break out of the message loop */
-  NSEvent *event = [NSEvent otherEventWithType: NSEventTypeApplicationDefined
-                       location: NSZeroPoint
-                  modifierFlags: 0
-                      timestamp: 0
-                   windowNumber: 0
-                        context: nil
-                        subtype: NSEventSubtypeApplicationActivated
-                          data1: 0 
-                          data2: 0];
 
-  [NSApp postEvent:event atStart:YES];
-  [NSApp stop:nil];
+  /* Post a message so we'll break out of the message loop
+    * from inside the mainloop */
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSEvent *event =
+        [NSEvent otherEventWithType:NSEventTypeApplicationDefined
+                           location:NSZeroPoint
+                      modifierFlags:0
+                          timestamp:0
+                       windowNumber:0
+                            context:nil
+                            subtype:NSEventSubtypeApplicationActivated
+                              data1:0
+                              data2:0];
+
+    [NSApp postEvent:event atStart:YES];
+    [NSApp stop:nil];
+    g_printerr("DISPATCHED!! -> now?? %d\n", ret);
+  });
 
   return ret;
 }
