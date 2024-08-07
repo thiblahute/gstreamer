@@ -69,9 +69,9 @@ set_dimension (GESVideoScale * self, gint width, gint height)
       NULL);
 
   if (width >= 0)
-    gst_caps_set_simple (caps, "width", G_TYPE_INT, width, NULL);
+    gst_caps_set_simple (caps, "width", G_TYPE_INT, width ? width : 1, NULL);
   if (height >= 0)
-    gst_caps_set_simple (caps, "height", G_TYPE_INT, height, NULL);
+    gst_caps_set_simple (caps, "height", G_TYPE_INT, height ? height : 1, NULL);
 
   gst_caps_set_features (caps, 0, gst_caps_features_new_any ());
   g_object_set (self->capsfilter, "caps", caps, NULL);
@@ -99,6 +99,11 @@ chain (GstPad * pad, GESVideoScale * self, GstBuffer * buffer)
 
       set_dimension (self, (gint) round (meta->width),
           (gint) round (meta->height));
+
+      if (self->width == 0 || self->height == 0) {
+        meta->alpha = 0.0;
+      }
+
     } else {
       GST_OBJECT_UNLOCK (self);
     }
