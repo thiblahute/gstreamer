@@ -1,0 +1,43 @@
+meta,
+    handles-states=true,
+    ignore-eos=true,
+    monitor-all-pipelines=true,
+    args={
+        "nlecomposition name=compo ! glimagesink qos=false",
+    },
+    configs = {
+       "$(validateflow), pad=background_decodepoolsrc:src, buffers-checksum=as-id, logged-upstream-event-types={ seek }, ignored-event-types={ tag }, ignored-fields=\"stream-start={stream-id,group-id, stream}, stream-collection={collection}\"",
+       "$(validateflow), pad=compositor:src, buffers-checksum=as-id, ignored-event-types={ tag }, ignored-fields=\"stream-start={stream-id,group-id, stream}, stream-collection={collection}\"",
+       "$(validateflow), pad=appsink0:sink, buffers-checksum=as-id, ignored-event-types={ tag }, ignored-fields=\"stream-start={stream-id,group-id, stream}, stream-collection={collection}\"",
+    }
+
+set-vars,
+  total_duration=2000000000,
+  s1_inpoint=0,
+  s1_duration=2000000000,
+  s2_start=500000000,
+  s2_inpoint=0,
+  s2_duration=1000000000
+
+
+nle-add-child, object-name="compo", desc="nlesource name=s1 start=0 inpoint=0 duration=\"$(s1_duration)\" priority=110"
+nle-add-child, object-name="s1", desc="uridecodepoolsrc name=background_decodepoolsrc inpoint=\"$(s1_inpoint)\" duration=\"$(s1_duration)\" uri=\"testbin://video,pattern=blue,caps=[video/x-raw,format=ARGB]\""
+
+nle-add-child, object-name="compo", desc="nleoperation name=timeoverlay start=0 duration=\"$(s1_duration)\" priority=100"
+nle-add-child, object-name="timeoverlay", desc="timeoverlay font-desc=\"Sans, 50\" halignment=center valignment=center time-mode=stream-time"
+
+nle-add-child, object-name="compo", desc="nlesource name=s2 start=\"$(s2_start)\" duration=\"$(s2_duration)\" priority=120"
+nle-add-child, object-name="s2", desc="uridecodepoolsrc name=short inpoint=\"$(s2_inpoint)\" duration=\"$(s2_duration)\" uri=\"testbin://video,pattern=green,caps=[video/x-raw,format=ARGB,height=70,width=340]\""
+
+nle-add-child, object-name="compo", desc="nleoperation name=mixer start=0 duration=\"$(total_duration)\" priority=1"
+nle-add-child, object-name="mixer", desc="compositor name=compositor background=black"
+
+nle-add-child, object-name="compo", desc="nleoperation name=filter start=0 duration=\"$(total_duration)\" priority=0"
+nle-add-child, object-name="filter", desc="capsfilter caps=\"video/x-raw,format=ARGB,width=320,height=240\""
+
+play
+check-position, on-message=eos, expected-position=2.0
+
+stop
+
+

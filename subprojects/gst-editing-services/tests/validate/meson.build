@@ -17,6 +17,7 @@ tests = [
     'nle/simple_source_playback',
     'nle/simple_source_in_composition_playback',
     'nle/ensure_no_unnecessary_stack_init_seeks',
+    'nle/uridecodepoolsrc_new_stack_no_seek',
 
     'ges/glvideomixer_exposed_properties',
 ]
