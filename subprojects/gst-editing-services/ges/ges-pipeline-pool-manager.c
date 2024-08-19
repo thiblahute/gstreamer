@@ -222,6 +222,9 @@ ges_pipeline_pool_clear (GESPipelinePoolManager * self)
   }
   g_rec_mutex_unlock (&self->lock);
 
+  if (self->pool)
+    g_signal_handler_disconnect (self->pool, self->pipeline_removed_sigid);
+
   gst_object_unref (self->pool);
 }
 
@@ -310,6 +313,7 @@ ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
       gst_child_proxy_get_child_by_name (GST_CHILD_PROXY (uridecodepoolsrc),
       "pool");
   g_object_set (self->pool, "cleanup-timeout", 0, NULL);
-  g_signal_connect (self->pool, "prepared-pipeline-removed",
+  self->pipeline_removed_sigid =
+      g_signal_connect (self->pool, "prepared-pipeline-removed",
       G_CALLBACK (ges_pipeline_pool_manager_prepare_pipeline_removed), self);
 }
