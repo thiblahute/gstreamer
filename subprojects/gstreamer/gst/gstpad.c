@@ -5623,7 +5623,8 @@ gst_pad_push_event_unchecked (GstPad * pad, GstEvent * event,
   /* ERROR handling */
 flushed:
   {
-    GST_DEBUG_OBJECT (pad, "We're flushing");
+    GST_DEBUG_OBJECT (pad, "We're flushing, can push %s",
+        gst_event_type_get_name (GST_EVENT_TYPE (event)));
     gst_event_unref (event);
     return GST_FLOW_FLUSHING;
   }
@@ -6015,7 +6016,8 @@ flushing:
     if (need_unlock)
       GST_PAD_STREAM_UNLOCK (pad);
     GST_CAT_INFO_OBJECT (GST_CAT_EVENT, pad,
-        "Received event on flushing pad. Discarding");
+        "Received event %s on flushing pad. Discarding",
+        gst_event_type_get_name (GST_EVENT_TYPE (event)));
     gst_event_unref (event);
     return GST_FLOW_FLUSHING;
   }
