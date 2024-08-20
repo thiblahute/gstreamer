@@ -757,6 +757,38 @@ G_DEFINE_TYPE_WITH_PRIVATE (GstVideoAggregatorParallelConvertPad,
 #define PARALLEL_CONVERT_PAD_GET_PRIVATE(o) \
     gst_video_aggregator_parallel_convert_pad_get_instance_private (o)
 
+typedef struct {
+  GstPad *pad;
+  GstBuffer *outbuf;
+} CopyMetaData;
+
+static gboolean
+foreach_metadata (GstBuffer * inbuf, GstMeta ** meta, gpointer user_data)
+{
+  const GstMetaInfo *info = (*meta)->info;
+  CopyMetaData *data = user_data;
+
+  if (gst_meta_api_type_has_tag (info->api, _gst_meta_tag_memory)
+      || gst_meta_api_type_has_tag (info->api, _gst_meta_tag_memory_reference)) {
+    GST_LOG_OBJECT (data->pad, "removing memory specific metadata %s",
+        g_type_name (info->api));
+  } else {
+    GstMetaTransformCopy copy_data = { FALSE, 0, -1 };
+    /* simply copy then */
+    if (info->transform_func) {
+      GST_DEBUG_OBJECT (data->pad, "copy metadata %s", g_type_name (info->api));
+      info->transform_func (data->outbuf, *meta, inbuf,
+          _gst_meta_transform_copy, &copy_data);
+    } else {
+      GST_DEBUG_OBJECT (data->pad, "couldn't copy metadata %s",
+          g_type_name (info->api));
+    }
+
+  }
+
+  return TRUE;
+}
+
 static void
     gst_video_aggregator_parallel_convert_pad_prepare_frame_start
     (GstVideoAggregatorPad * vpad, GstVideoAggregator * vagg,
@@ -843,6 +875,10 @@ static void
     converted_size = converted_size > outsize ? converted_size : outsize;
     converted_buf = gst_buffer_new_allocate (NULL, converted_size, &params);
 
+    CopyMetaData data = { (GstPad*) vpad, converted_buf, };
+
+    gst_buffer_foreach_meta (pcp_priv->src_frame.buffer, foreach_metadata,
+        &data);
     if (!gst_video_frame_map (prepared_frame, &(pad->priv->conversion_info),
             converted_buf, GST_MAP_READWRITE)) {
       GST_WARNING_OBJECT (vagg, "Could not map converted frame");
@@ -2059,40 +2095,6 @@ prepare_frames_start (GstElement * agg, GstPad * pad, gpointer user_data)
   return TRUE;
 }
 
-typedef struct
-{
-  GstVideoAggregatorPad *pad;
-  GstBuffer *outbuf;
-} CopyMetaData;
-
-
-static gboolean
-foreach_metadata (GstBuffer * inbuf, GstMeta ** meta, gpointer user_data)
-{
-  const GstMetaInfo *info = (*meta)->info;
-  GstVideoAggregatorPad *pad = user_data;
-
-  if (gst_meta_api_type_has_tag (info->api, _gst_meta_tag_memory)
-      || gst_meta_api_type_has_tag (info->api, _gst_meta_tag_memory_reference)) {
-    GST_LOG_OBJECT (pad, "removing memory specific metadata %s",
-        g_type_name (info->api));
-  } else {
-    GstMetaTransformCopy copy_data = { FALSE, 0, -1 };
-    /* simply copy then */
-    if (info->transform_func) {
-      GST_DEBUG_OBJECT (pad, "copy metadata %s", g_type_name (info->api));
-      info->transform_func (pad->priv->prepared_frame.buffer, *meta, inbuf,
-          _gst_meta_transform_copy, &copy_data);
-    } else {
-      GST_DEBUG_OBJECT (pad, "couldn't copy metadata %s",
-          g_type_name (info->api));
-    }
-
-  }
-
-  return TRUE;
-}
-
 static gboolean
 prepare_frames_finish (GstElement * agg, GstPad * pad, gpointer user_data)
 {
@@ -2109,10 +2111,6 @@ prepare_frames_finish (GstElement * agg, GstPad * pad, gpointer user_data)
       gst_buffer_get_size (vpad->priv->buffer) == 0 &&
       GST_BUFFER_FLAG_IS_SET (vpad->priv->buffer, GST_BUFFER_FLAG_GAP)) {
     return TRUE;
-  }
-
-  if (vpad->priv->buffer && vpad->priv->prepared_frame.buffer) {
-    gst_buffer_foreach_meta (vpad->priv->buffer, foreach_metadata, vpad);
   }
 
   if (vaggpad_class->prepare_frame_start && vaggpad_class->prepare_frame_finish) {
