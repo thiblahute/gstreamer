@@ -2327,10 +2327,10 @@ stream_selection_scenario_stopping_cb (GstValidateScenario * scenario,
   }
 
   if (!((d->wanted_n_calls == 0 && d->n_calls > 0) || d->wanted_n_calls == -1)) {
-      gst_validate_report_action(GST_VALIDATE_REPORTER(scenario), d->action,
-                                 SCENARIO_ACTION_EXECUTION_ERROR,
-                                 "Wrong number of calls: wanted %d got: %d",
-                                 d->wanted_n_calls, d->n_calls);
+    gst_validate_report_action (GST_VALIDATE_REPORTER (scenario), d->action,
+        SCENARIO_ACTION_EXECUTION_ERROR,
+        "Wrong number of calls: wanted %d got: %d",
+        d->wanted_n_calls, d->n_calls);
   }
 
   gst_validate_action_set_done (gst_validate_action_ref (d->action));
