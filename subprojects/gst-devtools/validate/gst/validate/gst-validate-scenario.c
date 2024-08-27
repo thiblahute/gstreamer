@@ -7995,6 +7995,14 @@ register_action_types (void)
         .possible_variables = NULL,
         .def = "false"
       },
+      {
+        .name="features-rank",
+        .description=g_bytes_get_data (meta_features_rank_doc, NULL),
+        .mandatory = FALSE,
+        .types = "bool",
+        .possible_variables = NULL,
+        .def = "false"
+      },
       {NULL}
       }),
       "Scenario metadata.\n\nNOTE: it used to be called \"description\"",
