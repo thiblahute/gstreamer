@@ -1355,11 +1355,19 @@ done:
   g_clear_pointer (&match_info, g_match_info_free);
 }
 
+gboolean
+gst_validate_structure_file_field_is_metadata (GQuark field_id)
+{
+  setup_quarks ();
+
+  return field_id == filename_quark || field_id == debug_quark
+      || field_id == lineno_quark;
+}
+
 static gboolean
 _structure_set_variables (GQuark field_id, GValue * value, ReplaceData * data)
 {
-  if (field_id == filename_quark || field_id == debug_quark
-      || field_id == debug_quark)
+  if (gst_validate_structure_file_field_is_metadata (field_id))
     return TRUE;
 
   if (GST_VALUE_HOLDS_LIST (value)) {

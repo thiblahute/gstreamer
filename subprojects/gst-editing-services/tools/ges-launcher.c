@@ -33,6 +33,10 @@
 #include "utils.h"
 #include "ges-launcher-kb.h"
 
+#ifdef HAVE_GST_VALIDATE
+#include <gst/validate/validate.h>
+#endif
+
 typedef enum
 {
   GST_PLAY_TRICK_MODE_NONE = 0,
@@ -320,6 +324,19 @@ _parse_track_type (const gchar * option_name, const gchar * value,
   opts->track_types = (GESTrackType) flags;
   return TRUE;
 }
+
+
+#ifdef HAVE_GST_VALIDATE
+static gboolean
+_parse_test_file (const gchar * option_name, const gchar * value,
+    GESLauncherParsedOptions * opts, GError ** error)
+{
+  opts->testfile = g_strdup (value);
+  gst_validate_init_debug ();
+  gst_validate_setup_test_file (opts->testfile, FALSE);
+  return TRUE;
+}
+#endif
 
 static gboolean
 _set_track_restriction_caps (GESTrack * track, const gchar * caps_str)
@@ -1449,7 +1466,7 @@ ges_launcher_parse_options (GESLauncher * self,
           "Specify the track restriction caps of the audio track.",
     },
 #ifdef HAVE_GST_VALIDATE
-    {"set-test-file", 0, 0, G_OPTION_ARG_STRING, &opts->testfile,
+    {"set-test-file", 0, 0, G_OPTION_ARG_CALLBACK, &_parse_test_file,
           "ges-launch-1.0 exposes gst-validate functionalities, such as test files and scenarios."
           " Scenarios describe actions to execute, such as seeks or setting of "
           "properties. "
