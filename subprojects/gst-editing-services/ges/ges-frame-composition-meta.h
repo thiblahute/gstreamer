@@ -71,6 +71,8 @@ struct _GESFrameCompositionMeta {
 #else
   gint operator;
 #endif
+
+  GstStructure *extra_properties;
 };
 
 GES_API

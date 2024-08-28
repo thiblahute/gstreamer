@@ -426,6 +426,8 @@ G_GNUC_INTERNAL gint element_end_compare                  (GESTimelineElement * 
                                                            GESTimelineElement * b);
 G_GNUC_INTERNAL GstElementFactory *
 ges_get_compositor_factory                                (void);
+G_GNUC_INTERNAL GstPad *
+ges_compositor_pad_new                                    (void);
 G_GNUC_INTERNAL gboolean
 ges_use_auto_converters                                   (void);
 G_GNUC_INTERNAL GstElementFactory *
@@ -444,8 +446,11 @@ G_GNUC_INTERNAL gboolean
 ges_util_structure_get_clocktime (GstStructure *structure, const gchar *name,
                                   GstClockTime *val, GESFrameNumber *frames);
 
-G_GNUC_INTERNAL gboolean /* From ges-xml-formatter.c */
+G_GNUC_INTERNAL gboolean
 ges_util_can_serialize_spec (GParamSpec * spec);
+
+G_GNUC_INTERNAL GstStructure*
+ges_util_object_properties_to_structure (GObject *object, const  gchar **ignored_fields);
 
 /****************************************************
  *              GESContainer                        *
@@ -508,6 +513,11 @@ ges_track_element_get_creator_asset                    (GESTrackElement * self);
 
 G_GNUC_INTERNAL void
 ges_track_element_set_has_internal_source_is_forbidden (GESTrackElement * element);
+
+G_GNUC_INTERNAL void ges_track_element_add_all_child_properties (GESTrackElement * self,
+                                                                 GObject *child,
+                                                                 const gchar ** blacklist,
+                                                                 const gchar ** whitelist);
 
 G_GNUC_INTERNAL GstElement* ges_source_create_topbin  (GESSource *source,
                                                        const gchar* bin_name,
