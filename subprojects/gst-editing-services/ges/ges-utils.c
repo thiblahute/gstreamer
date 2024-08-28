@@ -37,6 +37,7 @@
 #include <gst/base/base.h>
 
 static gboolean use_autoconverters = FALSE;
+static GstElement *compositor_pad_creator = NULL;
 static GstElementFactory *compositor_factory = NULL;
 static GstElementFactory *videoconvert_factory = NULL;
 static GstElementFactory *videoconvert_scale_factory = NULL;
@@ -135,13 +136,61 @@ ges_pspec_hash (gconstpointer key_spec)
   return h;
 }
 
+static GstElement *
+get_internal_mixer (GstElementFactory * factory)
+{
+  GstElement *mixer = NULL, *elem = NULL;
+
+  if (g_type_is_a (gst_element_factory_get_element_type (factory),
+          GST_TYPE_AGGREGATOR)) {
+    return gst_element_factory_create (factory, NULL);
+  }
+
+  if (!g_type_is_a (gst_element_factory_get_element_type (factory),
+          GST_TYPE_BIN)) {
+    goto done;
+  }
+
+  GParamSpec *pspec;
+
+  elem = gst_element_factory_create (factory, NULL);
+
+  /* Checks whether this element has mixer property and the internal element
+   * is aggregator subclass */
+  if (!elem) {
+    goto done;
+  }
+
+  pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (elem), "mixer");
+  if (!pspec) {
+    goto done;
+  }
+
+  if (!g_type_is_a (pspec->value_type, GST_TYPE_ELEMENT)) {
+    goto done;
+  }
+
+  g_object_get (elem, "mixer", &mixer, NULL);
+  if (!mixer) {
+    goto done;
+  }
+
+  if (!GST_IS_AGGREGATOR (mixer)) {
+    gst_clear_object (&mixer);
+  }
+
+done:
+  gst_clear_object (&elem);
+
+  return mixer;
+}
+
 static gboolean
 find_compositor (GstPluginFeature * feature, gpointer udata)
 {
   gboolean res = FALSE;
   const gchar *klass;
   GstPluginFeature *loaded_feature = NULL;
-  GstElement *elem = NULL;
 
   if (G_UNLIKELY (!GST_IS_ELEMENT_FACTORY (feature)))
     return FALSE;
@@ -154,92 +203,58 @@ find_compositor (GstPluginFeature * feature, gpointer udata)
 
   loaded_feature = gst_plugin_feature_load (feature);
   if (!loaded_feature) {
-    GST_ERROR ("Could not load feature: %" GST_PTR_FORMAT, feature);
     return FALSE;
   }
 
   /* glvideomixer consists of bin with internal mixer element */
-  if (g_type_is_a (gst_element_factory_get_element_type (GST_ELEMENT_FACTORY
-              (loaded_feature)), GST_TYPE_BIN)) {
+  GstElement *mixer = get_internal_mixer (GST_ELEMENT_FACTORY_CAST (feature));
+
+  if (!mixer) {
+    goto done;
+  }
+  res = TRUE;
+
+  gst_object_unref (mixer);
+  const gchar *needed_props[] = { "width", "height", "xpos", "ypos" };
+  GObjectClass *objklass =
+      g_type_class_ref (gst_element_factory_get_element_type
+      (GST_ELEMENT_FACTORY (loaded_feature)));
+  GstPadTemplate *templ =
+      gst_element_class_get_pad_template (GST_ELEMENT_CLASS (objklass),
+      "sink_%u");
+
+  g_type_class_unref (objklass);
+  if (!templ) {
+    GST_INFO_OBJECT (loaded_feature, "No sink template found, ignoring");
+    res = FALSE;
+    goto done;
+  }
+
+  GType pad_type;
+  g_object_get (templ, "gtype", &pad_type, NULL);
+  objklass = g_type_class_ref (pad_type);
+  for (gint i = 0; i < G_N_ELEMENTS (needed_props); i++) {
     GParamSpec *pspec;
-    GstElement *mixer = NULL;
 
-    elem =
-        gst_element_factory_create (GST_ELEMENT_FACTORY_CAST (loaded_feature),
-        NULL);
-
-    /* Checks whether this element has mixer property and the internal element
-     * is aggregator subclass */
-    if (!elem) {
-      GST_ERROR ("Could not create element from factory %" GST_PTR_FORMAT,
-          feature);
-      goto done;
-    }
-
-    pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (elem), "mixer");
-    if (!pspec)
-      goto done;
-
-    if (!g_type_is_a (pspec->value_type, GST_TYPE_ELEMENT))
-      goto done;
-
-    g_object_get (elem, "mixer", &mixer, NULL);
-    if (!mixer)
-      goto done;
-
-    if (GST_IS_AGGREGATOR (mixer))
-      res = TRUE;
-
-    gst_object_unref (mixer);
-  } else {
-    res =
-        g_type_is_a (gst_element_factory_get_element_type (GST_ELEMENT_FACTORY
-            (loaded_feature)), GST_TYPE_AGGREGATOR);
-  }
-
-  if (res) {
-    const gchar *needed_props[] = { "width", "height", "xpos", "ypos" };
-    GObjectClass *klass =
-        g_type_class_ref (gst_element_factory_get_element_type
-        (GST_ELEMENT_FACTORY (loaded_feature)));
-    GstPadTemplate *templ =
-        gst_element_class_get_pad_template (GST_ELEMENT_CLASS (klass),
-        "sink_%u");
-
-    g_type_class_unref (klass);
-    if (!templ) {
-      GST_INFO_OBJECT (loaded_feature, "No sink template found, ignoring");
+    if (!(pspec = g_object_class_find_property (objklass, needed_props[i]))) {
+      GST_INFO_OBJECT (loaded_feature, "No property %s found, ignoring",
+          needed_props[i]);
       res = FALSE;
-      goto done;
+      break;
     }
 
-    GType pad_type;
-    g_object_get (templ, "gtype", &pad_type, NULL);
-    klass = g_type_class_ref (pad_type);
-    for (gint i = 0; i < G_N_ELEMENTS (needed_props); i++) {
-      GParamSpec *pspec;
-
-      if (!(pspec = g_object_class_find_property (klass, needed_props[i]))) {
-        GST_INFO_OBJECT (loaded_feature, "No property %s found, ignoring",
-            needed_props[i]);
-        res = FALSE;
-        break;
-      }
-
-      if (pspec->value_type != G_TYPE_INT && pspec->value_type != G_TYPE_FLOAT
-          && pspec->value_type != G_TYPE_DOUBLE) {
-        GST_INFO_OBJECT (loaded_feature,
-            "Property %s is not of type int or float, or double, ignoring",
-            needed_props[i]);
-        res = FALSE;
-        break;
-      }
+    if (pspec->value_type != G_TYPE_INT && pspec->value_type != G_TYPE_FLOAT
+        && pspec->value_type != G_TYPE_DOUBLE) {
+      GST_INFO_OBJECT (loaded_feature,
+          "Property %s is not of type int or float, or double, ignoring",
+          needed_props[i]);
+      res = FALSE;
+      break;
     }
-    g_type_class_unref (klass);
   }
+  g_type_class_unref (objklass);
 
 done:
-  gst_clear_object (&elem);
   gst_object_unref (loaded_feature);
   return res;
 }
@@ -304,6 +319,96 @@ ges_util_structure_get_clocktime (GstStructure * structure, const gchar * name,
   return found;
 }
 
+static inline void
+_init_value_from_spec_for_serialization (GValue * value, GParamSpec * spec)
+{
+
+  if (g_type_is_a (spec->value_type, G_TYPE_ENUM) ||
+      g_type_is_a (spec->value_type, G_TYPE_FLAGS))
+    g_value_init (value, G_TYPE_INT);
+  else
+    g_value_init (value, spec->value_type);
+}
+
+GstStructure *
+ges_util_object_properties_to_structure (GObject * object,
+    const gchar ** ignored_fields)
+{
+  guint n_props, j;
+  GParamSpec *spec, **pspecs;
+  GObjectClass *class = G_OBJECT_GET_CLASS (object);
+  GstStructure *structure = gst_structure_new_empty ("properties");
+
+  pspecs = g_object_class_list_properties (class, &n_props);
+  for (j = 0; j < n_props; j++) {
+    GValue val = { 0 };
+
+
+    spec = pspecs[j];
+    if (!ges_util_can_serialize_spec (spec))
+      continue;
+
+    if (ignored_fields) {
+      if (g_strv_contains ((const gchar * const *) ignored_fields, spec->name))
+        continue;
+    }
+
+    _init_value_from_spec_for_serialization (&val, spec);
+    g_object_get_property (object, spec->name, &val);
+
+    const GValue *default_val = g_param_spec_get_default_value (spec);
+    if (g_type_is_a (spec->value_type, G_TYPE_ENUM) ||
+        g_type_is_a (spec->value_type, G_TYPE_FLAGS)) {
+      gint default_int = g_type_is_a (spec->value_type,
+          G_TYPE_ENUM) ? g_value_get_enum (default_val) :
+          g_value_get_flags (default_val);
+      if (g_value_get_int (&val) == default_int) {
+        GST_INFO ("Ignoring %s as it is using the default value", spec->name);
+        goto next;
+      }
+
+    } else {
+      if (gst_value_compare (default_val, &val) == GST_VALUE_EQUAL) {
+        GST_INFO ("Ignoring %s as it is using the default value", spec->name);
+        goto next;
+      }
+    }
+
+    if (spec->value_type == GST_TYPE_CAPS) {
+      gchar *caps_str;
+      const GstCaps *caps = gst_value_get_caps (&val);
+
+      caps_str = gst_caps_to_string (caps);
+      gst_structure_set (structure, spec->name, G_TYPE_STRING, caps_str, NULL);
+      g_free (caps_str);
+      goto next;
+    }
+
+    gst_structure_set_value (structure, spec->name, &val);
+
+  next:
+    g_value_unset (&val);
+  }
+  g_free (pspecs);
+
+
+  return structure;
+}
+
+GstPad *
+ges_compositor_pad_new (void)
+{
+  ges_get_compositor_factory ();
+
+  if (!compositor_pad_creator)
+    return NULL;
+
+  GstPad *res =
+      gst_element_request_pad_simple (compositor_pad_creator, "sink_%u");
+
+  return res;
+}
+
 GstElementFactory *
 ges_get_compositor_factory (void)
 {
@@ -320,6 +425,13 @@ ges_get_compositor_factory (void)
   g_assert (result);
 
   compositor_factory = result->data;
+
+  GObjectClass *klass =
+      g_type_class_ref (gst_element_factory_get_element_type
+      (GST_ELEMENT_FACTORY (compositor_factory)));
+  compositor_pad_creator = get_internal_mixer (compositor_factory);
+
+  g_type_class_unref (klass);
   gst_plugin_feature_list_free (result);
 
   return compositor_factory;

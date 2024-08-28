@@ -26,6 +26,26 @@
 
 G_BEGIN_DECLS
 
+static const gchar *gst_frame_positioner_ignore_propxied_properties_names[] = {
+  "name",
+  "alpha",
+  "posx",
+  "fposx",
+  "posy",
+  "fposy",
+  "width",
+  "fwidth",
+  "height",
+  "fheight",
+  "zorder",
+  "operator",
+  "max-last-buffer-repeat",
+  "direction",
+  "emit-signals",
+  "template",
+  NULL,
+};
+
 #define GST_TYPE_FRAME_POSITIONNER   (gst_frame_positioner_get_type())
 #define GST_FRAME_POSITIONNER(obj)   (G_TYPE_CHECK_INSTANCE_CAST((obj),GST_TYPE_FRAME_POSITIONNER,GstFramePositioner))
 #define GST_FRAME_POSITIONNER_CLASS(klass)   (G_TYPE_CHECK_CLASS_CAST((klass),GST_TYPE_FRAME_POSITIONNER,GstFramePositionerClass))
@@ -38,6 +58,8 @@ typedef struct _GstFramePositionerClass GstFramePositionerClass;
 struct _GstFramePositioner
 {
   GstBaseTransform base_framepositioner;
+
+  GstPad *proxied_pad;
 
   GstElement *capsfilter;
 

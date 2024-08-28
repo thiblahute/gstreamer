@@ -1,0 +1,8 @@
+event stream-start: GstEventStreamStart, flags=(GstStreamFlags)GST_STREAM_FLAG_NONE;
+event caps: video/x-raw, chroma-site=(string)jpeg, colorimetry=(string)bt601, format=(string)I420, framerate=(fraction)1/1, height=(int)380, pixel-aspect-ratio=(fraction)1/1, width=(int)640;
+event segment: format=TIME, start=0:00:00.000000000, offset=0:00:00.000000000, stop=0:00:02.000000000, flags=0x01, time=0:00:00.000000000, base=0:00:00.000000000, position=none
+buffer: checksum=a60f1ae0686711d3c19ec60704b8c67031e94027, pts=0:00:00.000000000, dur=0:00:01.000000000, flags=tag-memory, meta=GstVideoMeta, GstGLSyncMeta, GstGLSyncMeta
+buffer: checksum=a60f1ae0686711d3c19ec60704b8c67031e94027, pts=0:00:01.000000000, dur=0:00:01.000000000, flags=tag-memory, meta=GstVideoMeta, GstGLSyncMeta, GstGLSyncMeta
+event segment: format=TIME, start=0:00:02.000000000, offset=0:00:00.000000000, stop=0:00:02.000000001, flags=0x01, time=0:00:02.000000000, base=0:00:02.000000000, position=none
+buffer: checksum=ac22ad4a56ab6a17adb5b4f3b5a9d2ea0c031a1b, pts=0:00:02.000000000, dur=0:00:00.000000001, flags=tag-memory, meta=GstVideoMeta, GstGLSyncMeta, GstGLSyncMeta
+event eos: (no structure)
