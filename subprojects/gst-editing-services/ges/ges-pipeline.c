@@ -55,6 +55,9 @@ GST_DEBUG_CATEGORY_STATIC (ges_pipeline_debug);
 #undef GST_CAT_DEFAULT
 #define GST_CAT_DEFAULT ges_pipeline_debug
 
+#define DEFAULT_VIDEO_TRACK_MAX_SIZE_BUFFERS  0
+#define DEFAULT_VIDEO_TRACK_MAX_SIZE_BYTES    0
+#define DEFAULT_VIDEO_TRACK_MAX_SIZE_TIME     3 * GST_SECOND
 #define DEFAULT_TIMELINE_MODE  GES_PIPELINE_MODE_PREVIEW
 #define IN_RENDERING_MODE(timeline) ((timeline->priv->mode) & (GES_PIPELINE_MODE_RENDER | GES_PIPELINE_MODE_SMART_RENDER))
 #define CHECK_THREAD(pipeline) g_assert(pipeline->priv->valid_thread == g_thread_self())
@@ -93,12 +96,19 @@ struct _GESPipelinePrivate
 
   GList *contexts;
 
+  guint max_video_queue_bytes;
+  guint max_video_queue_buffers;
+  GstClockTime max_video_queue_time;
+
 };
 
 enum
 {
   PROP_0,
   PROP_AUDIO_SINK,
+  PROP_VIDEO_QUEUE_MAX_SIZE_BYTES,
+  PROP_VIDEO_QUEUE_MAX_SIZE_BUFFERS,
+  PROP_VIDEO_QUEUE_MAX_SIZE_TIME,
   PROP_VIDEO_SINK,
   PROP_TIMELINE,
   PROP_MODE,
@@ -174,6 +184,30 @@ G_DEFINE_TYPE_WITH_CODE (GESPipeline, ges_pipeline,
     G_IMPLEMENT_INTERFACE (GST_TYPE_VIDEO_OVERLAY, video_overlay_init));
 
 static void
+ges_pipeline_set_video_queue_sizes (GESPipeline * self)
+{
+  GstElement *queue = gst_bin_get_by_name (GST_BIN (self->priv->playsink),
+      "vqueue");
+
+  if (queue) {
+    GST_OBJECT_LOCK (self);
+    GstClockTime max_size_time = self->priv->max_video_queue_time;
+    guint max_size_buffers = self->priv->max_video_queue_buffers;
+    guint max_size_bytes = self->priv->max_video_queue_bytes;
+    GST_OBJECT_UNLOCK (self);
+
+    GST_LOG_OBJECT (self, "Setting playsink video queue max-size-timeto"
+        " %" GST_TIMEP_FORMAT
+        " and max-size-bytes to %d and max-size-buffers to %d", &max_size_time,
+        max_size_bytes, max_size_buffers);
+
+    g_object_set (G_OBJECT (queue), "max-size-buffers", max_size_buffers,
+        "max-size-bytes", max_size_bytes, "max-size-time", max_size_time, NULL);
+    gst_object_unref (queue);
+  }
+}
+
+static void
 ges_pipeline_get_property (GObject * object, guint property_id,
     GValue * value, GParamSpec * pspec)
 {
@@ -201,6 +235,27 @@ ges_pipeline_get_property (GObject * object, guint property_id,
     case PROP_VIDEO_FILTER:
       g_object_get_property (G_OBJECT (self->priv->playsink), "video-filter",
           value);
+      break;
+    case PROP_VIDEO_QUEUE_MAX_SIZE_BYTES:
+      GST_OBJECT_LOCK (self);
+      g_value_set_uint (value, self->priv->max_video_queue_bytes);
+      GST_OBJECT_UNLOCK (self);
+
+      ges_pipeline_set_video_queue_sizes (self);
+      break;
+    case PROP_VIDEO_QUEUE_MAX_SIZE_BUFFERS:
+      GST_OBJECT_LOCK (self);
+      g_value_set_uint (value, self->priv->max_video_queue_buffers);
+      GST_OBJECT_UNLOCK (self);
+
+      ges_pipeline_set_video_queue_sizes (self);
+      break;
+    case PROP_VIDEO_QUEUE_MAX_SIZE_TIME:
+      GST_OBJECT_LOCK (self);
+      g_value_set_uint64 (value, self->priv->max_video_queue_time);
+      GST_OBJECT_UNLOCK (self);
+
+      ges_pipeline_set_video_queue_sizes (self);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -234,6 +289,21 @@ ges_pipeline_set_property (GObject * object, guint property_id,
     case PROP_VIDEO_FILTER:
       g_object_set (self->priv->playsink, "video-filter",
           GST_ELEMENT (g_value_get_object (value)), NULL);
+      break;
+    case PROP_VIDEO_QUEUE_MAX_SIZE_BYTES:
+      GST_OBJECT_LOCK (self);
+      self->priv->max_video_queue_bytes = g_value_get_uint (value);
+      GST_OBJECT_UNLOCK (self);
+      break;
+    case PROP_VIDEO_QUEUE_MAX_SIZE_BUFFERS:
+      GST_OBJECT_LOCK (self);
+      self->priv->max_video_queue_buffers = g_value_get_uint (value);
+      GST_OBJECT_UNLOCK (self);
+      break;
+    case PROP_VIDEO_QUEUE_MAX_SIZE_TIME:
+      GST_OBJECT_LOCK (self);
+      self->priv->max_video_queue_time = g_value_get_uint64 (value);
+      GST_OBJECT_UNLOCK (self);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -481,13 +551,52 @@ ges_pipeline_class_init (GESPipelineClass * klass)
       "the Video filter(s) to apply, if possible", GST_TYPE_ELEMENT,
       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
+  /**
+   * GESPipeline:video-queue-max-size-bytes:
+   *
+   * The size in bytes of the queue to be used after video tracks in preview,
+   * see #queue:max-size-bytes.
+   *
+   * Since: 1.26
+   */
+  properties[PROP_VIDEO_QUEUE_MAX_SIZE_BYTES] =
+      g_param_spec_uint ("video-queue-max-size-bytes", "Max. size (kB)",
+      "Max. amount of data in the queue after the video track (bytes, 0=disable)",
+      0, G_MAXUINT, DEFAULT_VIDEO_TRACK_MAX_SIZE_BYTES,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
+
+  /**
+   * GESPipeline:video-queue-max-size-buffers:
+   *
+   * The maximum number of buffers to be used in the queue after video tracks in preview,
+   * see #queue:max-size-buffers.
+   *
+   * Since: 1.26
+   */
+  properties[PROP_VIDEO_QUEUE_MAX_SIZE_BUFFERS] =
+      g_param_spec_uint ("video-queue-max-size-buffers", "Max. size (buffers)",
+      "Max. number of buffers in the queue after the video track (0=disable)",
+      0, G_MAXUINT, DEFAULT_VIDEO_TRACK_MAX_SIZE_BUFFERS,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
+
+  /**
+   * GESPipeline:video-queue-max-size-time:
+   *
+   * The size of the queue in time to be used after video tracks in preview,
+   * see #queue:max-size-time.
+   *
+   * Since: 1.26
+   */
+  properties[PROP_VIDEO_QUEUE_MAX_SIZE_TIME] =
+      g_param_spec_uint64 ("video-queue-max-size-time", "Max. size (ns)",
+      "Max. amount of data in the queue after the video track (in ns, 0=disable)",
+      0, G_MAXUINT64, DEFAULT_VIDEO_TRACK_MAX_SIZE_TIME,
+      G_PARAM_READWRITE | GST_PARAM_MUTABLE_PLAYING | G_PARAM_STATIC_STRINGS);
+
   g_object_class_install_properties (object_class, PROP_LAST, properties);
 
   element_class->change_state = GST_DEBUG_FUNCPTR (ges_pipeline_change_state);
   bin_klass->handle_message = GST_DEBUG_FUNCPTR (ges_pipeline_handle_message);
-
-  /* TODO : Add state_change handlers
-   * Don't change state if we don't have a timeline */
 }
 
 static void
@@ -496,6 +605,9 @@ ges_pipeline_init (GESPipeline * self)
   GST_INFO_OBJECT (self, "Creating new 'playsink'");
   self->priv = ges_pipeline_get_instance_private (self);
   self->priv->valid_thread = g_thread_self ();
+  self->priv->max_video_queue_bytes = DEFAULT_VIDEO_TRACK_MAX_SIZE_BYTES;
+  self->priv->max_video_queue_buffers = DEFAULT_VIDEO_TRACK_MAX_SIZE_BUFFERS;
+  self->priv->max_video_queue_time = DEFAULT_VIDEO_TRACK_MAX_SIZE_TIME;
 
   self->priv->playsink =
       gst_element_factory_make ("playsink", "internal-sinks");
@@ -739,17 +851,7 @@ ges_pipeline_change_state (GstElement * element, GstStateChange transition)
     }
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
     {
-      GstElement *queue = gst_bin_get_by_name (GST_BIN (self->priv->playsink),
-          "vqueue");
-
-      if (queue) {
-        GST_INFO_OBJECT (self, "Setting playsink video queue max-size-time to"
-            " 3 seconds.");
-        g_object_set (G_OBJECT (queue), "max-size-buffers", 0,
-            "max-size-bytes", 0, "max-size-time", (gint64) 3 * GST_SECOND,
-            NULL);
-        gst_object_unref (queue);
-      }
+      ges_pipeline_set_video_queue_sizes (self);
       break;
     }
     default:
