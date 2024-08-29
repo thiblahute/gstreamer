@@ -129,8 +129,13 @@ ges_discoverer_manager_finalize (GObject * object)
   g_mutex_lock (&self->cleanup_thread_mutex);
   self->finalized = TRUE;
   g_cond_signal (&self->cleanup_thread_cond);
-  g_mutex_unlock (&self->cleanup_thread_mutex);
-  g_thread_join (self->cleanup_thread);
+  if (self->cleanup_thread) {
+    g_mutex_unlock (&self->cleanup_thread_mutex);
+
+    g_thread_join (self->cleanup_thread);
+  } else {
+    g_mutex_unlock (&self->cleanup_thread_mutex);
+  }
 
   g_rec_mutex_lock (&self->lock);
   if (self->cleanup_thread) {
@@ -266,8 +271,10 @@ ges_discoverer_manager_cleanup_discoverers (GESDiscovererManager * self)
     }
 
     gboolean not_discovering = g_hash_table_size (self->discoverers) == 0;
-    g_thread_unref (self->cleanup_thread);
-    self->cleanup_thread = NULL;
+    if (self->cleanup_thread) {
+      g_thread_unref (self->cleanup_thread);
+      self->cleanup_thread = NULL;
+    }
     g_rec_mutex_unlock (&self->lock);
 
     if (not_discovering) {
