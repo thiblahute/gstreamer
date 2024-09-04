@@ -311,10 +311,12 @@ ges_pipeline_pool_clear (GESPipelinePoolManager * self)
     self->pooled_sources = NULL;
   }
 
-  g_signal_handlers_disconnect_by_func (self->pool,
-      G_CALLBACK (ges_pipeline_pool_manager_prepare_pipeline_removed), self);
-  g_signal_handlers_disconnect_by_func (self->pool,
-      G_CALLBACK (new_pipeline_cb), NULL);
+  if (self->pool) {
+    g_signal_handlers_disconnect_by_func (self->pool,
+        G_CALLBACK (ges_pipeline_pool_manager_prepare_pipeline_removed), self);
+    g_signal_handlers_disconnect_by_func (self->pool,
+        G_CALLBACK (new_pipeline_cb), NULL);
+  }
 
   gst_clear_object (&self->pool);
   g_rec_mutex_unlock (&self->lock);
