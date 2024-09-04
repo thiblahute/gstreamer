@@ -3946,7 +3946,7 @@ cleanup:
  * @msg: A pointer to a #GstMessage
  *
  * (Re)Configure the @output for the associated slot active stream.
- * 
+ *
  * Returns: #TRUE if the output was properly (re)configured. #FALSE if it
  * failed, in which case the stream shouldn't be used and the @msg might contain
  * a message to be posted on the bus.
@@ -4381,8 +4381,8 @@ handle_select_streams (GstDecodebin3 * dbin, GstEvent * event)
   collection->seqnum = seqnum;
   collection->posted_streams_selected_msg = FALSE;
 
-  /* If the collection is the current output one, handle the switch. */
-  if (collection == dbin->output_collection)
+  /* If the collection is the current output one, handle the switch */
+  if (collection == dbin->output_collection && collection->all_streams_present)
     handle_stream_switch (dbin);
 
 beach:
