@@ -3842,6 +3842,21 @@ db_output_stream_setup_decoder (DecodebinOutputStream * output,
       goto try_next;
     }
 
+    if (dbin->caps && !gst_caps_is_any (dbin->caps)) {
+      GstCaps *caps = gst_pad_query_caps (output->decoder_src, dbin->caps);
+
+      if (gst_caps_is_empty (caps)) {
+        GST_DEBUG_OBJECT (dbin,
+            "Decoder '%s' did not accept the caps, trying the next type",
+            GST_ELEMENT_NAME (output->decoder));
+        gst_caps_unref (caps);
+        goto try_next;
+      }
+
+      gst_caps_unref (caps);
+    }
+
+
     if (gst_element_set_state (output->decoder, GST_STATE_PAUSED) ==
         GST_STATE_CHANGE_FAILURE) {
       GST_WARNING_OBJECT (dbin, "Decoder '%s' failed to reach PAUSED state",
