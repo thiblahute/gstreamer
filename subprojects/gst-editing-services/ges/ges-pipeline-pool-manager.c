@@ -62,20 +62,22 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     return;
   }
 
+
   g_rec_mutex_lock (&self->lock);
   if (!self->pooled_sources) {
     g_rec_mutex_unlock (&self->lock);
     return;
   }
 
-  GST_LOG_OBJECT (self->timeline, "Preparing pipelines around %" GST_TIME_FORMAT
-      " - %" GST_TIME_FORMAT " window: [%" GST_TIMEP_FORMAT " - %"
-      GST_TIMEP_FORMAT "]" " in %d soures", GST_TIME_ARGS (stack_start),
-      GST_TIME_ARGS (stack_end), &window_start, &window_stop,
-      self->pooled_sources->len);
 
-  if (self->rendering) {
-    GST_LOG_OBJECT (self->timeline, "We are rendering: %d", self->rendering);
+  GstState state, pending;
+  gboolean playing = (
+      (gst_element_get_state (GST_ELEMENT (track), &state, &pending,
+              0) == GST_STATE_CHANGE_SUCCESS) && state == GST_STATE_PLAYING
+      && pending == GST_STATE_VOID_PENDING);
+  if (self->rendering || playing) {
+    GST_LOG_OBJECT (self->timeline, "We are %s not loading clips before",
+        playing ? "playing" : "rendering");
     window_start = stack_start;
     max_preloaded_sources = max_preloaded_sources / 2;
   } else {
