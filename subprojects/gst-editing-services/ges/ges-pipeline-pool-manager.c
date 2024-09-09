@@ -222,12 +222,12 @@ ges_pipeline_pool_clear (GESPipelinePoolManager * self)
     self->prepared_sources = NULL;
     self->pooled_sources = NULL;
   }
-  g_rec_mutex_unlock (&self->lock);
-
-  if (self->pool)
+  if (self->pool) {
     g_signal_handler_disconnect (self->pool, self->pipeline_removed_sigid);
 
-  gst_object_unref (self->pool);
+    gst_object_unref (self->pool);
+  }
+  g_rec_mutex_unlock (&self->lock);
 }
 
 void
