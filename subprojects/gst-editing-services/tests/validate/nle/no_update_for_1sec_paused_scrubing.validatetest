@@ -1,0 +1,42 @@
+meta,
+    handles-states=true,
+    ignore-eos=true,
+    args={
+        "nlecomposition name=compo ! queue name=q ! $(videosink)",
+    },
+    configs = {
+       "$(validateflow), pad=q:sink, buffers-checksum=as-id, ignored-event-types={ tag }, ignored-fields=\"stream-start={stream-id,group-id, stream}, stream-collection={collection}\"",
+    }
+
+
+nle-add-child, object-name="compo", desc="nlesource name=s inpoint=0 duration=200000000"
+nle-add-child, object-name="s", desc="videotestsrc pattern=blue ! capsfilter caps=video/x-raw,format=RGB,with=50,height=50"
+
+nle-add-child, object-name="compo", desc="nlesource name=s1 start=200000000 duration=200000000"
+nle-add-child, object-name="s1", desc="videotestsrc pattern=green ! capsfilter caps=video/x-raw,format=RGB,with=50,height=50"
+
+pause
+
+# Let the whole composition be queued
+wait, target-element-name=q, property-name="current-level-buffers", property-value=11
+
+# Avoid race condition where scrubing threshold is reached between scrubbing
+# seek (could happen in tests under high load)
+set-properties, compo::duration-between-seeks-to-consider-scrubbing=100000000000
+foreach, i=[0, 5],
+    actions={
+      [seek, flags=accurate+flush, start=0.1],
+      [checkpoint, text="seek $(i)/4"],
+      # Ensure the whole first stack is queued (we are sure the rest is not
+      # thanks to the validate flow checks)
+      [wait, target-element-name=q, property-name="current-level-buffers", property-value=2],
+    }
+
+# Make sure the composition is updated after the timeout is reached
+# after we stopped scrubbing.
+set-properties, compo::duration-between-seeks-to-consider-scrubbing=1000000000
+checkpoint, text="-> Last seek (stop scrubbing)"
+seek, flags=accurate+flush, start=0.1
+wait, target-element-name=q, property-name="current-level-buffers", property-value=8
+stop
+
