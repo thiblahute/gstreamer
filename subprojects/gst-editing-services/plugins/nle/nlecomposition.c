@@ -51,10 +51,18 @@ enum
   PROP_0,
   PROP_ID,
   PROP_DROP_TAGS,
+  PROP_DURATION_BETWEEN_SEEKS_TO_CONSIDER_SCRUBBING,
   PROP_LAST,
 };
 
+typedef enum
+{
+  NLE_COMPOSITION_ACTION_NONE = 0,
+  NLE_COMPOSITION_DROP_IF_NEW = 0,
+} ActionFlags;
+
 #define DEFAULT_DROP_TAGS TRUE
+#define DEFAULT_DURATION_BETWEEN_SEEKS_TO_CONSIDER_SCRUBBING (1 * GST_SECOND)
 
 /* Properties from NleObject */
 enum
@@ -104,6 +112,12 @@ typedef struct
 
   NleUpdateStackReason reason;
 } UpdateCompositionData;
+
+typedef struct
+{
+  GstClockTime timeout;
+  gint64 end_time;
+} UpdateAfterTimeoutData;
 
 typedef struct _Action
 {
@@ -211,12 +225,14 @@ struct _NleCompositionPrivate
 
   guint seek_seqnum;
 
-  /* When seeking in PAUSED we should avoid updating stack when current one is EOS
-   * as it is more likely that the user will keep seeking around than actually
-   * needing to playback that next stack */
+  /* When seeking in PAUSED avoid updating stack when current one is EOS if we
+   * detect that the user is "scrubing"
+   */
   GMutex seek_in_paused_lock;   /* { protects following fields */
   gboolean got_buffer_for_stack;
-  gboolean seeking_in_paused;
+  gboolean scrub_seeking_in_pause;
+  GstClockTime last_seek_in_pause;
+  GstClockTime duration_between_seeks_to_consider_scrubbing;
   gboolean needs_pipeline_update;       /* } */
 
   GstEvent *awaited_toplevel_seek;
@@ -315,6 +331,9 @@ static gboolean
 _is_ready_to_restart_task (NleComposition * comp, GstEvent * event);
 static GstEvent *
 nle_composition_query_topelevel_initializing_seek (NleComposition * comp);
+
+static void
+_update_after_eos_while_scrubbing (NleComposition * comp, UpdateAfterTimeoutData * data);
 /* *INDENT-ON* */
 
 
@@ -353,7 +372,7 @@ nle_composition_query_topelevel_initializing_seek (NleComposition * comp);
 #define SIGNAL_NEW_ACTION(comp) G_STMT_START {                     \
   GST_LOG_OBJECT (comp, "Signalling new action from thread %p",       \
         g_thread_self());                                           \
-  g_cond_signal(&((NleComposition*)comp)->priv->actions_cond);     \
+  g_cond_broadcast(&((NleComposition*)comp)->priv->actions_cond);     \
 } G_STMT_END
 
 #define GET_TASK_LOCK(comp)    (&(NLE_COMPOSITION(comp)->task_rec_lock))
@@ -659,9 +678,15 @@ _seek_pipeline_func (NleComposition * comp, SeekData * seekd)
   if (!initializing_stack) {
     segment_start = cur;
     segment_stop = stop;
+    GstClockTime now = gst_util_get_timestamp ();
+
     GST_OBJECT_LOCK (comp);
     if (GST_STATE (comp) == GST_STATE_PAUSED) {
-      comp->priv->seeking_in_paused = TRUE;
+      comp->priv->scrub_seeking_in_pause =
+          GST_CLOCK_TIME_IS_VALID (priv->last_seek_in_pause)
+          && GST_CLOCK_DIFF (priv->last_seek_in_pause,
+          now) < priv->duration_between_seeks_to_consider_scrubbing;
+      comp->priv->last_seek_in_pause = now;
     }
     GST_OBJECT_UNLOCK (comp);
     g_mutex_unlock (&priv->seek_in_paused_lock);
@@ -955,6 +980,7 @@ _free_action (gpointer udata, Action * action)
     g_free (udata);
   } else if (ACTION_CALLBACK (action) == _update_pipeline_func ||
       ACTION_CALLBACK (action) == _commit_func ||
+      ACTION_CALLBACK (action) == _update_after_eos_while_scrubbing ||
       ACTION_CALLBACK (action) == _initialize_stack_func) {
     g_free (udata);
   }
@@ -1075,11 +1101,14 @@ static void
 _remove_update_actions (NleComposition * comp)
 {
   _remove_actions_for_type (comp, G_CALLBACK (_update_pipeline_func));
+  _remove_actions_for_type (comp,
+      G_CALLBACK (_update_after_eos_while_scrubbing));
 }
 
 static void
 _add_update_compo_action (NleComposition * comp,
-    GCallback callback, NleUpdateStackReason reason)
+    GCallback callback, NleUpdateStackReason reason,
+    gboolean has_already_action_lock)
 {
   UpdateCompositionData *ucompo = g_new0 (UpdateCompositionData, 1);
 
@@ -1090,7 +1119,62 @@ _add_update_compo_action (NleComposition * comp,
   GST_INFO_OBJECT (comp, "Updating because: %s -- Setting seqnum: %i",
       UPDATE_PIPELINE_REASONS[reason], ucompo->seqnum);
 
-  _add_action (comp, callback, ucompo, G_PRIORITY_DEFAULT);
+  if (has_already_action_lock) {
+    _add_action_locked (comp, callback, ucompo, G_PRIORITY_DEFAULT);
+  } else {
+    _add_action (comp, callback, ucompo, G_PRIORITY_DEFAULT);
+  }
+}
+
+static void
+_update_after_eos_while_scrubbing (NleComposition * comp,
+    UpdateAfterTimeoutData * data)
+{
+  ACTIONS_LOCK (comp);
+  while (comp->priv->running && !comp->priv->actions) {
+    GST_INFO_OBJECT (comp,
+        "Waiting for %" GST_TIMEP_FORMAT
+        " before updating after eos while scrubbing", &data->timeout);
+    if (!g_cond_wait_until (&comp->priv->actions_cond,
+            &((NleComposition *) comp)->priv->actions_lock, data->end_time)
+        && !comp->priv->actions) {
+
+      g_mutex_lock (&comp->priv->seek_in_paused_lock);
+      comp->priv->scrub_seeking_in_pause = FALSE;
+      if (comp->priv->needs_pipeline_update) {
+        comp->priv->needs_pipeline_update = FALSE;
+        GST_DEBUG_OBJECT (comp,
+            "Got no seek during %" GST_TIMEP_FORMAT
+            " after 'scub seeking' in pause... restart updating the pipeline",
+            &data->timeout);
+        _add_update_compo_action (comp, G_CALLBACK (_update_pipeline_func),
+            COMP_UPDATE_STACK_ON_EOS, TRUE);
+      }
+      g_mutex_unlock (&comp->priv->seek_in_paused_lock);
+
+    } else {
+      GST_DEBUG_OBJECT (comp,
+          "Ignoring timeout as an action was added meanwhile");
+    }
+  }
+  ACTIONS_UNLOCK (comp);
+}
+
+static void
+_add_update_after_eos_while_scrubbing_action (NleComposition * comp,
+    GstClockTime timeout)
+{
+  UpdateAfterTimeoutData *data = g_new0 (UpdateAfterTimeoutData, 1);
+
+  data->timeout = timeout;
+  data->end_time = g_get_monotonic_time () + (timeout / 1000);
+
+  GST_INFO_OBJECT (comp,
+      "Setup %" GST_TIMEP_FORMAT
+      " timeout for update after eos while scrubbing", &timeout);
+
+  _add_action (comp, G_CALLBACK (_update_after_eos_while_scrubbing), data,
+      G_PRIORITY_DEFAULT);
 }
 
 static void
@@ -1238,6 +1322,12 @@ nle_composition_get_property (GObject * object, guint property_id,
       g_value_set_boolean (value, comp->priv->drop_tags);
       GST_OBJECT_UNLOCK (comp);
       break;
+    case PROP_DURATION_BETWEEN_SEEKS_TO_CONSIDER_SCRUBBING:
+      g_mutex_lock (&comp->priv->seek_in_paused_lock);
+      g_value_set_uint64 (value,
+          comp->priv->duration_between_seeks_to_consider_scrubbing);
+      g_mutex_unlock (&comp->priv->seek_in_paused_lock);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (comp, property_id, pspec);
   }
@@ -1260,6 +1350,12 @@ nle_composition_set_property (GObject * object, guint property_id,
       GST_OBJECT_LOCK (comp);
       comp->priv->drop_tags = g_value_get_boolean (value);
       GST_OBJECT_UNLOCK (comp);
+      break;
+    case PROP_DURATION_BETWEEN_SEEKS_TO_CONSIDER_SCRUBBING:
+      g_mutex_lock (&comp->priv->seek_in_paused_lock);
+      comp->priv->duration_between_seeks_to_consider_scrubbing =
+          g_value_get_uint64 (value);
+      g_mutex_unlock (&comp->priv->seek_in_paused_lock);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (comp, property_id, pspec);
@@ -1344,6 +1440,24 @@ nle_composition_class_init (NleCompositionClass * klass)
       DEFAULT_DROP_TAGS,
       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_DOC_SHOW_DEFAULT |
       GST_PARAM_MUTABLE_PLAYING);
+  /**
+   * NleComposition:duration-between-seeks-to-consider-scrubbing:
+   *
+   * When scrub seeking (in PAUSED state), the composition is not updated when
+   * reaching EOS to avoid unnecessary work (as seeks will flush again anyway).
+   * This properties represents the time spent between various seeks to start
+   * considering that the composition is beeing "scrubbed".
+   *
+   * Since: 1.26
+   */
+  properties[PROP_DURATION_BETWEEN_SEEKS_TO_CONSIDER_SCRUBBING] =
+      g_param_spec_uint64 ("duration-between-seeks-to-consider-scrubbing",
+      "Duration between seeks to consider scrubbing",
+      "Duration between seeks to consider scrubbing",
+      0, G_MAXUINT64, DEFAULT_DURATION_BETWEEN_SEEKS_TO_CONSIDER_SCRUBBING,
+      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS | GST_PARAM_DOC_SHOW_DEFAULT |
+      GST_PARAM_MUTABLE_PLAYING);
+
   g_object_class_install_properties (gobject_class, PROP_LAST, properties);
 
   _signals[COMMITED_SIGNAL] =
@@ -1354,6 +1468,7 @@ nle_composition_class_init (NleCompositionClass * klass)
   GST_DEBUG_REGISTER_FUNCPTR (_remove_object_func);
   GST_DEBUG_REGISTER_FUNCPTR (_add_object_func);
   GST_DEBUG_REGISTER_FUNCPTR (_update_pipeline_func);
+  GST_DEBUG_REGISTER_FUNCPTR (_update_after_eos_while_scrubbing);
   GST_DEBUG_REGISTER_FUNCPTR (_commit_func);
   GST_DEBUG_REGISTER_FUNCPTR (_emit_commited_signal_func);
   GST_DEBUG_REGISTER_FUNCPTR (_initialize_stack_func);
@@ -1399,6 +1514,8 @@ nle_composition_init (NleComposition * comp)
   nle_composition_reset (comp);
 
   priv->drop_tags = DEFAULT_DROP_TAGS;
+  priv->duration_between_seeks_to_consider_scrubbing =
+      DEFAULT_DURATION_BETWEEN_SEEKS_TO_CONSIDER_SCRUBBING;
   priv->nle_event_pad_func = GST_PAD_EVENTFUNC (NLE_OBJECT_SRC (comp));
   gst_pad_set_event_function (NLE_OBJECT_SRC (comp),
       GST_DEBUG_FUNCPTR (nle_composition_event_handler));
@@ -1785,14 +1902,33 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
       }
 
       if (priv->next_eos_seqnum == seqnum) {
+        GstClockTime now = gst_util_get_timestamp ();
+
         g_mutex_lock (&priv->seek_in_paused_lock);
-        if (priv->got_buffer_for_stack && priv->seeking_in_paused) {
+
+        // If we activated the scrub mode, and we got a seek in the last
+        // $(duration_between_seeks_to_consider_scrubbing) seconds, then
+        // optimize scrubbing
+        comp->priv->scrub_seeking_in_pause = comp->priv->scrub_seeking_in_pause
+            && GST_CLOCK_TIME_IS_VALID (priv->last_seek_in_pause)
+            &&
+            GST_CLOCK_TIME_IS_VALID
+            (priv->duration_between_seeks_to_consider_scrubbing)
+            && GST_CLOCK_DIFF (priv->last_seek_in_pause,
+            now) < priv->duration_between_seeks_to_consider_scrubbing;
+
+        if (priv->got_buffer_for_stack && priv->scrub_seeking_in_pause) {
           priv->needs_pipeline_update = TRUE;
-          GST_INFO_OBJECT (comp, "PAUSED, not updating stack");
+          _add_update_after_eos_while_scrubbing_action (comp,
+              priv->duration_between_seeks_to_consider_scrubbing);
+          GST_INFO_OBJECT (comp,
+              "currently scrub seeking, NOT updating stack during 1 second, last seek happened %"
+              GST_STIME_FORMAT,
+              GST_STIME_ARGS (GST_CLOCK_DIFF (priv->last_seek_in_pause, now)));
         } else {
-          GST_INFO_OBJECT (comp, "NOT PAUSED, UPDATING stack");
+          GST_INFO_OBJECT (comp, "Scrub seeking in paused, UPDATING stack");
           _add_update_compo_action (comp, G_CALLBACK (_update_pipeline_func),
-              COMP_UPDATE_STACK_ON_EOS);
+              COMP_UPDATE_STACK_ON_EOS, FALSE);
         }
         g_mutex_unlock (&priv->seek_in_paused_lock);
       } else if (priv->awaited_toplevel_seek) {
@@ -1857,7 +1993,7 @@ static gboolean
 nle_composition_commit_func (NleObject * object, gboolean recurse)
 {
   _add_update_compo_action (NLE_COMPOSITION (object),
-      G_CALLBACK (_commit_func), COMP_UPDATE_STACK_ON_COMMIT);
+      G_CALLBACK (_commit_func), COMP_UPDATE_STACK_ON_COMMIT, FALSE);
 
   return TRUE;
 }
@@ -2973,6 +3109,16 @@ nle_composition_change_state (GstElement * element, GstStateChange transition)
       _set_all_children_state (comp, GST_STATE_READY);
       _start_task (comp);
       break;
+    case GST_STATE_CHANGE_READY_TO_PAUSED:
+      /* FALLTHROUGH */
+    case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+      g_mutex_lock (&comp->priv->seek_in_paused_lock);
+      /* Consider the moment we get into the PAUSED state as if it was
+       * a seek in paused as this way we can detect that we start scrubbing
+       * right after pausing the pipeline */
+      comp->priv->last_seek_in_pause = gst_util_get_timestamp ();
+      g_mutex_unlock (&comp->priv->seek_in_paused_lock);
+      break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       _stop_task (comp);
 
@@ -2982,7 +3128,7 @@ nle_composition_change_state (GstElement * element, GstStateChange transition)
       comp->priv->tearing_down_stack = TRUE;
 
       g_mutex_lock (&comp->priv->seek_in_paused_lock);
-      comp->priv->seeking_in_paused = FALSE;
+      comp->priv->scrub_seeking_in_pause = FALSE;
       comp->priv->needs_pipeline_update = FALSE;
       comp->priv->got_buffer_for_stack = FALSE;
       g_mutex_unlock (&comp->priv->seek_in_paused_lock);
@@ -2990,11 +3136,12 @@ nle_composition_change_state (GstElement * element, GstStateChange transition)
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
       g_mutex_lock (&comp->priv->seek_in_paused_lock);
-      comp->priv->seeking_in_paused = FALSE;
+      comp->priv->last_seek_in_pause = GST_CLOCK_TIME_NONE;
+      comp->priv->scrub_seeking_in_pause = FALSE;
       if (comp->priv->needs_pipeline_update) {
         comp->priv->needs_pipeline_update = FALSE;
         _add_update_compo_action (comp, G_CALLBACK (_update_pipeline_func),
-            COMP_UPDATE_STACK_ON_EOS);
+            COMP_UPDATE_STACK_ON_EOS, FALSE);
       }
       g_mutex_unlock (&comp->priv->seek_in_paused_lock);
       break;
@@ -3033,7 +3180,7 @@ nle_composition_change_state (GstElement * element, GstStateChange transition)
           "Setting all children to READY and locking their state");
 
       _add_update_compo_action (comp, G_CALLBACK (_initialize_stack_func),
-          COMP_UPDATE_STACK_INITIALIZE);
+          COMP_UPDATE_STACK_INITIALIZE, FALSE);
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       comp->priv->tearing_down_stack = FALSE;
