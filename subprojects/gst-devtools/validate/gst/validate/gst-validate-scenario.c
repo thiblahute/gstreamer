@@ -3387,6 +3387,7 @@ stop_waiting_signal_cb (WaitingSignalData * data, GstObject * prop_object,
   _add_execute_actions_gsource (scenario);
 
 cleanup:
+  g_mutex_unlock (&data->lock);
   gst_validate_action_unref (action);
   gst_clear_object (&scenario);
   g_mutex_unlock (&data->lock);
@@ -3513,6 +3514,7 @@ _execute_wait_for_signal (GstValidateScenario * scenario,
       deep_property_name);
 
   if (checking_property) {
+    data->check_property = TRUE;
     signal_name = g_strdup_printf ("notify::%s", property_name);
     g_mutex_lock (&data->lock);
   }
