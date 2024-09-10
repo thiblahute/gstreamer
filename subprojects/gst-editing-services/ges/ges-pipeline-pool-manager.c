@@ -123,6 +123,11 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
       }
     }
 
+    if (source->start >= stack_start && source->end <= stack_end) {
+      /* Do not reload sources that are currently running */
+      continue;
+    }
+
     if (source->start > window_stop) {
       break;
     }
