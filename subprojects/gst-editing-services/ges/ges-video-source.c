@@ -172,7 +172,7 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
   }
   ges_track_element_add_all_child_properties (trksrc,
       G_OBJECT (((GstFramePositioner *) positioner)->proxied_pad),
-      gst_frame_positioner_ignore_propxied_properties_names, NULL);
+      gst_frame_positioner_ignore_proxied_properties_names, NULL);
 
   self->priv->positioner = GST_FRAME_POSITIONNER (positioner);
   self->priv->positioner->scale_in_compositor =
