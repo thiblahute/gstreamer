@@ -2834,6 +2834,27 @@ get_clean_toplevel_stack (NleComposition * comp, GstClockTime * timestamp,
     else
       *start_time = 0;
   }
+  // REMOVEME - Hacking around issue in the sequence way of setting the timeline that leads
+  // to useless 1ms stacks
+  {
+    GstStructure *caps_struct =
+        NLE_OBJECT (comp)->
+        caps ? gst_caps_get_structure (NLE_OBJECT (comp)->caps, 0) : NULL;
+    if (GST_CLOCK_TIME_IS_VALID (start) && GST_CLOCK_TIME_IS_VALID (stop)
+        && ABS (GST_CLOCK_DIFF (stop, start)) <= GST_MSECOND && caps_struct
+        && gst_structure_has_name (caps_struct, "video/x-raw")) {
+      GST_ERROR_OBJECT (comp,
+          "Start: %" GST_TIMEP_FORMAT ", Stop: %" GST_TIMEP_FORMAT, &start,
+          &stop);
+      GST_ERROR_OBJECT (comp,
+          "stack is too short ===> GETTING NEXT ONE %lld - old timestamp: %"
+          GST_TIMEP_FORMAT, GST_CLOCK_DIFF (stop, start), timestamp);
+      *timestamp = reverse ? start : stop;
+      GST_ERROR_OBJECT (comp, "New timestamp: %" GST_TIMEP_FORMAT, timestamp);
+
+      return get_clean_toplevel_stack (comp, timestamp, start_time, stop_time);
+    }
+  }
 
   GST_DEBUG_OBJECT (comp,
       "Returning timestamp:%" GST_TIME_FORMAT " , start_time:%"
