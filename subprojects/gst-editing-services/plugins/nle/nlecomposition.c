@@ -2730,21 +2730,36 @@ get_clean_toplevel_stack (NleComposition * comp, GstClockTime * timestamp,
   // to useless 1ms stacks
   {
     GstStructure *caps_struct =
-        NLE_OBJECT (comp)->
-        caps ? gst_caps_get_structure (NLE_OBJECT (comp)->caps, 0) : NULL;
+        NLE_OBJECT (comp)->caps
+        && gst_caps_get_size (NLE_OBJECT (comp)->caps) ==
+        1 ? gst_caps_get_structure (NLE_OBJECT (comp)->caps, 0) : NULL;
     if (GST_CLOCK_TIME_IS_VALID (start) && GST_CLOCK_TIME_IS_VALID (stop)
         && ABS (GST_CLOCK_DIFF (stop, start)) <= GST_MSECOND && caps_struct
         && gst_structure_has_name (caps_struct, "video/x-raw")) {
-      GST_ERROR_OBJECT (comp,
+      GST_INFO_OBJECT (comp,
           "Start: %" GST_TIMEP_FORMAT ", Stop: %" GST_TIMEP_FORMAT, &start,
           &stop);
-      GST_ERROR_OBJECT (comp,
-          "stack is too short ===> GETTING NEXT ONE %lld - old timestamp: %"
-          GST_TIMEP_FORMAT, GST_CLOCK_DIFF (stop, start), timestamp);
-      *timestamp = reverse ? start : stop;
+      GST_INFO_OBJECT (comp,
+          "stack is too short ===> GETTING NEXT ONE %" G_GINT64_FORMAT
+          " - old timestamp: %" GST_TIMEP_FORMAT, GST_CLOCK_DIFF (stop, start),
+          timestamp);
+
+      GstClockTime next_timestamp = reverse ? start : stop;
+      GstClockTime next_start_time = *start_time;
+      GstClockTime next_stop_time = *stop_time;
       GST_ERROR_OBJECT (comp, "New timestamp: %" GST_TIMEP_FORMAT, timestamp);
 
-      return get_clean_toplevel_stack (comp, timestamp, start_time, stop_time);
+      GNode *next_stack =
+          get_clean_toplevel_stack (comp, &next_timestamp, &next_start_time,
+          &next_stop_time);
+      if (next_stack) {
+        *timestamp = next_timestamp;
+        *start_time = next_start_time;
+        *stop_time = next_stop_time;
+        return next_stack;
+      }
+
+      GST_ERROR_OBJECT (comp, "Failed to get next stack, using small one");
     }
   }
 
