@@ -169,8 +169,7 @@ _should_enable_uridecodepoolsrc (GESSource * self)
         _ges_enable_uridecodepoolsrc = TRUE;
         gst_object_unref (feature);
       } else {
-        GST_ERROR
-            ("uridecodepoolsrc is not available while enabled, disabling it");
+        g_error ("uridecodepoolsrc is not available while enabled.");
       }
 
     }
