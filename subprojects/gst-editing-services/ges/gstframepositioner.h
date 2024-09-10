@@ -26,7 +26,7 @@
 
 G_BEGIN_DECLS
 
-static const gchar *gst_frame_positioner_ignore_propxied_properties_names[] = {
+static const gchar *gst_frame_positioner_ignore_proxied_properties_names[] G_GNUC_UNUSED = {
   "name",
   "alpha",
   "posx",

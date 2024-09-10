@@ -839,7 +839,7 @@ gst_frame_positioner_transform_ip (GstBaseTransform * trans, GstBuffer * buf)
   meta->extra_properties =
       ges_util_object_properties_to_structure (G_OBJECT
       (framepositioner->proxied_pad),
-      gst_frame_positioner_ignore_propxied_properties_names);
+      gst_frame_positioner_ignore_proxied_properties_names);
   gst_structure_set_parent_refcount (meta->extra_properties,
       &GST_MINI_OBJECT_REFCOUNT (meta));
 
