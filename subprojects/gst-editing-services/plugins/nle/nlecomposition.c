@@ -235,27 +235,14 @@ struct _NleCompositionPrivate
   GstClockTime duration_between_seeks_to_consider_scrubbing;
   gboolean needs_pipeline_update;       /* } */
 
+  GstEvent *awaited_toplevel_seek;
+
   /* Both protected with object lock */
   gchar *id;
   gboolean drop_tags;
 };
 
 #define ACTION_CALLBACK(__action) (((GCClosure*) (__action))->callback)
-
-#define QUERY_NEEDS_INITIALIZATION_SEEK_MESSAGE_STRUCT_NAME "nlecomposition-query-needs-initialization-seek"
-typedef struct
-{
-  GMutex lock;
-  gboolean needs_initialization_seek;
-} NleCompositionQueryNeedsInitializationSeek;
-
-/* *INDENT-OFF* */
-#define NLE_TYPE_COMPOSITION_QUERY_NEEDS_INITIALIZATION_SEEK nle_composition_query_needs_initialization_seek_get_type ()
-GType nle_composition_query_needs_initialization_seek_get_type (void) G_GNUC_CONST;
-G_DEFINE_BOXED_TYPE (NleCompositionQueryNeedsInitializationSeek,
-    nle_composition_query_needs_initialization_seek,
-    g_atomic_rc_box_acquire, g_atomic_rc_box_release);
-/* *INDENT-ON* */
 
 #define QUERY_PIPELINE_POSITION_STRUCT_NAME "nlecomposition-query-pipeline-position"
 typedef struct
@@ -1179,20 +1166,22 @@ nle_composition_handle_message (GstBin * bin, GstMessage * message)
     const GstStructure *structure = gst_message_get_structure (message);
 
     if (gst_structure_has_name (structure,
-            QUERY_NEEDS_INITIALIZATION_SEEK_MESSAGE_STRUCT_NAME)
+            NLE_OBJECT_QUERY_INITIALIZATION_SEEK_MESSAGE_STRUCT_NAME)
         && GST_MESSAGE_SRC (message) != GST_OBJECT_CAST (comp)) {
-      NleCompositionQueryNeedsInitializationSeek *q;
+      NleObjectQueryInitializationSeek *q;
 
       /* First let parents answer */
       GST_BIN_CLASS (parent_class)->handle_message (bin, message);
 
       gst_structure_get (structure, "query",
-          NLE_TYPE_COMPOSITION_QUERY_NEEDS_INITIALIZATION_SEEK, &q, NULL);
+          NLE_TYPE_OBJECT_QUERY_INITIALIZATION_SEEK, &q, NULL);
       g_assert (q);
 
       g_mutex_lock (&q->lock);
-      if (q->needs_initialization_seek) {
-        q->needs_initialization_seek = priv->stack_initialization_seek == NULL;
+      if (q->initialization_seek) {
+        q->initialization_seek =
+            priv->stack_initialization_seek ?
+            gst_event_ref (priv->stack_initialization_seek) : NULL;
       }
       g_mutex_unlock (&q->lock);
 
@@ -1861,6 +1850,10 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
               COMP_UPDATE_STACK_ON_EOS, FALSE);
         }
         g_mutex_unlock (&priv->seek_in_paused_lock);
+      } else if (priv->awaited_toplevel_seek) {
+        GST_INFO_OBJECT (comp,
+            "---> Forwarding EOS as we are waiting for toplevel_seek");
+        return GST_PAD_PROBE_OK;
       } else {
         GST_INFO_OBJECT (comp,
             "Got an EOS but it seqnum %i != next eos seqnum %i", seqnum,
@@ -1985,16 +1978,17 @@ get_new_seek_event (NleComposition * comp, gboolean initial,
       priv->segment->format, flags, starttype, start, GST_SEEK_TYPE_SET, stop);
 }
 
-static gboolean
-nle_composition_query_needs_topelevel_initializing_seek (NleComposition * comp)
+static GstEvent *
+nle_composition_query_topelevel_initializing_seek (NleComposition * comp)
 {
-  NleCompositionQueryNeedsInitializationSeek *q =
-      g_atomic_rc_box_new0 (NleCompositionQueryNeedsInitializationSeek);
-  q->needs_initialization_seek = TRUE;
+  NleObjectQueryInitializationSeek *q =
+      g_atomic_rc_box_new0 (NleObjectQueryInitializationSeek);
+  q->initialization_seek = NULL;
 
   GstMessage *m = gst_message_new_element (GST_OBJECT_CAST (comp),
-      gst_structure_new (QUERY_NEEDS_INITIALIZATION_SEEK_MESSAGE_STRUCT_NAME,
-          "query", NLE_TYPE_COMPOSITION_QUERY_NEEDS_INITIALIZATION_SEEK, q,
+      gst_structure_new
+      (NLE_OBJECT_QUERY_INITIALIZATION_SEEK_MESSAGE_STRUCT_NAME,
+          "query", NLE_TYPE_OBJECT_QUERY_INITIALIZATION_SEEK, q,
           NULL)
       );
 
@@ -2002,11 +1996,12 @@ nle_composition_query_needs_topelevel_initializing_seek (NleComposition * comp)
     GST_WARNING_OBJECT (comp, "Querying needs_initialization_seek failed");
   }
 
-  gboolean res = TRUE;
   g_mutex_lock (&q->lock);
-  res = q->needs_initialization_seek;
+  GstEvent *res =
+      q->initialization_seek ? gst_event_ref (q->initialization_seek) : NULL;
   g_mutex_unlock (&q->lock);
-  g_atomic_rc_box_release (q);
+  g_atomic_rc_box_release_full (q,
+      (GDestroyNotify) nle_object_query_needs_initialization_seek_free);
 
   return res;
 }
@@ -2222,6 +2217,15 @@ nle_composition_event_handler (GstPad * ghostpad, GstObject * parent,
         return TRUE;
       }
       GST_OBJECT_UNLOCK (comp);
+
+      if (priv->awaited_toplevel_seek
+          && GST_EVENT_SEQNUM (event) ==
+          GST_EVENT_SEQNUM (priv->awaited_toplevel_seek)) {
+        GST_INFO_OBJECT (comp, "Toplevel seek %d received",
+            GST_EVENT_SEQNUM (event));
+        gst_clear_event (&priv->awaited_toplevel_seek);
+      }
+
       break;
     }
     case GST_EVENT_QOS:
@@ -3821,10 +3825,10 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
      * This avoid seeking round trips (otherwise we get 1 extra seek
      * per level of nesting)
      */
-
-    if (tear_down
-        && update_reason == COMP_UPDATE_STACK_INITIALIZE
-        && !nle_composition_query_needs_topelevel_initializing_seek (comp))
+    priv->awaited_toplevel_seek =
+        nle_composition_query_topelevel_initializing_seek (comp);
+    if (tear_down && update_reason == COMP_UPDATE_STACK_INITIALIZE
+        && priv->awaited_toplevel_seek)
       gst_clear_event (&toplevel_seek);
 
     if (toplevel_seek) {

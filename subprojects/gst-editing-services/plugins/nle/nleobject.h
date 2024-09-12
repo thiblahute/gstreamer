@@ -45,6 +45,19 @@ G_BEGIN_DECLS
 
 #define NLE_OBJECT_SRC(obj) (((NleObject *) obj)->srcpad)
 
+#define NLE_OBJECT_QUERY_INITIALIZATION_SEEK_MESSAGE_STRUCT_NAME "nleobject-query-initialization-seek"
+typedef struct
+{
+  GMutex lock;
+  GstEvent *initialization_seek;
+} NleObjectQueryInitializationSeek;
+
+#define NLE_TYPE_OBJECT_QUERY_INITIALIZATION_SEEK nle_object_query_initialization_seek_get_type ()
+GType nle_object_query_initialization_seek_get_type (void) G_GNUC_CONST;
+
+void
+nle_object_query_needs_initialization_seek_free (NleObjectQueryInitializationSeek *query);
+
 /**
  * NleObjectFlags:
  * @NLE_OBJECT_IS_SOURCE:
