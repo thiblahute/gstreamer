@@ -81,7 +81,7 @@ NLE_START_VALIDATE_ACTION (_add_object)
   GstElement *nleobj = NULL;
   GstElement *child =
       gst_parse_bin_from_description_full (gst_structure_get_string
-      (action->structure, "desc"), TRUE, NULL,
+      (action->structure, "desc"), FALSE, NULL,
       GST_PARSE_FLAG_NO_SINGLE_ELEMENT_BINS | GST_PARSE_FLAG_PLACE_IN_BIN,
       &err);
   const gchar *objname = gst_structure_get_string (action->structure,
