@@ -632,8 +632,9 @@ _seek_pipeline_func (NleComposition * comp, SeekData * seekd)
   reverse = rate < 0;
 
   GST_DEBUG_OBJECT (seekd->comp,
-      "start:%" GST_TIME_FORMAT " -- stop:%" GST_TIME_FORMAT "  flags:%d",
-      GST_TIME_ARGS (cur), GST_TIME_ARGS (stop), flags);
+      "Seeking for %s with start:%" GST_TIME_FORMAT " -- stop:%" GST_TIME_FORMAT
+      "  flags:%d", UPDATE_PIPELINE_REASONS[reason], GST_TIME_ARGS (cur),
+      GST_TIME_ARGS (stop), flags);
 
   if (!initializing_stack) {
     segment_start = cur;
@@ -1506,6 +1507,9 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
 
   gboolean is_buffer = GST_IS_BUFFER (info->data);
   gboolean is_query = GST_IS_QUERY (info->data);
+  gboolean is_eos_to_init = GST_IS_EVENT (info->data)
+      && GST_EVENT_TYPE (info->data) == GST_EVENT_EOS
+      && priv->stack_initialization_seek;
   /* The `uridecodepoolsrc` elements is able to handle `inpoint` and `duration`
    * and prerolls pipeline at the right point so they can be played right where
    * `nle` needs them. To be able to detect that `nlecomposition` needs those
@@ -1517,7 +1521,7 @@ ghost_event_probe_handler (GstPad * ghostpad G_GNUC_UNUSED,
       "nlecomposition-initialization-seek");
 
   if (is_buffer || (is_query && GST_QUERY_IS_SERIALIZED (info->data))
-      || query_nlecomposition_initialization_seek) {
+      || query_nlecomposition_initialization_seek || is_eos_to_init) {
     if (priv->stack_initialization_seek) {
       if (g_atomic_int_compare_and_exchange
           (&priv->stack_initialization_seek_sent, FALSE, TRUE)) {
