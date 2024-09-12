@@ -3194,6 +3194,18 @@ _relink_single_node (NleComposition * comp, GNode * node,
 
   gst_bin_add (GST_BIN (comp->priv->current_bin), GST_ELEMENT (newobj));
   gst_element_sync_state_with_parent (GST_ELEMENT_CAST (newobj));
+  GstEvent *translated_seek = nle_object_translate_incoming_seek (newobj,
+      gst_event_ref (toplevel_seek));
+  GstEvent *event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+      gst_structure_new ("nlecomposition-seek",
+          "seek", GST_TYPE_EVENT, translated_seek, NULL));
+  GST_EVENT_SEQNUM (event) = gst_event_get_seqnum (translated_seek);
+
+  GST_DEBUG_OBJECT (comp, "Sending nlecomposition-seek with seqnum: %d(%d)",
+      GST_EVENT_SEQNUM (event), GST_EVENT_SEQNUM (toplevel_seek));
+  gst_element_send_event (GST_ELEMENT (newobj), event);
+  gst_event_unref (translated_seek);
+
 
   /* link to parent if needed.  */
   if (newparent) {

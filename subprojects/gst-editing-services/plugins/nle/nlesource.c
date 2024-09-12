@@ -524,6 +524,16 @@ nle_source_remove_element (GstBin * bin, GstElement * element)
   return pret;
 }
 
+static void
+nle_source_send_seek_to_source (const GValue * v, gpointer user_data)
+{
+  GstElement *element = g_value_get_object (v);
+
+  GST_LOG_OBJECT (element, "SENDING SEEK");
+  gst_element_send_event (element, gst_event_ref (user_data));
+}
+
+
 static gboolean
 nle_source_send_event (GstElement * element, GstEvent * event)
 {
@@ -536,6 +546,18 @@ nle_source_send_event (GstElement * element, GstEvent * event)
       gst_event_replace (&source->priv->seek_event, event);
       g_mutex_unlock (&source->priv->seek_lock);
       break;
+    case GST_EVENT_CUSTOM_UPSTREAM:
+      if (gst_structure_has_name (gst_event_get_structure (event),
+              "nlecomposition-seek")) {
+        GstIterator *it = gst_bin_iterate_recurse (GST_BIN (element));
+        while (gst_iterator_foreach (it, nle_source_send_seek_to_source, event))
+          gst_iterator_resync (it);
+        gst_iterator_free (it);
+        gst_event_unref (event);
+
+        break;
+      }
+      // FALLTHROUGH
     default:
       res = GST_ELEMENT_CLASS (parent_class)->send_event (element, event);
       break;
