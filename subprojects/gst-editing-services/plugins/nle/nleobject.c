@@ -34,6 +34,18 @@
  * properties provided by all the GNonLin elements.
  */
 
+/* *INDENT-OFF* */
+G_DEFINE_BOXED_TYPE (NleObjectQueryInitializationSeek,
+    nle_object_query_initialization_seek,
+    g_atomic_rc_box_acquire, g_atomic_rc_box_release);
+/* *INDENT-ON* */
+
+void nle_object_query_needs_initialization_seek_free
+    (NleObjectQueryInitializationSeek * query)
+{
+  gst_clear_event (&query->initialization_seek);
+}
+
 static void
 nle_query_parent_nle_object_free (NleQueryParentNleObject * query)
 {

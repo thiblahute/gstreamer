@@ -142,6 +142,41 @@ nle_source_set_property (GObject * object, guint property_id,
   GST_OBJECT_UNLOCK (self);
 }
 
+static void
+nle_source_handle_message (GstBin * bin, GstMessage * message)
+{
+  if (GST_MESSAGE_TYPE (message) == GST_MESSAGE_ELEMENT) {
+    const GstStructure *structure = gst_message_get_structure (message);
+
+    if (gst_structure_has_name (structure,
+            NLE_OBJECT_QUERY_INITIALIZATION_SEEK_MESSAGE_STRUCT_NAME)) {
+      NleObjectQueryInitializationSeek *q;
+
+      /* First let parents answer */
+      GST_BIN_CLASS (parent_class)->handle_message (bin, message);
+
+      gst_structure_get (structure, "query",
+          NLE_TYPE_OBJECT_QUERY_INITIALIZATION_SEEK, &q, NULL);
+      g_assert (q);
+
+      g_mutex_lock (&q->lock);
+      if (q->initialization_seek) {
+        q->initialization_seek =
+            nle_object_translate_incoming_seek (NLE_OBJECT (bin),
+            q->initialization_seek);
+      }
+      g_mutex_unlock (&q->lock);
+
+      g_atomic_rc_box_release (q);
+
+      /* We recursed up already */
+      return;
+    }
+  }
+
+  GST_BIN_CLASS (parent_class)->handle_message (bin, message);
+}
+
 
 static void
 nle_source_class_init (NleSourceClass * klass)
@@ -187,6 +222,7 @@ nle_source_class_init (NleSourceClass * klass)
 
   gstbin_class->add_element = GST_DEBUG_FUNCPTR (nle_source_add_element);
   gstbin_class->remove_element = GST_DEBUG_FUNCPTR (nle_source_remove_element);
+  gstbin_class->handle_message = GST_DEBUG_FUNCPTR (nle_source_handle_message);
 
   gobject_class->dispose = GST_DEBUG_FUNCPTR (nle_source_dispose);
 
