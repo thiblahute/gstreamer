@@ -973,7 +973,8 @@ gst_decodebin_input_stream_src_probe (GstPad * pad, GstPadProbeInfo * info,
 
         GST_DEBUG_OBJECT (pad, "Got stream-start, group_id:%d, input %p",
             group_id, input->input);
-        if (gst_decodebin_input_set_group_id (input->input, &group_id)) {
+        if (input->input
+            && gst_decodebin_input_set_group_id (input->input, &group_id)) {
           ev = gst_event_make_writable (ev);
           gst_event_set_group_id (ev, group_id);
           GST_PAD_PROBE_INFO_DATA (info) = ev;
@@ -1017,6 +1018,11 @@ gst_decodebin_input_stream_src_probe (GstPad * pad, GstPadProbeInfo * info,
       case GST_EVENT_EOS:
       {
         GST_DEBUG_OBJECT (pad, "Marking input as EOS");
+        if (input->buffer_probe_id) {
+          GST_DEBUG_OBJECT (pad, "Got a EOS event! Unblocking input(s) !");
+          gst_decodebin_input_unblock_streams (input->input, TRUE);
+        }
+
         input->saw_eos = TRUE;
       }
         break;
