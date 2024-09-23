@@ -227,16 +227,16 @@ ges_init (void)
 void
 ges_deinit (void)
 {
-  _deinit_playbin_pool_src ();
-
   G_LOCK (init_lock);
-  GST_INFO ("deinitializing GES");
 
   if (!initialized_thread) {
     GST_DEBUG ("nothing to deinitialize");
     G_UNLOCK (init_lock);
     return;
   }
+
+  GST_INFO ("deinitializing GES");
+  _deinit_playbin_pool_src ();
 
   /* Allow deinit only from a thread where ges_init() was called */
   g_assert (initialized_thread == g_thread_self ());
