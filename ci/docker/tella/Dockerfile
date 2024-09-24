@@ -59,6 +59,8 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
   gdb \
   fontconfig \
   alien \
+  fonts-noto-cjk \
+  fonts-noto \
   && \
   apt-get clean && \
   rm -rf /var/lib/apt/lists/* && \
