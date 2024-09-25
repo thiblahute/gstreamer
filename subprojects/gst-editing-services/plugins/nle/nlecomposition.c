@@ -1092,7 +1092,7 @@ nle_composition_handle_message (GstBin * bin, GstMessage * message)
       g_assert (q);
 
       g_mutex_lock (&q->lock);
-      if (q->initialization_seek) {
+      if (!q->initialization_seek) {
         q->initialization_seek =
             priv->stack_initialization_seek ?
             gst_event_ref (priv->stack_initialization_seek) : NULL;
