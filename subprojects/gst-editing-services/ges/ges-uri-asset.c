@@ -812,6 +812,16 @@ _extract (GESAsset * asset, GError ** error)
   g_free (cleaned_filename);
   ges_timeline_element_set_name (GES_TIMELINE_ELEMENT (trackelement), name);
 
+  gchar *filename = g_path_get_basename (uri);
+  gchar *cleaned_filename = g_uri_unescape_string (filename, NULL);
+  g_strdelimit (cleaned_filename, " ", '_');
+  gchar *name = g_strdup_printf ("%s:%d-src%d", cleaned_filename,
+      gst_discoverer_stream_info_get_stream_number (priv->sinfo),
+      g_atomic_int_add (&priv->n_extracted, 1));
+  g_free (filename);
+  g_free (cleaned_filename);
+  ges_timeline_element_set_name (GES_TIMELINE_ELEMENT (trackelement), name);
+
   ges_track_element_set_track_type (trackelement,
       ges_track_element_asset_get_track_type (GES_TRACK_ELEMENT_ASSET (asset)));
 
