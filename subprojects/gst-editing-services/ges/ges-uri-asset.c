@@ -89,6 +89,8 @@ struct _GESUriSourceAssetPrivate
   GESUriClipAsset *creator_asset;
 
   const gchar *uri;
+  // Used as atomic
+  guint n_extracted;
 };
 
 G_DEFINE_TYPE_WITH_CODE (GESUriClipAsset, ges_uri_clip_asset,
@@ -771,6 +773,16 @@ _extract (GESAsset * asset, GError ** error)
     trackelement = GES_TRACK_ELEMENT (ges_video_uri_source_new (uri));
   else
     trackelement = GES_TRACK_ELEMENT (ges_audio_uri_source_new (uri));
+
+  gchar *filename = g_path_get_basename (uri);
+  gchar *cleaned_filename = g_uri_unescape_string (filename, NULL);
+  g_strdelimit (cleaned_filename, " ", '_');
+  gchar *name = g_strdup_printf ("%s:%d-src%d", cleaned_filename,
+      gst_discoverer_stream_info_get_stream_number (priv->sinfo),
+      g_atomic_int_add (&priv->n_extracted, 1));
+  g_free (filename);
+  g_free (cleaned_filename);
+  ges_timeline_element_set_name (GES_TIMELINE_ELEMENT (trackelement), name);
 
   ges_track_element_set_track_type (trackelement,
       ges_track_element_asset_get_track_type (GES_TRACK_ELEMENT_ASSET (asset)));
