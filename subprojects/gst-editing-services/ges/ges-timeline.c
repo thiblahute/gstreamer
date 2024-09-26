@@ -350,7 +350,9 @@ ges_timeline_get_property (GObject * object, guint property_id,
 
   switch (property_id) {
     case PROP_DURATION:
+      GST_OBJECT_LOCK (timeline);
       g_value_set_uint64 (value, timeline->priv->duration);
+      GST_OBJECT_UNLOCK (timeline);
       break;
     case PROP_AUTO_TRANSITION:
       g_value_set_boolean (value, timeline->priv->auto_transition);
@@ -1031,14 +1033,18 @@ timeline_update_duration (GESTimeline * timeline)
 {
   GstClockTime duration = timeline_tree_get_duration (timeline->priv->tree);
 
+  GST_OBJECT_LOCK (timeline);
   if (timeline->priv->duration != duration) {
     GST_DEBUG ("track duration : %" GST_TIME_FORMAT " current : %"
         GST_TIME_FORMAT, GST_TIME_ARGS (duration),
         GST_TIME_ARGS (timeline->priv->duration));
 
     timeline->priv->duration = duration;
+    GST_OBJECT_UNLOCK (timeline);
 
     g_object_notify_by_pspec (G_OBJECT (timeline), properties[PROP_DURATION]);
+  } else {
+    GST_OBJECT_UNLOCK (timeline);
   }
 }
 
@@ -3090,9 +3096,12 @@ GstClockTime
 ges_timeline_get_duration (GESTimeline * timeline)
 {
   g_return_val_if_fail (GES_IS_TIMELINE (timeline), GST_CLOCK_TIME_NONE);
-  CHECK_THREAD (timeline);
 
-  return timeline->priv->duration;
+  GST_OBJECT_LOCK (timeline);
+  GstClockTime duration = timeline->priv->duration;
+  GST_OBJECT_UNLOCK (timeline);
+
+  return duration;
 }
 
 /**
