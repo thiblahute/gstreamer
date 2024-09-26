@@ -89,6 +89,8 @@ struct _GESUriSourceAssetPrivate
   GESUriClipAsset *creator_asset;
 
   const gchar *uri;
+  // Used as atomic
+  guint n_extracted;
 };
 
 G_DEFINE_TYPE_WITH_CODE (GESUriClipAsset, ges_uri_clip_asset,
@@ -779,12 +781,28 @@ _extract (GESAsset * asset, GError ** error)
 
   uri = g_strdup (priv->uri);
 
-  if (g_str_has_prefix (priv->uri, GES_MULTI_FILE_URI_PREFIX))
+  const char *stream_type_name = "v";
+  if (g_str_has_prefix (priv->uri, GES_MULTI_FILE_URI_PREFIX)) {
     trackelement = GES_TRACK_ELEMENT (ges_multi_file_source_new (uri));
-  else if (GST_IS_DISCOVERER_VIDEO_INFO (priv->sinfo))
+  } else if (GST_IS_DISCOVERER_VIDEO_INFO (priv->sinfo)) {
     trackelement = GES_TRACK_ELEMENT (ges_video_uri_source_new (uri));
-  else
+  } else {
+    stream_type_name = "a";
     trackelement = GES_TRACK_ELEMENT (ges_audio_uri_source_new (uri));
+  }
+
+  gchar *filename = g_path_get_basename (uri);
+  gchar *cleaned_filename = g_uri_unescape_string (filename, NULL);
+  g_strdelimit (cleaned_filename, " ", '_');
+  gchar *name =
+      g_strdup_printf ("%" G_GINTPTR_FORMAT "_%s_%d-%ssrc%d", (gintptr) asset,
+      cleaned_filename,
+      gst_discoverer_stream_info_get_stream_number (priv->sinfo),
+      stream_type_name,
+      g_atomic_int_add (&priv->n_extracted, 1));
+  g_free (filename);
+  g_free (cleaned_filename);
+  ges_timeline_element_set_name (GES_TIMELINE_ELEMENT (trackelement), name);
 
   ges_track_element_set_track_type (trackelement,
       ges_track_element_asset_get_track_type (GES_TRACK_ELEMENT_ASSET (asset)));
