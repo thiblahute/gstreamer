@@ -90,9 +90,6 @@ struct _GESUriSourceAssetPrivate
 
   const gchar *uri;
   gchar id[11];
-
-  // Used as atomic
-  guint n_extracted;
 };
 
 G_DEFINE_TYPE_WITH_CODE (GESUriClipAsset, ges_uri_clip_asset,
@@ -807,16 +804,6 @@ _extract (GESAsset * asset, GError ** error)
       cleaned_filename,
       gst_discoverer_stream_info_get_stream_number (priv->sinfo),
       stream_type_name,
-      g_atomic_int_add (&priv->n_extracted, 1));
-  g_free (filename);
-  g_free (cleaned_filename);
-  ges_timeline_element_set_name (GES_TIMELINE_ELEMENT (trackelement), name);
-
-  gchar *filename = g_path_get_basename (uri);
-  gchar *cleaned_filename = g_uri_unescape_string (filename, NULL);
-  g_strdelimit (cleaned_filename, " ", '_');
-  gchar *name = g_strdup_printf ("%s:%d-src%d", cleaned_filename,
-      gst_discoverer_stream_info_get_stream_number (priv->sinfo),
       g_atomic_int_add (&priv->n_extracted, 1));
   g_free (filename);
   g_free (cleaned_filename);
