@@ -130,18 +130,16 @@ ges_discoverer_manager_finalize (GObject * object)
   self->finalized = TRUE;
   g_cond_signal (&self->cleanup_thread_cond);
   if (self->cleanup_thread) {
+    GThread *cleanup_thread = self->cleanup_thread;
+    self->cleanup_thread = NULL;
     g_mutex_unlock (&self->cleanup_thread_mutex);
 
-    g_thread_join (self->cleanup_thread);
+    g_thread_join (cleanup_thread);
   } else {
     g_mutex_unlock (&self->cleanup_thread_mutex);
   }
 
   g_rec_mutex_lock (&self->lock);
-  if (self->cleanup_thread) {
-    g_thread_unref (self->cleanup_thread);
-  }
-  self->cleanup_thread = NULL;
   g_hash_table_unref (self->discoverers);
   g_rec_mutex_unlock (&self->lock);
 
