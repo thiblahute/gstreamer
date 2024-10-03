@@ -1048,6 +1048,20 @@ local_done:
 
 GST_END_VALIDATE_ACTION;
 
+GES_START_VALIDATE_ACTION (_wait_project_loaded)
+{
+  GstValidateScenario *scenario = gst_validate_action_get_scenario (action);
+
+  DECLARE_AND_GET_TIMELINE (scenario, action);
+
+  GESProject *project = ges_timeline_get_project (timeline);
+
+  g_signal_connect (project, "loaded", G_CALLBACK (_project_loaded_cb), action);
+  res = GST_VALIDATE_EXECUTE_ACTION_ASYNC;
+}
+
+GST_END_VALIDATE_ACTION;
+
 static gint
 prepare_seek_action (GstValidateAction * action)
 {
@@ -1912,6 +1926,13 @@ ges_validate_register_action_types (void)
         {NULL}
       }, "Remove a keyframe on @element-name:property-name.", GST_VALIDATE_ACTION_TYPE_NONE);
 
+  gst_validate_register_action_type ("wait-project-loaded", "ges", _wait_project_loaded,
+      (GstValidateActionParameter [])  {
+        {NULL}
+      },
+      "Wait for the current project to emit `project-loaded`.",
+      GST_VALIDATE_ACTION_TYPE_NONE);
+
   gst_validate_register_action_type ("load-project", "ges", _load_project,
       (GstValidateActionParameter [])  {
         {
@@ -1933,7 +1954,6 @@ ges_validate_register_action_types (void)
       "Loads a project either from its content passed in the 'serialized-content' field or using the provided 'uri'.\n"
       "Note that it will completely clean the previous timeline",
       GST_VALIDATE_ACTION_TYPE_NONE);
-
 
   gst_validate_register_action_type ("commit", "ges", _commit, NULL,
        "Commit the timeline.", GST_VALIDATE_ACTION_TYPE_ASYNC);
