@@ -40,6 +40,7 @@ struct _GESVideoScale
   GstElement *capsfilter;
 
   gint width, height;
+  GThread *setting_caps_thread;
 };
 
 /* *INDENT-OFF* */
@@ -74,7 +75,9 @@ set_dimension (GESVideoScale * self, gint width, gint height)
     gst_caps_set_simple (caps, "height", G_TYPE_INT, height ? height : 1, NULL);
 
   gst_caps_set_features (caps, 0, gst_caps_features_new_any ());
+  self->setting_caps_thread = g_thread_self ();
   g_object_set (self->capsfilter, "caps", caps, NULL);
+  self->setting_caps_thread = NULL;
   gst_caps_unref (caps);
 
   GST_OBJECT_LOCK (self);
@@ -132,6 +135,20 @@ change_state (GstElement * element, GstStateChange transition)
   return res;
 }
 
+static gboolean
+event_probe (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+{
+  GESVideoScale *self =
+      GES_VIDEO_SCALE (gst_object_get_parent (GST_OBJECT_CAST (pad)));
+  if (GST_EVENT_TYPE (info->data) == GST_EVENT_RECONFIGURE
+      && self->setting_caps_thread == g_thread_self ()) {
+    GST_DEBUG_OBJECT (pad, "Dropping reconfigure  event as reconfiguration");
+    return GST_PAD_PROBE_DROP;
+  }
+
+  return GST_PAD_PROBE_OK;
+}
+
 static void
 ges_video_scale_init (GESVideoScale * self)
 {
@@ -151,6 +168,8 @@ ges_video_scale_init (GESVideoScale * self)
   self->sink =
       gst_ghost_pad_new_from_template ("sink", scale->sinkpads->data, template);
   gst_pad_set_chain_function (self->sink, (GstPadChainFunction) chain);
+  gst_pad_add_probe (self->sink, GST_PAD_PROBE_TYPE_EVENT_BOTH,
+      (GstPadProbeCallback) event_probe, self, NULL);
   gst_element_add_pad (GST_ELEMENT (self), self->sink);
   gst_object_unref (template);
 
