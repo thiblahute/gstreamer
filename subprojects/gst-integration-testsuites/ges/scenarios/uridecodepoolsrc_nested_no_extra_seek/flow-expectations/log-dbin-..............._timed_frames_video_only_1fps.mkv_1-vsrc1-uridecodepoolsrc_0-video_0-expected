@@ -1,0 +1,1 @@
+event seek: GstEventSeek, cur=(gint64)11000000000, cur-type=(GstSeekType)set, flags=(GstSeekFlags)GST_SEEK_FLAG_FLUSH+GST_SEEK_FLAG_ACCURATE, format=(GstFormat)time, rate=(double)1, stop=(gint64)21000000000, stop-type=(GstSeekType)set, trickmode-interval=(guint64)0;
