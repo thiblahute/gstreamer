@@ -183,6 +183,148 @@ ges_source_uses_uridecodepoolsrc (GESSource * self)
   return _ges_enable_uridecodepoolsrc;
 }
 
+static GstEvent *
+ges_uri_source_query_seek (GESUriSource * self, GstEvent * seek)
+{
+  GstElement *nlesrc = ges_track_element_get_nleobject (self->element);
+
+  g_assert (seek);
+
+  GstStructure *structure =
+      gst_structure_new ("translate-seek", "seek", GST_TYPE_EVENT, seek, NULL);
+  GstQuery *query_translate_seek =
+      gst_query_new_custom (GST_QUERY_CUSTOM, structure);
+
+  if (!gst_element_query (nlesrc, query_translate_seek)) {
+    GST_ERROR_OBJECT (nlesrc, "Failed to translate seek!!");
+    return NULL;
+  }
+
+  GstEvent *translated_seek = NULL;
+  gst_structure_get (structure, "translated-seek", GST_TYPE_EVENT,
+      &translated_seek, NULL);
+  g_assert (translated_seek);
+
+  gst_query_unref (query_translate_seek);
+  gst_event_unref (seek);
+
+  return translated_seek;
+}
+
+static GstEvent *
+uridecodepoolsrc_get_initial_seek_cb (GstElement * uridecodepoolsrc,
+    GESUriSource * self)
+{
+  if (self->controls_nested_timeline) {
+    GST_INFO_OBJECT (uridecodepoolsrc,
+        "Controls a nested timeline not sending initial seek as the deepest timeline will do it itself");
+
+    return NULL;
+  }
+
+  GList *toplevel_src_node = g_list_last (self->parent_ges_uri_sources);
+  GstEvent *seek = gst_event_new_seek (1.0,
+      GST_FORMAT_TIME, GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE,
+      GST_SEEK_TYPE_SET, 0,
+      GST_SEEK_TYPE_SET,
+      toplevel_src_node ? GES_TIMELINE_ELEMENT_DURATION ((((GESUriSource *)
+                  toplevel_src_node->data))->element) :
+      ges_timeline_get_duration (GES_TIMELINE_ELEMENT_TIMELINE (self->element))
+      );
+
+  /* TODO time-effect: Also add time effect support in ges_pipeline_pool_manager_prepare_pipelines_around */
+  GST_FIXME_OBJECT (self->element, "FIXME Add support for time effects");
+  for (GList * tmp = toplevel_src_node; tmp; tmp = tmp->prev) {
+    seek = ges_uri_source_query_seek (tmp->data, seek);
+    GST_DEBUG_OBJECT (uridecodepoolsrc, "Parent: %s",
+        GES_TIMELINE_ELEMENT_NAME (((GESUriSource *) tmp->data)->element));
+  }
+
+  seek = ges_uri_source_query_seek (self, seek);
+  GST_DEBUG_OBJECT (self->element, "%s initlial seek: %" GST_PTR_FORMAT,
+      GES_TIMELINE_ELEMENT_NAME (self->element), seek);
+
+  return seek;
+}
+
+static void
+uridecodepoolsrc_setup_parent_sources (GstElement * uridecodepoolsrc,
+    GESUriSource * self)
+{
+  GESUriSource *child_ges_source =
+      g_object_get_data (G_OBJECT (uridecodepoolsrc), "__gesurisource_data__");
+  g_assert (child_ges_source);
+
+  for (GList * tmp = child_ges_source->parent_ges_uri_sources; tmp;
+      tmp = tmp->next) {
+  }
+
+  if (!g_list_find (child_ges_source->parent_ges_uri_sources, self)) {
+    child_ges_source->parent_ges_uri_sources =
+        g_list_prepend (child_ges_source->parent_ges_uri_sources, self);
+  }
+
+  for (GList * tmp = self->parent_ges_uri_sources; tmp; tmp = tmp->next) {
+    if (!g_list_find (child_ges_source->parent_ges_uri_sources, tmp->data)) {
+      child_ges_source->parent_ges_uri_sources =
+          g_list_append (child_ges_source->parent_ges_uri_sources, tmp->data);
+    }
+  }
+
+  for (GList * tmp = child_ges_source->parent_ges_uri_sources; tmp;
+      tmp = tmp->next) {
+  }
+}
+
+static gboolean
+setup_uridecodepool_srcs (GNode * node, GESUriSource * self)
+{
+  GESUriSource *child_source = NULL;
+  if (GES_IS_AUDIO_URI_SOURCE (node->data))
+    child_source = GES_AUDIO_URI_SOURCE (node->data)->priv;
+  else if (GES_IS_VIDEO_URI_SOURCE (node->data))
+    child_source = GES_VIDEO_URI_SOURCE (node->data)->priv;
+
+  return FALSE;
+}
+
+static void
+uridecodepoolsrc_deep_element_added_cb (GstPipeline * pipeline, GstBin * bin,
+    GstElement * element, GESUriSource * self)
+{
+  if (GES_IS_TIMELINE (element)) {
+    g_node_traverse (timeline_get_tree (GES_TIMELINE (element)), G_IN_ORDER,
+        G_TRAVERSE_LEAVES, -1, (GNodeTraverseFunc) setup_uridecodepool_srcs,
+        self);
+    timeline_set_parent_uri_source (GES_TIMELINE (element),
+        (GESSource *) self->element);
+  }
+}
+
+static void
+uridecodepoolsrc_pipeline_notify_cb (GstElement * decodebin,
+    GParamSpec * arg G_GNUC_UNUSED, GESUriSource * self)
+{
+  GstPipeline *pipeline, *prev_pipeline;
+
+  g_object_get (decodebin, "pipeline", &pipeline, NULL);
+
+  prev_pipeline = g_weak_ref_get (&self->uridecodepool_pipeline);
+  if (prev_pipeline) {
+    g_signal_handlers_disconnect_by_func (prev_pipeline,
+        uridecodepoolsrc_pipeline_notify_cb, self);
+  }
+
+  if (pipeline) {
+    g_signal_connect_data (pipeline, "deep-element-added",
+        G_CALLBACK (uridecodepoolsrc_deep_element_added_cb), self, NULL, 0);
+  }
+  g_weak_ref_set (&self->uridecodepool_pipeline, pipeline);
+
+  GST_DEBUG_OBJECT (self->element, "Pipeline changed: %" GST_PTR_FORMAT,
+      pipeline);
+}
+
 static GstElement *
 uridecodepoolsrc_create_filter (GstElement * uridecodepoolsrc,
     GstElement * _underlying_pipeline, GstPad * srcpad,
@@ -208,6 +350,8 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
       (ges_extractable_get_asset (GES_EXTRACTABLE (self->element)));
   const gchar *wanted_id = gst_discoverer_stream_info_get_stream_id
       (ges_uri_source_asset_get_stream_info (asset));
+  const GESUriClipAsset *clip_asset =
+      ges_uri_source_asset_get_filesource_asset (asset);
 
   track = ges_track_element_get_track (self->element);
 
@@ -215,11 +359,13 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
       GES_TIMELINE_ELEMENT_NAME (self->element));
   self->decodebin = decodebin =
       gst_element_factory_make ("uridecodepoolsrc", name);
+  g_object_set_data (G_OBJECT (decodebin), "__gesurisource_data__", self);
   g_free (name);
   GST_DEBUG_OBJECT (self->element,
       "%" GST_PTR_FORMAT " - Track! %" GST_PTR_FORMAT, self->decodebin, track);
   GstCaps *caps = NULL;
   if (GES_IS_VIDEO_SOURCE (self->element)) {
+
     if (ges_use_auto_converters ())
       caps = gst_caps_from_string ("video/x-raw(ANY)");
     else
@@ -249,13 +395,19 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
   g_object_set (decodebin, "uri", self->uri, "stream-id", wanted_id, "caps",
       caps, NULL);
 
-  GstElement *nlesrc = ges_track_element_get_nleobject (self->element);
-  if (!ges_uri_source_asset_is_image (asset)) {
-    g_object_bind_property (nlesrc, "inpoint", decodebin, "inpoint",
-        G_BINDING_SYNC_CREATE | G_BINDING_DEFAULT);
-    g_object_bind_property (nlesrc, "duration", decodebin, "duration",
-        G_BINDING_SYNC_CREATE | G_BINDING_DEFAULT);
+  g_signal_connect_data (decodebin, "get-initial-seek",
+      G_CALLBACK (uridecodepoolsrc_get_initial_seek_cb), self, NULL, 0);
+  if (clip_asset) {
+    g_object_get (G_OBJECT (clip_asset), "is-nested-timeline",
+        &self->controls_nested_timeline, NULL);
   }
+
+  if (self->controls_nested_timeline) {
+    g_signal_connect_data (decodebin, "notify::pipeline",
+        G_CALLBACK (uridecodepoolsrc_pipeline_notify_cb), self, 0, 0);
+    uridecodepoolsrc_pipeline_notify_cb (decodebin, NULL, self);
+  }
+
   gst_caps_unref (caps);
 
   return decodebin;
@@ -314,8 +466,6 @@ ges_uri_source_track_set_cb (GESTrackElement * element,
   if (!ges_source_uses_uridecodepoolsrc (GES_SOURCE (self->element)))
     g_object_set (self->decodebin, "caps", caps, NULL);
 }
-
-
 
 void
 ges_uri_source_init (GESTrackElement * element, GESUriSource * self)

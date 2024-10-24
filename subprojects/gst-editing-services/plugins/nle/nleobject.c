@@ -18,6 +18,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#include "gst/gststructure.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -166,6 +167,32 @@ nle_bin_handle_message (GstBin * bin, GstMessage * message)
   return GST_BIN_CLASS (parent_class)->handle_message (bin, message);
 }
 
+static gboolean
+nle_object_query (GstElement * element, GstQuery * query)
+{
+  if (GST_QUERY_TYPE (query) == GST_QUERY_CUSTOM) {
+    GstStructure *structure = gst_query_writable_structure (query);
+
+    if (structure && gst_structure_has_name (structure, "translate-seek")) {
+      GstEvent *seek;
+
+      gst_structure_get (structure, "seek", GST_TYPE_EVENT, &seek, NULL);
+
+      g_assert (seek);
+
+      GstEvent *translated_seek =
+          nle_object_translate_incoming_seek (NLE_OBJECT (element), seek);
+      gst_structure_set (structure, "translated-seek", GST_TYPE_EVENT,
+          translated_seek, NULL);
+      gst_event_unref (translated_seek);
+
+      return TRUE;
+    }
+  }
+
+  return GST_ELEMENT_CLASS (parent_class)->query (element, query);
+}
+
 static void
 nle_object_class_init (NleObjectClass * klass)
 {
@@ -192,6 +219,7 @@ nle_object_class_init (NleObjectClass * klass)
   gobject_class->dispose = GST_DEBUG_FUNCPTR (nle_object_dispose);
 
   gstelement_class->change_state = GST_DEBUG_FUNCPTR (nle_object_change_state);
+  gstelement_class->query = GST_DEBUG_FUNCPTR (nle_object_query);
   gstbin_class->handle_message = GST_DEBUG_FUNCPTR (nle_bin_handle_message);
 
   nleobject_class->prepare = GST_DEBUG_FUNCPTR (nle_object_prepare_func);
@@ -372,6 +400,7 @@ nle_object_init (NleObject * object, NleObjectClass * klass)
   object->segment_rate = 1.0;
   object->segment_start = -1;
   object->segment_stop = -1;
+  object->can_seek_in_ready = TRUE;
 
   object->srcpad = nle_object_ghost_pad_no_target (object,
       "src", GST_PAD_SRC,

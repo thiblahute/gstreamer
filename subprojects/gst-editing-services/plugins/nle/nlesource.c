@@ -24,6 +24,7 @@
 #endif
 
 #include "nle.h"
+#include <gst/base/base.h>
 
 /**
  * SECTION:element-nlesource
@@ -160,11 +161,29 @@ nle_source_handle_message (GstBin * bin, GstMessage * message)
       g_assert (q);
 
       g_mutex_lock (&q->lock);
+
+      GstEvent *event;
       if (q->initialization_seek) {
-        q->initialization_seek =
-            nle_object_translate_incoming_seek (NLE_OBJECT (bin),
-            q->initialization_seek);
+        event = gst_event_copy (q->initialization_seek);
+      } else {
+        GstObject *parent = gst_object_get_parent (GST_OBJECT (bin));
+
+        GstClockTime stop =
+            NLE_IS_COMPOSITION (parent) ? NLE_OBJECT_STOP (parent) :
+            NLE_OBJECT_STOP (bin);
+        gst_clear_object (&parent);
+
+        event = gst_event_new_seek (1.0,
+            GST_FORMAT_TIME,
+            GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE,
+            GST_SEEK_TYPE_SET, 0, GST_SEEK_TYPE_SET, stop);
       }
+
+      q->initialization_seek =
+          nle_object_translate_incoming_seek (NLE_OBJECT (bin), event);
+      GST_DEBUG_OBJECT (bin, "Translated to %" GST_PTR_FORMAT,
+          q->initialization_seek);
+
       g_mutex_unlock (&q->lock);
 
       g_atomic_rc_box_release (q);
@@ -177,6 +196,13 @@ nle_source_handle_message (GstBin * bin, GstMessage * message)
   GST_BIN_CLASS (parent_class)->handle_message (bin, message);
 }
 
+static void
+nle_source_constructed (GObject * obj)
+{
+  NLE_OBJECT (obj)->can_seek_in_ready = FALSE;
+
+  ((GObjectClass *) parent_class)->constructed (obj);
+}
 
 static void
 nle_source_class_init (NleSourceClass * klass)
@@ -193,6 +219,7 @@ nle_source_class_init (NleSourceClass * klass)
 
   gobject_class->get_property = nle_source_get_property;
   gobject_class->set_property = nle_source_set_property;
+  gobject_class->constructed = nle_source_constructed;
 
   /**
    * NleSource:reverse:
@@ -500,6 +527,16 @@ nle_source_control_element_func (NleSource * source, GstElement * element)
   return TRUE;
 }
 
+static void
+nle_source_check_can_seek_in_ready (const GValue * v, NleSource * source)
+{
+  GstElement *element = g_value_get_object (v);
+  // FIXME: This assume that any source that has a BaseSrc in it in NULL static_assert(
+  // can be seeked in READY state, that is not totally correct and should be
+  // enhanced
+  NLE_OBJECT (source)->can_seek_in_ready |= GST_IS_BASE_SRC (element);
+}
+
 static gboolean
 nle_source_add_element (GstBin * bin, GstElement * element)
 {
@@ -511,6 +548,19 @@ nle_source_add_element (GstBin * bin, GstElement * element)
   if (source->element) {
     GST_WARNING_OBJECT (bin, "NleSource can only handle one element at a time");
     return FALSE;
+  }
+
+  NLE_OBJECT (source)->can_seek_in_ready = GST_IS_BASE_SRC (element);
+  if (GST_IS_BIN (element)) {
+    GstIterator *iter;
+
+    iter = gst_bin_iterate_recurse (GST_BIN (element));
+    while (gst_iterator_foreach (iter,
+            (GstIteratorForeachFunction) nle_source_check_can_seek_in_ready,
+            source)) {
+      gst_iterator_resync (iter);
+    }
+    gst_iterator_free (iter);
   }
 
   /* call parent add_element */
@@ -556,17 +606,9 @@ nle_source_remove_element (GstBin * bin, GstElement * element)
     priv->dynamicpads = FALSE;
     gst_object_unref (element);
     source->element = NULL;
+    NLE_OBJECT (source)->can_seek_in_ready = FALSE;
   }
   return pret;
-}
-
-static void
-nle_source_send_seek_to_source (const GValue * v, gpointer user_data)
-{
-  GstElement *element = g_value_get_object (v);
-
-  GST_LOG_OBJECT (element, "SENDING SEEK");
-  gst_element_send_event (element, gst_event_ref (user_data));
 }
 
 
@@ -578,22 +620,16 @@ nle_source_send_event (GstElement * element, GstEvent * event)
 
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_SEEK:
-      g_mutex_lock (&source->priv->seek_lock);
-      gst_event_replace (&source->priv->seek_event, event);
-      g_mutex_unlock (&source->priv->seek_lock);
-      break;
-    case GST_EVENT_CUSTOM_UPSTREAM:
-      if (gst_structure_has_name (gst_event_get_structure (event),
+      if (gst_structure_has_field (gst_event_get_structure (event),
               "nlecomposition-seek")) {
-        GstIterator *it = gst_bin_iterate_recurse (GST_BIN (element));
-        while (gst_iterator_foreach (it, nle_source_send_seek_to_source, event))
-          gst_iterator_resync (it);
-        gst_iterator_free (it);
-        gst_event_unref (event);
-
-        break;
+        g_assert (NLE_OBJECT (source)->can_seek_in_ready);
+        nle_object_seek_all_children (NLE_OBJECT (element), event);
+      } else {
+        g_mutex_lock (&source->priv->seek_lock);
+        gst_event_replace (&source->priv->seek_event, event);
+        g_mutex_unlock (&source->priv->seek_lock);
       }
-      // FALLTHROUGH
+      break;
     default:
       res = GST_ELEMENT_CLASS (parent_class)->send_event (element, event);
       break;

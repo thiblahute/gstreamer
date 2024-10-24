@@ -33,6 +33,11 @@ struct _GESUriSource
   gchar *uri;
 
   GESTrackElement *element;
+
+  GWeakRef uridecodepool_pipeline;
+
+  GList *parent_ges_uri_sources;
+  gboolean controls_nested_timeline;
 };
 
 G_GNUC_INTERNAL gboolean      ges_uri_source_select_pad   (GESSource *self, GstPad *pad);

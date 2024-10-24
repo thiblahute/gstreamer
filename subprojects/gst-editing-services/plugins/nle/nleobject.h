@@ -140,6 +140,7 @@ struct _NleObject
   gint64 segment_stop;
 
   gboolean in_composition;
+  gboolean can_seek_in_ready;
 };
 
 struct _NleObjectClass
