@@ -192,6 +192,7 @@ RUN meson builddir \
   -Dgst-plugins-bad:videoparsers=enabled \
   -Dgst-plugins-bad:wayland=disabled \
   -Dgst-plugins-bad:webrtc=disabled \
+  -Dgst-plugins-bad:aja=disabled \
   -Dugly=enabled \
   -Dgst-plugins-ugly:x264=enabled \
   -Dgst-plugins-bad:x265=enabled \
