@@ -171,8 +171,11 @@ timeline_fill_gaps            (GESTimeline *timeline);
 G_GNUC_INTERNAL void
 timeline_create_transitions (GESTimeline * timeline, GESTrackElement * track_element);
 
-G_GNUC_INTERNAL void timeline_get_framerate(GESTimeline *self, gint *fps_n,
-                                            gint *fps_d);
+G_GNUC_INTERNAL GESSource * timeline_get_parent_uri_source  (GESTimeline *self);
+G_GNUC_INTERNAL void        timeline_set_parent_uri_source  (GESTimeline *self, GESSource *source);
+G_GNUC_INTERNAL void        timeline_get_framerate          (GESTimeline *self,
+                                                             gint *fps_n,
+                                                             gint *fps_d);
 G_GNUC_INTERNAL void
 ges_timeline_set_moving_track_elements (GESTimeline * timeline, gboolean moving);
 

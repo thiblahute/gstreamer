@@ -242,6 +242,9 @@ struct _GESTimelinePrivate
   gboolean disable_edit_apis;
 
   GESPipelinePoolManager pool_manager;
+  /* When the timeline is nested, this is the parent source that lead to the
+   * creation of the timeline */
+    GWeakRef /*<GESTrackElement> */ parent_source;
 };
 
 /* private structure to contain our track-related information */
@@ -589,6 +592,7 @@ ges_timeline_change_state (GstElement * element, GstStateChange transition)
       ges_timeline_post_stream_collection (timeline);
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
+      g_weak_ref_set (&timeline->priv->parent_source, NULL);
       ges_pipeline_pool_manager_unprepare_all (&timeline->priv->pool_manager);
       break;
     default:
@@ -1314,6 +1318,18 @@ done:
     *fps_n = DEFAULT_FRAMERATE_N;
     *fps_d = DEFAULT_FRAMERATE_D;
   }
+}
+
+GESSource *
+timeline_get_parent_uri_source (GESTimeline * self)
+{
+  return g_weak_ref_get (&self->priv->parent_source);
+}
+
+void
+timeline_set_parent_uri_source (GESTimeline * self, GESSource * source)
+{
+  g_weak_ref_set (&self->priv->parent_source, source);
 }
 
 void

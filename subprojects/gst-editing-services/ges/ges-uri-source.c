@@ -285,6 +285,10 @@ setup_uridecodepool_srcs (GNode * node, GESUriSource * self)
   else if (GES_IS_VIDEO_URI_SOURCE (node->data))
     child_source = GES_VIDEO_URI_SOURCE (node->data)->priv;
 
+  if (child_source) {
+    uridecodepoolsrc_setup_parent_sources (child_source->decodebin, self);
+  }
+
   return FALSE;
 }
 

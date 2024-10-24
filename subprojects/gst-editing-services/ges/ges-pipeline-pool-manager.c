@@ -56,7 +56,6 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
   GstClockTime window_stop = stack_end + window_dur;
   gint max_preloaded_sources = MAX_PRELOADED_SOURCES;
 
-
   if (!GES_IS_VIDEO_TRACK (track)) {
     GST_DEBUG_OBJECT (self->timeline,
         "Not preparing neighboors anything for %s track",
@@ -83,7 +82,6 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     return;
   }
 
-
   GST_LOG_OBJECT (self->timeline, "We are rendering: %d", self->rendering);
   if (self->rendering) {
     window_start = stack_start;
@@ -91,6 +89,19 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
   } else {
     window_start = stack_start >= window_dur ? stack_start - window_dur : 0;
   }
+
+  GESSource *parent_source = timeline_get_parent_uri_source (self->timeline);
+  if (parent_source) {
+    /* TODO: time-effect: Add support for time effects! */
+    window_start =
+        MAX (window_start, GES_TIMELINE_ELEMENT_INPOINT (parent_source));
+    window_dur =
+        MIN (window_dur, GES_TIMELINE_ELEMENT_DURATION (parent_source));
+    GST_DEBUG_OBJECT (self->timeline,
+        "Reducing window %" GST_PTR_FORMAT "[%" GST_TIMEP_FORMAT "- %"
+        GST_TIMEP_FORMAT "]", parent_source, &window_start, &window_dur);
+  }
+  g_clear_object (&parent_source);
 
   for (gint i = 0; i < self->pooled_sources->len; i++) {
     PooledSource *source =
