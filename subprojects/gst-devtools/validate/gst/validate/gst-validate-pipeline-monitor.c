@@ -164,7 +164,11 @@ print_position (GstValidateMonitor * monitor)
   GstQuery *query;
   gint64 position, duration;
   GstElement *pipeline =
-      GST_ELEMENT (gst_validate_monitor_get_pipeline (monitor));
+      GST_ELEMENT_CAST (gst_validate_monitor_get_pipeline (monitor));
+
+  if (!pipeline) {
+    return FALSE;
+  }
 
   gdouble rate = 1.0;
   GstFormat format = GST_FORMAT_TIME;
