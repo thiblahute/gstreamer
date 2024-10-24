@@ -214,7 +214,16 @@ GES_START_VALIDATE_ACTION (_serialize_project)
   g_free (location);
   g_free (dir);
 
-  res = ges_timeline_save_to_uri (timeline, uri, NULL, TRUE, NULL);
+  GError *error = NULL;
+  if (!ges_timeline_save_to_uri (timeline, uri, NULL, TRUE, &error)) {
+    res = GST_VALIDATE_EXECUTE_ACTION_ERROR_REPORTED;
+    gst_validate_report_action (GST_VALIDATE_REPORTER (scenario), action,
+        SCENARIO_ACTION_EXECUTION_ERROR, "Could not save project to %s: %s",
+        uri, error->message);
+    g_clear_error (&error);
+  }
+
+  return res;
 }
 
 GST_END_VALIDATE_ACTION;
