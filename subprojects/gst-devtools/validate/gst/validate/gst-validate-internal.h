@@ -76,6 +76,7 @@ gst_validate_pipeline_monitor_new_full (GstPipeline * pipeline,
     GstValidateRunner * runner, GstValidateMonitor * parent,
     const gchar *scenario_name, GList *actions,
     gboolean is_sub_pipeline);
+void gst_validate_pipeline_monitor_set_print_position (GstValidatePipelineMonitor * monitor, gboolean print_position);
 
 G_GNUC_INTERNAL gboolean gst_validate_extra_checks_init (void);
 G_GNUC_INTERNAL gboolean gst_validate_flow_init (void);

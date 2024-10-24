@@ -768,6 +768,17 @@ _bus_handler (GstBus * bus, GstMessage * message,
   }
 }
 
+void
+gst_validate_pipeline_monitor_set_print_position (GstValidatePipelineMonitor *
+    monitor, gboolean print_position)
+{
+  PRIV (monitor)->print_position = print_position;
+  if (!print_position && monitor->print_pos_srcid) {
+    g_source_remove (monitor->print_pos_srcid);
+    monitor->print_pos_srcid = 0;
+  }
+}
+
 static void
 gst_validate_pipeline_monitor_create_scenarios (GstValidateBinMonitor * monitor,
     const gchar * scenario_name, GList * actions, gboolean is_sub_pipeline)

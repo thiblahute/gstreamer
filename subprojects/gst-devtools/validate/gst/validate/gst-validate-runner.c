@@ -146,10 +146,26 @@ static GParamSpec *properties[PROP_LAST];
 static guint _signals[LAST_SIGNAL] = { 0, };
 
 static gboolean
+pipeline_explicitely_monitored (GstValidateRunner * self, GstElement * element)
+{
+  if (!self->priv->pipeline_names_strv) {
+    return TRUE;
+  }
+
+  for (gint i = 0; self->priv->pipeline_names_strv[i]; i++) {
+    if (g_pattern_match_simple (self->priv->pipeline_names_strv[i],
+            GST_OBJECT_NAME (element))) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static gboolean
 gst_validate_runner_should_monitor (GstValidateRunner * self,
     GstElement * element)
 {
-  gint i;
   GstValidateMonitor *monitor;
 
   if (!GST_IS_PIPELINE (element)) {
@@ -176,13 +192,7 @@ gst_validate_runner_should_monitor (GstValidateRunner * self,
         gst_validate_reporter_get_runner (GST_VALIDATE_REPORTER (monitor)));
   }
 
-  for (i = 0; self->priv->pipeline_names_strv[i]; i++) {
-    if (g_pattern_match_simple (self->priv->pipeline_names_strv[i],
-            GST_OBJECT_NAME (element)))
-      return TRUE;
-  }
-
-  return FALSE;
+  return pipeline_explicitely_monitored (self, element);
 }
 
 static void
@@ -191,7 +201,15 @@ do_element_new (GstValidateRunner * self, guint64 ts, GstElement * element)
   element_created = TRUE;
   if (gst_validate_runner_should_monitor (self, element)) {
     /* the reference to the monitor is lost */
-    gst_validate_monitor_factory_create (GST_OBJECT_CAST (element), self, NULL);
+    GstValidateMonitor *monitor =
+        gst_validate_monitor_factory_create (GST_OBJECT_CAST (element), self,
+        NULL);
+    if (self->priv->monitor_all_pipelines
+        && (!pipeline_explicitely_monitored (self, element)
+            || self->priv->user_created)) {
+      gst_validate_pipeline_monitor_set_print_position
+          (GST_VALIDATE_PIPELINE_MONITOR (monitor), FALSE);
+    }
   }
 }
 
