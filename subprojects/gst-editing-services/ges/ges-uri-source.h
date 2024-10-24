@@ -38,5 +38,6 @@ struct _GESUriSource
 G_GNUC_INTERNAL gboolean      ges_uri_source_select_pad   (GESSource *self, GstPad *pad);
 G_GNUC_INTERNAL GstElement *ges_uri_source_create_source  (GESUriSource *self);
 G_GNUC_INTERNAL void         ges_uri_source_init          (GESTrackElement *element, GESUriSource *self);
+G_GNUC_INTERNAL gboolean ges_source_uses_uridecodepoolsrc (GESSource * self);
 
 G_END_DECLS

@@ -225,6 +225,7 @@ static gboolean
 ges_video_uri_source_create_filters (GESVideoSource * source,
     GPtrArray * elements, gboolean needs_converters)
 {
+  GESVideoUriSource *self = GES_VIDEO_URI_SOURCE (source);
   GESAsset *asset = ges_extractable_get_asset (GES_EXTRACTABLE (source));
   GstDiscovererVideoInfo *info =
       GST_DISCOVERER_VIDEO_INFO (ges_uri_source_asset_get_stream_info
@@ -259,7 +260,8 @@ ges_video_uri_source_create_filters (GESVideoSource * source,
 
   }
 
-  if (ges_uri_source_asset_is_image (GES_URI_SOURCE_ASSET (asset))) {
+  if (!ges_source_uses_uridecodepoolsrc (GES_SOURCE (self)) &&
+      ges_uri_source_asset_is_image (GES_URI_SOURCE_ASSET (asset))) {
     guint i;
 
     g_ptr_array_find_with_equal_func (elements, NULL,

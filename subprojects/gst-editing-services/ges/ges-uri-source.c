@@ -146,8 +146,8 @@ source_setup_cb (GstElement * decodebin, GstElement * source,
       GST_ELEMENT (subtimeline));
 }
 
-static gboolean
-_should_enable_uridecodepoolsrc (GESSource * self)
+gboolean
+ges_source_uses_uridecodepoolsrc (GESSource * self)
 {
   static gsize once = 0;
   const gchar *envvar;
@@ -184,6 +184,22 @@ _should_enable_uridecodepoolsrc (GESSource * self)
 }
 
 static GstElement *
+uridecodepoolsrc_create_filter (GstElement * uridecodepoolsrc,
+    GstElement * _underlying_pipeline, GstPad * srcpad,
+    const gchar * filter_desc)
+{
+  GstElement *filter = gst_element_factory_make (filter_desc, NULL);
+
+  if (!filter) {
+    GST_INFO_OBJECT (uridecodepoolsrc, "Could not create filter: %s",
+        filter_desc);
+    return NULL;
+  }
+
+  return g_object_ref_sink (filter);
+}
+
+static GstElement *
 ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
 {
   GESTrack *track;
@@ -208,6 +224,16 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
       caps = gst_caps_from_string ("video/x-raw(ANY)");
     else
       caps = gst_caps_new_empty_simple ("video/x-raw");
+
+    const gchar *filter = NULL;
+    if (ges_uri_source_asset_is_image (asset)) {
+      filter = "imagefreeze";
+    } else {
+      filter = "segmentclipper";
+    }
+    g_signal_connect_data (decodebin, "create-filter",
+        G_CALLBACK (uridecodepoolsrc_create_filter), (gpointer) filter, NULL,
+        0);
 
     GST_DEBUG ("Using caps: %" GST_PTR_FORMAT " for uridecodepoolsrc", caps);
   } else if (GES_IS_AUDIO_SOURCE (self->element)) {
@@ -242,7 +268,7 @@ ges_uri_source_create_source (GESUriSource * self)
   GstElement *decodebin;
   const GstCaps *caps = NULL;
 
-  if (_should_enable_uridecodepoolsrc (GES_SOURCE (self->element)))
+  if (ges_source_uses_uridecodepoolsrc (GES_SOURCE (self->element)))
     return ges_uri_source_create_uridecodepoolsrc (self);
 
   track = ges_track_element_get_track (self->element);
@@ -285,7 +311,7 @@ ges_uri_source_track_set_cb (GESTrackElement * element,
       "Setting %" GST_PTR_FORMAT "caps to: %" GST_PTR_FORMAT, self->decodebin,
       caps);
 
-  if (!_should_enable_uridecodepoolsrc (GES_SOURCE (self->element)))
+  if (!ges_source_uses_uridecodepoolsrc (GES_SOURCE (self->element)))
     g_object_set (self->decodebin, "caps", caps, NULL);
 }
 
@@ -310,7 +336,7 @@ ges_uri_source_init (GESTrackElement * element, GESUriSource * self)
 gboolean
 ges_uri_source_select_pad (GESSource * self, GstPad * pad)
 {
-  if (_should_enable_uridecodepoolsrc (self))
+  if (ges_source_uses_uridecodepoolsrc (self))
     return TRUE;
 
   gboolean res = TRUE;
