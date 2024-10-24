@@ -65,6 +65,13 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
     return;
   }
 
+  if (!GST_CLOCK_TIME_IS_VALID (stack_start)
+      || !GST_CLOCK_TIME_IS_VALID (stack_end)) {
+    GST_INFO_OBJECT (track,
+        "Got invalid stack start/end, not preparing anything.");
+    return;
+  }
+
   GST_LOG_OBJECT (self->timeline, "Preparing pipelines around %" GST_TIME_FORMAT
       " - %" GST_TIME_FORMAT " window: [%" GST_TIMEP_FORMAT " - %"
       GST_TIMEP_FORMAT "]" " in %d soures", GST_TIME_ARGS (stack_start),
