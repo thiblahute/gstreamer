@@ -223,13 +223,17 @@ uridecodepoolsrc_get_initial_seek_cb (GstElement * uridecodepoolsrc,
   }
 
   GList *toplevel_src_node = g_list_last (self->parent_ges_uri_sources);
+  GESTimeline *toplevel_timeline = toplevel_src_node ?
+      GES_TIMELINE_ELEMENT_TIMELINE (((GESUriSource *)
+          toplevel_src_node->data)->element) : NULL;
   GstEvent *seek = gst_event_new_seek (1.0,
-      GST_FORMAT_TIME, GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE,
-      GST_SEEK_TYPE_SET, 0,
+      GST_FORMAT_TIME,
+      GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE,
       GST_SEEK_TYPE_SET,
-      toplevel_src_node ? GES_TIMELINE_ELEMENT_DURATION ((((GESUriSource *)
-                  toplevel_src_node->data))->element) :
-      ges_timeline_get_duration (GES_TIMELINE_ELEMENT_TIMELINE (self->element))
+      0,
+      GST_SEEK_TYPE_SET,
+      ges_timeline_get_duration (toplevel_timeline ? toplevel_timeline :
+          GES_TIMELINE_ELEMENT_TIMELINE (self->element))
       );
 
   /* TODO time-effect: Also add time effect support in ges_pipeline_pool_manager_prepare_pipelines_around */
