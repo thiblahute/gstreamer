@@ -8,7 +8,7 @@
 #define GST_CAT_DEFAULT ges_pipeline_pool_manager_debug
 
 /* FIXME Make that a public setting */
-#define MAX_PRELOADED_SOURCES 4
+#define MAX_PRELOADED_SOURCES 2
 
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 
