@@ -324,6 +324,7 @@ struct _GstAdaptiveDemux2Stream
 
   gboolean starting_fragment;
   gboolean first_fragment_buffer;
+  gboolean waiting_buffer_after_seek;
   gint64 download_start_time;
   gint64 download_total_bytes;
   gint64 download_end_offset;
