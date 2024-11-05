@@ -89,6 +89,8 @@ struct _GESUriSourceAssetPrivate
   GESUriClipAsset *creator_asset;
 
   const gchar *uri;
+  gchar id[11];
+
   // Used as atomic
   guint n_extracted;
 };
@@ -349,10 +351,17 @@ _create_uri_source_asset (GESUriClipAsset * asset,
   }
   g_free (stream_id);
 
+  gchar *checksum;
   src_priv = GES_URI_SOURCE_ASSET (src_asset)->priv;
   src_priv->uri = ges_asset_get_id (GES_ASSET (asset));
   src_priv->sinfo = gst_object_ref (sinfo);
   src_priv->creator_asset = asset;
+
+  /* Calculate SHA256 of URI and take first 10 chars */
+  checksum =
+      g_compute_checksum_for_string (G_CHECKSUM_SHA256, src_priv->uri, -1);
+  g_strlcpy (src_priv->id, (const gchar *) checksum, 10);
+  g_free (checksum);
   ges_track_element_asset_set_track_type (GES_TRACK_ELEMENT_ASSET
       (src_asset), type);
 
@@ -794,8 +803,7 @@ _extract (GESAsset * asset, GError ** error)
   gchar *filename = g_path_get_basename (uri);
   gchar *cleaned_filename = g_uri_unescape_string (filename, NULL);
   g_strdelimit (cleaned_filename, " ", '_');
-  gchar *name =
-      g_strdup_printf ("%" G_GINTPTR_FORMAT "_%s_%d-%ssrc%d", (gintptr) asset,
+  gchar *name = g_strdup_printf ("%s_%s_%d-%ssrc%d", priv->id,
       cleaned_filename,
       gst_discoverer_stream_info_get_stream_number (priv->sinfo),
       stream_type_name,
