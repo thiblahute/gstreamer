@@ -84,7 +84,10 @@ _gl_format_n_components (guint format)
     case GST_GL_RED:
     case GST_GL_R8:
     case GST_GL_R16:
+    case GST_GL_DEPTH_COMPONENT16:
       return 1;
+    case GST_GL_DEPTH24_STENCIL8:
+      return 2;
     default:
       return 0;
   }
