@@ -81,14 +81,14 @@ gst_auto_video_convert_init (GstAutoVideoConvert * autovideoconvert)
       .colorspace_converters = { "videoconvert", NULL },
       .last_elements = { NULL } ,
       .filters = {  NULL},
-      .rank = GST_RANK_SECONDARY,
+      .rank = GST_RANK_MARGINAL,
     },
     {
       .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
       .colorspace_converters = { "videoconvert", NULL },
       .last_elements = { "rgb2bayer", NULL },
       .filters = {  NULL },
-      .rank = GST_RANK_SECONDARY,
+      .rank = GST_RANK_MARGINAL,
     },
     {
       .first_elements = { "capsfilter caps=\"video/x-raw\"", NULL, },
