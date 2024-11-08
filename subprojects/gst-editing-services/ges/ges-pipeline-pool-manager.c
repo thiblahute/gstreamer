@@ -19,6 +19,8 @@ typedef struct
 
   GstClockTime start;
   GstClockTime end;
+
+  GObject *decoderpipe;
 } PooledSource;
 
 static gint
@@ -76,7 +78,7 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
               0) == GST_STATE_CHANGE_SUCCESS) && state == GST_STATE_PLAYING
       && pending == GST_STATE_VOID_PENDING);
   if (self->rendering || playing) {
-    GST_LOG_OBJECT (self->timeline, "We are %s not loading clips before",
+    GST_DEBUG_OBJECT (self->timeline, "We are %s not loading clips before",
         playing ? "playing" : "rendering");
     window_start = stack_start;
     max_preloaded_sources = max_preloaded_sources / 2;
@@ -109,15 +111,19 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
       continue;
     }
 
-    gboolean res = TRUE;
-    GST_LOG_OBJECT (self->timeline,
+    GObject *decoderpipeline = FALSE;
+    GST_DEBUG_OBJECT (self->timeline,
         "Preparing %s [%" GST_TIMEP_FORMAT "- %" GST_TIMEP_FORMAT "]",
         GST_OBJECT_NAME (source->element), &source->start, &source->end);
     g_signal_emit_by_name (self->pool, "prepare-pipeline", source->element,
-        &res);
-    if (res) {
+        &decoderpipeline);
+    if (decoderpipeline) {
       gst_object_ref (source->element);
       g_array_append_val (self->prepared_sources, *source);
+      PooledSource *prepared =
+          &g_array_index (self->prepared_sources, PooledSource,
+          self->prepared_sources->len - 1);
+      prepared->decoderpipe = decoderpipeline;
     }
 
     if (self->prepared_sources->len >= max_preloaded_sources) {
@@ -149,7 +155,7 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
         || (source->start > window_stop);
     if (!in_window) {
       gboolean res;
-      GST_LOG_OBJECT (self->timeline,
+      GST_DEBUG_OBJECT (self->timeline,
           "Unpreparing pipeline for %s [%" GST_TIMEP_FORMAT "- %"
           GST_TIMEP_FORMAT "]", GST_OBJECT_NAME (source->element),
           &source->start, &source->end);
@@ -157,6 +163,9 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
           &res);
     }
   }
+
+  GST_DEBUG_OBJECT (self->timeline, "%d sources prepared",
+      self->prepared_sources->len);
   g_rec_mutex_unlock (&self->lock);
 }
 
@@ -174,7 +183,6 @@ ges_pipeline_pool_manager_unprepare_all (GESPipelinePoolManager * self)
     g_signal_emit_by_name (self->pool, "unprepare-pipeline", source->element,
         &res);
   }
-  g_array_remove_range (self->prepared_sources, 0, self->prepared_sources->len);
 done:
   g_rec_mutex_unlock (&self->lock);
 }
@@ -239,7 +247,7 @@ void
 ges_pipeline_pool_manager_set_rendering (GESPipelinePoolManager * self,
     gboolean rendering)
 {
-  GST_LOG_OBJECT (self->timeline, "Set rendering %d", rendering);
+  GST_DEBUG_OBJECT (self->timeline, "Set rendering %d", rendering);
 
   g_rec_mutex_lock (&self->lock);
   self->rendering = rendering;
@@ -247,8 +255,8 @@ ges_pipeline_pool_manager_set_rendering (GESPipelinePoolManager * self,
 }
 
 static void
-ges_pipeline_pool_manager_prepare_pipeline_removed (GObject * pool,
-    GstElement * src, GESPipelinePoolManager * self)
+ges_pipeline_pool_manager_prepare_pipeline_removed_cb (GObject * pool,
+    GstElement * src, GObject * decoderpipe, GESPipelinePoolManager * self)
 {
   g_rec_mutex_lock (&self->lock);
   if (!self->prepared_sources) {
@@ -260,7 +268,8 @@ ges_pipeline_pool_manager_prepare_pipeline_removed (GObject * pool,
   for (gint i = 0; i < self->prepared_sources->len; i++) {
     PooledSource *source =
         &g_array_index (self->prepared_sources, PooledSource, i);
-    if (source->element == src) {
+    if (source->decoderpipe == decoderpipe) {
+      gst_object_unref (source->decoderpipe);
       GST_DEBUG_OBJECT (self->timeline, "Removing prepared source %s",
           GST_OBJECT_NAME (src));
       g_array_remove_index (self->prepared_sources, i);
@@ -322,5 +331,5 @@ ges_pipeline_pool_manager_init (GESPipelinePoolManager * self,
   g_object_set (self->pool, "cleanup-timeout", 0, NULL);
   self->pipeline_removed_sigid =
       g_signal_connect (self->pool, "prepared-pipeline-removed",
-      G_CALLBACK (ges_pipeline_pool_manager_prepare_pipeline_removed), self);
+      G_CALLBACK (ges_pipeline_pool_manager_prepare_pipeline_removed_cb), self);
 }
