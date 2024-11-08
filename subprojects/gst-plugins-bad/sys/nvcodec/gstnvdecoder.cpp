@@ -1802,9 +1802,7 @@ gst_nv_decoder_negotiate (GstNvDecoder * decoder,
 #endif
 #ifdef HAVE_CUDA_GST_GL
         /* TODO: gl does not support Y444_16 and GBR_16 */
-        if (GST_VIDEO_INFO_FORMAT (&decoder->info) !=
-            GST_VIDEO_FORMAT_Y444_16LE &&
-            GST_VIDEO_INFO_FORMAT (&decoder->info) !=
+        if ( GST_VIDEO_INFO_FORMAT (&decoder->info) !=
             GST_VIDEO_FORMAT_GBR_16LE &&
             features && gst_caps_features_contains (features,
                 GST_CAPS_FEATURE_MEMORY_GL_MEMORY)) {
