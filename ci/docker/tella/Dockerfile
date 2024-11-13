@@ -107,7 +107,7 @@ RUN meson builddir \
   -Dgstreamer:tools=enabled \
   -Dpython=disabled \
   -Dorc=enabled \
-  -Ddevtools=disabled \
+  -Ddevtools=enabled \
   -Drtsp_server=disabled \
   -Dges=enabled \
   -Dgpl=enabled \
