@@ -644,12 +644,9 @@ gst_adaptive_demux2_stream_push_buffer (GstAdaptiveDemux2Stream * stream,
       stream->send_segment = FALSE;
       GST_DEBUG_OBJECT (stream, "Sending %" GST_PTR_FORMAT, pending_segment);
       GST_ADAPTIVE_DEMUX_SEGMENT_UNLOCK (demux);
-
-      if (!stream->waiting_buffer_after_seek || stream->downloading_header) {
-        stream_start = gst_event_new_stream_start ("bogus");
-        if (demux->have_group_id)
-          gst_event_set_group_id (stream_start, demux->group_id);
-      }
+      stream_start = gst_event_new_stream_start ("bogus");
+      if (demux->have_group_id)
+        gst_event_set_group_id (stream_start, demux->group_id);
     }
     stream->first_fragment_buffer = FALSE;
 
@@ -660,7 +657,6 @@ gst_adaptive_demux2_stream_push_buffer (GstAdaptiveDemux2Stream * stream,
   } else {
     GST_BUFFER_PTS (buffer) = GST_CLOCK_TIME_NONE;
   }
-  stream->waiting_buffer_after_seek = FALSE;
 
   if (discont) {
     GST_DEBUG_OBJECT (stream, "Marking fragment as discontinuous");
@@ -2374,15 +2370,9 @@ gst_adaptive_demux2_stream_seek (GstAdaptiveDemux2Stream * stream,
   GstAdaptiveDemux2StreamClass *klass =
       GST_ADAPTIVE_DEMUX2_STREAM_GET_CLASS (stream);
 
-  GstFlowReturn ret = GST_FLOW_ERROR;
-  if (klass->stream_seek) {
-    ret = klass->stream_seek (stream, forward, flags, ts, final_ts);
-    if (ret == GST_FLOW_OK) {
-      stream->waiting_buffer_after_seek = TRUE;
-    }
-  }
-
-  return ret;
+  if (klass->stream_seek)
+    return klass->stream_seek (stream, forward, flags, ts, final_ts);
+  return GST_FLOW_ERROR;
 }
 
 static gboolean
