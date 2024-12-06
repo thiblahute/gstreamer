@@ -188,6 +188,13 @@ enum
 #define DEFAULT_I_ADAPT FALSE
 #define DEFAULT_QP_DETAIL -1
 
+typedef enum
+{
+  GST_NVENC_SET_FORMAT_FAIL,
+  GST_NVENC_SET_FORMAT_OK,
+  GST_NVENC_SET_FORMAT_NEEDS_KEYFRAME
+} GstNvEncSetFormatResult;
+
 /* This lock is needed to prevent the situation where multiple encoders are
  * initialised at the same time which appears to cause excessive CPU usage over
  * some period of time. */
@@ -1636,8 +1643,9 @@ gst_nv_base_enc_calculate_num_prealloc_buffers (GstNvBaseEnc * enc,
  *
  * TODO: bframe also considered as force re-init case
  */
-static gboolean
-gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
+static GstNvEncSetFormatResult
+gst_nv_base_enc_set_format_internal (GstVideoEncoder * enc,
+    GstVideoCodecState * state)
 {
   GstNvBaseEncClass *nvenc_class = GST_NV_BASE_ENC_GET_CLASS (enc);
   GstNvBaseEnc *nvenc = GST_NV_BASE_ENC (enc);
@@ -1649,13 +1657,14 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   NVENCSTATUS nv_ret;
   gint dar_n, dar_d;
   gboolean reconfigure = FALSE;
+  GstNvEncSetFormatResult result = GST_NVENC_SET_FORMAT_OK;
 
   g_atomic_int_set (&nvenc->reconfig, FALSE);
 
   if (!nvenc->encoder && !gst_nv_base_enc_open_encode_session (nvenc)) {
     GST_ELEMENT_ERROR (nvenc, LIBRARY, INIT, (NULL),
         ("Failed to open encode session"));
-    return FALSE;
+    return GST_NVENC_SET_FORMAT_FAIL;
   }
 
   if (old_state) {
@@ -1695,7 +1704,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
 
       if (!gst_nv_base_enc_open_encode_session (nvenc)) {
         GST_ERROR_OBJECT (nvenc, "Failed to open encode session");
-        return FALSE;
+        return GST_NVENC_SET_FORMAT_FAIL;
       }
     } else {
       reconfigure_params.version = gst_nvenc_get_reconfigure_params_version ();
@@ -1722,7 +1731,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
     if (nv_ret != NV_ENC_SUCCESS) {
       GST_ELEMENT_ERROR (nvenc, LIBRARY, SETTINGS, (NULL),
           ("Failed to get encoder presets"));
-      return FALSE;
+      return GST_NVENC_SET_FORMAT_FAIL;
     }
 
     presets = g_new0 (GUID, n_presets);
@@ -1733,7 +1742,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
       GST_ELEMENT_ERROR (nvenc, LIBRARY, SETTINGS, (NULL),
           ("Failed to get encoder presets"));
       g_free (presets);
-      return FALSE;
+      return GST_NVENC_SET_FORMAT_FAIL;
     }
 
     for (i = 0; i < n_presets; i++) {
@@ -1744,7 +1753,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
     if (i >= n_presets) {
       GST_ELEMENT_ERROR (nvenc, LIBRARY, SETTINGS, (NULL),
           ("Selected preset not supported"));
-      return FALSE;
+      return GST_NVENC_SET_FORMAT_FAIL;
     }
 
     params->presetGUID = nvenc->selected_preset;
@@ -1756,6 +1765,9 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
      * subsequent reconfigures */
     params->maxEncodeWidth = GST_VIDEO_INFO_WIDTH (info);
     params->maxEncodeHeight = GST_VIDEO_INFO_HEIGHT (info);
+
+    /* A new keyframe is required after a full configuration */
+    result = GST_NVENC_SET_FORMAT_NEEDS_KEYFRAME;
   }
 
   preset_config.version = gst_nvenc_get_preset_config_version ();
@@ -1767,7 +1779,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   if (nv_ret != NV_ENC_SUCCESS) {
     GST_ELEMENT_ERROR (nvenc, LIBRARY, SETTINGS, (NULL),
         ("Failed to get encode preset configuration: %d", nv_ret));
-    return FALSE;
+    return GST_NVENC_SET_FORMAT_FAIL;
   }
 
   params->encodeConfig = &preset_config.presetCfg;
@@ -1822,7 +1834,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   g_assert (nvenc_class->set_encoder_config);
   if (!nvenc_class->set_encoder_config (nvenc, state, params->encodeConfig)) {
     GST_ERROR_OBJECT (enc, "Subclass failed to set encoder configuration");
-    return FALSE;
+    return GST_NVENC_SET_FORMAT_FAIL;
   }
 
   /* store the last config to reconfig/re-init decision in the next time */
@@ -1843,7 +1855,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
             NvEncGetLastErrorString (nvenc->encoder)));
     NvEncDestroyEncoder (nvenc->encoder);
     nvenc->encoder = NULL;
-    return FALSE;
+    return GST_NVENC_SET_FORMAT_FAIL;
   }
 
   if (!reconfigure) {
@@ -1945,7 +1957,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
       if (nv_ret != NV_ENC_SUCCESS) {
         GST_WARNING_OBJECT (enc, "Failed to allocate input buffer: %d", nv_ret);
         /* FIXME: clean up */
-        return FALSE;
+        return GST_NVENC_SET_FORMAT_FAIL;
       }
 
       GST_INFO_OBJECT (nvenc, "allocated output buffer %2d: %p", i,
@@ -1972,7 +1984,7 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
       nv_ret = NvEncGetSequenceParams (nvenc->encoder, &seq_param);
       if (nv_ret != NV_ENC_SUCCESS) {
         GST_WARNING_OBJECT (enc, "Failed to retrieve SPS/PPS: %d", nv_ret);
-        return FALSE;
+        return GST_NVENC_SET_FORMAT_FAIL;
       }
 
       /* FIXME: use SPS/PPS */
@@ -1985,10 +1997,20 @@ gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
   if (!nvenc_class->set_src_caps (nvenc, state)) {
     GST_ERROR_OBJECT (nvenc, "Subclass failed to set output caps");
     /* FIXME: clean up */
-    return FALSE;
+    return GST_NVENC_SET_FORMAT_FAIL;
   }
 
-  return TRUE;
+  return result;
+}
+
+static gboolean
+gst_nv_base_enc_set_format (GstVideoEncoder * enc, GstVideoCodecState * state)
+{
+  GstNvEncSetFormatResult result;
+
+  result = gst_nv_base_enc_set_format_internal (enc, state);
+
+  return result != GST_NVENC_SET_FORMAT_FAIL;
 }
 
 static guint
@@ -2427,13 +2449,24 @@ gst_nv_base_enc_handle_frame (GstVideoEncoder * enc, GstVideoCodecFrame * frame)
   }
 
   if (g_atomic_int_compare_and_exchange (&nvenc->reconfig, TRUE, FALSE)) {
-    if (!gst_nv_base_enc_set_format (enc, nvenc->input_state)) {
-      flow = GST_FLOW_NOT_NEGOTIATED;
-      goto drop;
+    switch (gst_nv_base_enc_set_format_internal (enc, nvenc->input_state)) {
+      case GST_NVENC_SET_FORMAT_FAIL:
+      {
+        flow = GST_FLOW_NOT_NEGOTIATED;
+        goto drop;
+      }
+      case GST_NVENC_SET_FORMAT_OK:
+      {
+        break;
+      }
+      case GST_NVENC_SET_FORMAT_NEEDS_KEYFRAME:
+      {
+        /* reconfigured encode session should start from keyframe */
+        GST_VIDEO_CODEC_FRAME_SET_FORCE_KEYFRAME (frame);
+        break;
+      }
     }
 
-    /* reconfigured encode session should start from keyframe */
-    GST_VIDEO_CODEC_FRAME_SET_FORCE_KEYFRAME (frame);
   }
 #ifdef HAVE_CUDA_GST_GL
   if (nvenc->mem_type == GST_NVENC_MEM_TYPE_GL)
