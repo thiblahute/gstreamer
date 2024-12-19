@@ -442,6 +442,33 @@ gst_video_crop_transform_semi_planar (GstVideoCrop * vcrop,
 }
 
 static GstFlowReturn
+gst_video_crop_fill_transparent (GstVideoCrop * vcrop, GstVideoFrame * frame)
+{
+  const GstVideoFormatInfo *finfo = frame->info.finfo;
+  guint i;
+
+  if (!GST_VIDEO_FORMAT_INFO_HAS_ALPHA (finfo) ||
+      GST_VIDEO_FORMAT_INFO_IS_COMPLEX (finfo)) {
+    GST_WARNING_OBJECT (vcrop, "Format %s not supported for transparency",
+        GST_VIDEO_FORMAT_INFO_NAME (finfo));
+    return GST_FLOW_ERROR;
+  }
+
+  /* Set everything to 0, making the frame fully transparent */
+  for (i = 0; i < GST_VIDEO_FRAME_N_PLANES (frame); i++) {
+    guint8 *data = GST_VIDEO_FRAME_PLANE_DATA (frame, i);
+    gint stride = GST_VIDEO_FRAME_PLANE_STRIDE (frame, i);
+    gint height = GST_VIDEO_FRAME_COMP_HEIGHT (frame, i);
+
+    for (guint h = 0; h < height; h++) {
+      memset (data + (h * stride), 0, stride);
+    }
+  }
+
+  return GST_FLOW_OK;
+}
+
+static GstFlowReturn
 gst_video_crop_transform_frame (GstVideoFilter * vfilter,
     GstVideoFrame * in_frame, GstVideoFrame * out_frame)
 {
@@ -459,6 +486,10 @@ gst_video_crop_transform_frame (GstVideoFilter * vfilter,
   if (meta) {
     x = meta->x;
     y = meta->y;
+  }
+
+  if (vcrop->fill_transparent) {
+    return gst_video_crop_fill_transparent (vcrop, out_frame);
   }
 
   switch (vcrop->packing) {
@@ -756,6 +787,38 @@ gst_video_crop_transform_caps (GstBaseTransform * trans,
     gst_caps_set_features (other_caps, i, gst_caps_features_copy (features));
   }
 
+  GstCaps *template_caps = gst_static_pad_template_get_caps (&src_template);
+  const GValue *formats =
+      gst_structure_get_value (gst_caps_get_structure (template_caps, 0),
+      "format");
+  GValue alpha_formats = G_VALUE_INIT;
+  GstStructure *structure = gst_structure_new_empty ("video/x-raw");
+
+  g_value_init (&alpha_formats, GST_TYPE_LIST);
+  for (i = 0; i < gst_value_list_get_size (formats); i++) {
+    const GValue *fmt_value = gst_value_list_get_value (formats, i);
+    GstVideoFormat fmt =
+        gst_video_format_from_string (g_value_get_string (fmt_value));
+    const GstVideoFormatInfo *format_info = gst_video_format_get_info (fmt);
+
+    if (GST_VIDEO_FORMAT_INFO_HAS_ALPHA (format_info)) {
+      GValue v = G_VALUE_INIT;
+      g_value_init (&v, G_TYPE_STRING);
+      g_value_copy (fmt_value, &v);
+      gst_value_list_append_value (&alpha_formats, &v);
+    }
+  }
+  gst_structure_set_value (structure, "format", &alpha_formats);
+  if (direction == GST_PAD_SINK) {
+    /* On the output side, when "cropping  too much" we will output 1 transparent pixel only */
+    gst_structure_set (structure, "width", G_TYPE_INT, 1, "height", G_TYPE_INT,
+        1, NULL);
+  }
+
+  gst_caps_append_structure (other_caps, structure);
+
+  gst_caps_unref (template_caps);
+
   if (!gst_caps_is_empty (other_caps) && filter_caps) {
     GstCaps *tmp = gst_caps_intersect_full (filter_caps, other_caps,
         GST_CAPS_INTERSECT_FIRST);
@@ -775,6 +838,7 @@ gst_video_crop_set_info (GstVideoFilter * vfilter, GstCaps * in,
   int dx, dy;
 
   GST_OBJECT_LOCK (crop);
+  crop->fill_transparent = FALSE;
   crop->need_update = FALSE;
   crop->crop_left = crop->prop_left;
   crop->crop_right = crop->prop_right;
@@ -920,10 +984,34 @@ beach:
 
   return TRUE;
 
-  /* ERROR */
 cropping_too_much:
   {
-    GST_WARNING_OBJECT (crop, "we are cropping too much");
+    /* When "croping too much" we try to fill the buffer with transparent pixels so that the image fully disapears */
+    if (GST_VIDEO_INFO_HAS_ALPHA (out_info)) {
+      GST_INFO_OBJECT (crop,
+          "we are cropping too much, filling 1 transparent pixels");
+
+      features = gst_caps_get_features (in, 0);
+      crop->raw_caps = gst_caps_features_is_equal (features,
+          GST_CAPS_FEATURES_MEMORY_SYSTEM_MEMORY);
+
+      if (!crop->raw_caps) {
+        GST_WARNING_OBJECT (crop,
+            "we are cropping too much while negotiated format with a non system memory buffer");
+
+        return FALSE;
+      }
+
+      gst_base_transform_set_passthrough (GST_BASE_TRANSFORM (crop), FALSE);
+      gst_base_transform_set_in_place (GST_BASE_TRANSFORM (crop), FALSE);
+      GST_OBJECT_LOCK (crop);
+      crop->fill_transparent = TRUE;
+      GST_OBJECT_UNLOCK (crop);
+      return TRUE;
+    }
+
+    GST_WARNING_OBJECT (crop,
+        "we are cropping too much while negotiated format without an alpha channel");
     return FALSE;
   }
 unknown_format:

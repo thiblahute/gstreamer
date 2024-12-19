@@ -79,6 +79,7 @@ struct _GstVideoCrop
   gint crop_right;
   gint crop_top;
   gint crop_bottom;
+  gboolean fill_transparent;
 
   VideoCropPixelFormat packing;
   gint macro_y_off;
