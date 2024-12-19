@@ -85,6 +85,8 @@ struct _GESTrackPrivate
   guint64 duration;
 
   GstCaps *caps;
+  /* This field can be read from any thread since it's protected by OBJECT_LOCK,
+   * but it must only be set from the GES thread due to its side effects */
   GstCaps *restriction_caps;
 
   GstElement *composition;      /* The composition associated with this track */
@@ -1045,9 +1047,11 @@ ges_track_set_restriction_caps (GESTrack * track, const GstCaps * caps)
 
   priv = track->priv;
 
+  GST_OBJECT_LOCK (track);
   if (priv->restriction_caps)
     gst_caps_unref (priv->restriction_caps);
   priv->restriction_caps = gst_caps_copy (caps);
+  GST_OBJECT_UNLOCK (track);
 
   if (!track->priv->timeline ||
       !ges_timeline_get_smart_rendering (track->priv->timeline))
@@ -1485,14 +1489,16 @@ GstCaps *
 ges_track_get_restriction_caps (GESTrack * track)
 {
   GESTrackPrivate *priv;
+  GstCaps *res = NULL;
 
   g_return_val_if_fail (GES_IS_TRACK (track), NULL);
-  CHECK_THREAD (track);
 
   priv = track->priv;
 
+  GST_OBJECT_LOCK (track);
   if (priv->restriction_caps)
-    return gst_caps_ref (priv->restriction_caps);
+    res = gst_caps_ref (priv->restriction_caps);
+  GST_OBJECT_UNLOCK (track);
 
-  return NULL;
+  return res;
 }
