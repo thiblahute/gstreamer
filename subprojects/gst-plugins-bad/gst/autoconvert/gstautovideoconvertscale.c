@@ -49,6 +49,8 @@ G_DEFINE_TYPE (GstAutoVideoConvertScale, gst_auto_video_convert_scale,
 
 GST_ELEMENT_REGISTER_DEFINE (autovideoconvertscale, "autovideoconvertscale",
     GST_RANK_NONE, gst_auto_video_convert_scale_get_type ());
+static void
+gst_auto_video_convert_scale_register_filters (GstBaseAutoConvert * self);
 
 static void
 gst_auto_video_convert_scale_class_init (GstAutoVideoConvertScaleClass * klass)
@@ -63,11 +65,20 @@ gst_auto_video_convert_scale_class_init (GstAutoVideoConvertScaleClass * klass)
       "Bin/Colorspace/Scale/Video/Converter",
       "Selects the right color space converter based on the caps",
       "Thibault Saunier <tsaunier@igalia.com>");
+
+  GST_BASE_AUTO_CONVERT_CLASS (klass)->register_filters =
+      gst_auto_video_convert_scale_register_filters;
 }
 
 static void
 gst_auto_video_convert_scale_init (GstAutoVideoConvertScale *
     autovideoconvertscale)
+{
+
+}
+
+static void
+gst_auto_video_convert_scale_register_filters (GstBaseAutoConvert * self)
 {
   /* *INDENT-OFF* */
   static const GstAutoVideoFilterGenerator gen[] = {
@@ -187,6 +198,5 @@ gst_auto_video_convert_scale_init (GstAutoVideoConvertScale *
   /* *INDENT-ON* */
 
 
-  gst_auto_video_register_well_known_bins (GST_BASE_AUTO_CONVERT
-      (autovideoconvertscale), gen);
+  gst_auto_video_register_well_known_bins (self, gen);
 }

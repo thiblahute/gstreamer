@@ -313,8 +313,6 @@ gst_base_auto_convert_class_init (GstBaseAutoConvertClass * klass)
   gobject_class->finalize = GST_DEBUG_FUNCPTR (gst_base_auto_convert_finalize);
 
   gstbin_class->element_removed = gst_base_auto_convert_element_removed;
-
-  klass->registers_filters = TRUE;
 }
 
 static void
@@ -974,7 +972,19 @@ gst_base_auto_convert_get_or_load_filters_info (GstBaseAutoConvert * self)
     goto done;
   }
 
-  if (GST_BASE_AUTO_CONVERT_GET_CLASS (self)->registers_filters) {
+  if (GST_BASE_AUTO_CONVERT_GET_CLASS (self)->register_filters) {
+    GST_OBJECT_UNLOCK (self);
+    GST_BASE_AUTO_CONVERT_GET_CLASS (self)->register_filters (self);
+
+
+    GST_OBJECT_LOCK (self);
+    if (self->filters_info) {
+      GST_OBJECT_UNLOCK (self);
+
+      goto done;
+    }
+    GST_OBJECT_UNLOCK (self);
+
     GST_ERROR_OBJECT (self,
         "Filters should have been registered but none found");
 

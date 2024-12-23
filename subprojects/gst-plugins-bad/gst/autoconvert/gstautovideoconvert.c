@@ -50,6 +50,7 @@ G_DEFINE_TYPE (GstAutoVideoConvert, gst_auto_video_convert,
 
 GST_ELEMENT_REGISTER_DEFINE (autovideoconvert, "autovideoconvert",
     GST_RANK_NONE, gst_auto_video_convert_get_type ());
+static void gst_auto_video_convert_register_filters (GstBaseAutoConvert * self);
 
 static void
 gst_auto_video_convert_class_init (GstAutoVideoConvertClass * klass)
@@ -64,6 +65,9 @@ gst_auto_video_convert_class_init (GstAutoVideoConvertClass * klass)
       "Bin/Colorspace/Video/Converter",
       "Selects the right color space converter based on the caps",
       "Thibault Saunier <tsaunier@igalia.com>");
+
+  GST_BASE_AUTO_CONVERT_CLASS (klass)->register_filters =
+      gst_auto_video_convert_register_filters;
 }
 
 #define CUDA_CONVERT_FORMATS_UNHANDLED_BY_GL \
@@ -72,7 +76,7 @@ gst_auto_video_convert_class_init (GstAutoVideoConvertClass * klass)
     "video/x-raw,format={I420_10LE,I422_10LE,I422_12LE,Y444_16LE};"
 
 static void
-gst_auto_video_convert_init (GstAutoVideoConvert * autovideoconvert)
+gst_auto_video_convert_register_filters (GstBaseAutoConvert * self)
 {
   /* *INDENT-OFF* */
   static const GstAutoVideoFilterGenerator gen[] = {
@@ -206,6 +210,11 @@ gst_auto_video_convert_init (GstAutoVideoConvert * autovideoconvert)
   /* *INDENT-ON* */
 
 
-  gst_auto_video_register_well_known_bins (GST_BASE_AUTO_CONVERT
-      (autovideoconvert), gen);
+  gst_auto_video_register_well_known_bins (self, gen);
+}
+
+static void
+gst_auto_video_convert_init (GstAutoVideoConvert * self)
+{
+
 }

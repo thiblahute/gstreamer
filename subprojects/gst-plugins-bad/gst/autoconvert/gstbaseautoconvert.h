@@ -77,7 +77,7 @@ struct _GstBaseAutoConvertClass
 {
   GstBinClass parent_class;
 
-  gboolean registers_filters;
+  void (*register_filters) (GstBaseAutoConvert *self);
 };
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstBaseAutoConvert, gst_object_unref)

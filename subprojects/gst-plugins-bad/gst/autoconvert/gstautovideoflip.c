@@ -40,6 +40,8 @@
 GST_DEBUG_CATEGORY (autovideoflip_debug);
 #define GST_CAT_DEFAULT (autovideoflip_debug)
 
+static void gst_auto_video_flip_register_filters (GstBaseAutoConvert * self);
+
 #define PROP_DIRECTION_DEFAULT GST_VIDEO_ORIENTATION_IDENTITY
 
 /* GstVideoFlip properties */
@@ -225,13 +227,20 @@ gst_auto_video_flip_class_init (GstAutoVideoFlipClass * klass)
 
   gstbin_class->deep_element_added = gst_auto_video_flip_deep_element_added;
   gstbin_class->deep_element_removed = gst_auto_video_flip_deep_element_removed;
+
+  GST_BASE_AUTO_CONVERT_CLASS (klass)->register_filters =
+      gst_auto_video_flip_register_filters;
 }
 
 static void
 gst_auto_video_flip_init (GstAutoVideoFlip * self)
 {
   self->direction = PROP_DIRECTION_DEFAULT;
+}
 
+static void
+gst_auto_video_flip_register_filters (GstBaseAutoConvert * self)
+{
   /* *INDENT-OFF* */
   static const GstAutoVideoFilterGenerator gen[] = {
     {

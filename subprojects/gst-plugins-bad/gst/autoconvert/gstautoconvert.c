@@ -192,8 +192,6 @@ gst_auto_convert_class_init (GstAutoConvertClass * klass)
               "An element factory name", NULL,
               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS),
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-  GST_BASE_AUTO_CONVERT_CLASS (klass)->registers_filters = FALSE;
 }
 
 static void

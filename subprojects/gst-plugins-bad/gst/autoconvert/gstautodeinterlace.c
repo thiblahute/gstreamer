@@ -315,9 +315,10 @@ GST_ELEMENT_REGISTER_DEFINE (autodeinterlace, "autodeinterlace",
 #define DEINTERLACE_FORCE_SYSMEM { "capsfilter caps=\"video/x-raw\" ! deinterlace ! capsfilter caps=\"video/x-raw\"", NULL}
 
 static void
-gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
+gst_auto_deinterlace_register_filters (GstBaseAutoConvert * base_autoconvert)
 {
   const GstAutoVideoFilterGenerator *g;
+  GstAutoDeinterlace *self = GST_AUTO_DEINTERLACE (base_autoconvert);
 
   /* Only the software deinterlacer supports all our properties so if we are using
    * defaults values for all of them, use hw deinterlacer otherwise ensure to use
@@ -505,7 +506,7 @@ gst_auto_deinterlace_register_filters (GstAutoDeinterlace * self)
   }
   /* *INDENT-ON* */
 
-  gst_auto_video_register_well_known_bins (GST_BASE_AUTO_CONVERT (self), g);
+  gst_auto_video_register_well_known_bins (base_autoconvert, g);
 }
 
 static void
@@ -562,7 +563,7 @@ gst_auto_deinterlace_set_property (GObject * object, guint prop_id,
 
   if (changed) {
     gst_base_auto_convert_reset_filters (GST_BASE_AUTO_CONVERT (object));
-    gst_auto_deinterlace_register_filters (GST_AUTO_DEINTERLACE (object));
+    gst_auto_deinterlace_register_filters (GST_BASE_AUTO_CONVERT (object));
 
     /* Force a reconfigure so the new property can be taken into account if necessary */
     gst_pad_push_event (GST_BASE_AUTO_CONVERT (object)->sinkpad,
@@ -800,10 +801,13 @@ gst_auto_deinterlace_class_init (GstAutoDeinterlaceClass * klass)
   gstbin_class->deep_element_added = gst_auto_deinterlace_deep_element_added;
   gstbin_class->deep_element_removed =
       gst_auto_deinterlace_deep_element_removed;
+
+  GST_BASE_AUTO_CONVERT_CLASS (klass)->register_filters =
+      gst_auto_deinterlace_register_filters;
+
 }
 
 static void
 gst_auto_deinterlace_init (GstAutoDeinterlace * self)
 {
-  gst_auto_deinterlace_register_filters (self);
 }
