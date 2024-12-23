@@ -322,13 +322,19 @@ compare_src_pad (GValue * item, GstCaps * caps)
 */
 
 static gboolean
-get_valid_src_pad (NleSource * source, GstElement * element, GstPad ** pad)
+get_valid_src_pad (NleSource * source, GstElement * element, GstPad ** pad,
+    gboolean has_dynamic_src)
 {
   gboolean res = FALSE;
   GstIterator *srcpads;
   GValue item = { 0, };
 
   g_return_val_if_fail (pad, FALSE);
+
+  if (!has_dynamic_src && element->numsrcpads == 1) {
+    *pad = gst_object_ref (element->srcpads->data);
+    return TRUE;
+  }
 
   srcpads = gst_element_iterate_src_pads (element);
   if (gst_iterator_find_custom (srcpads, (GCompareFunc) compare_src_pad, &item,
@@ -387,24 +393,23 @@ nle_source_control_element_func (NleSource * source, GstElement * element)
   source->element = element;
   gst_object_ref (element);
 
-  if (get_valid_src_pad (source, source->element, &pad)) {
+  gboolean has_dynamic_srcpad = has_dynamic_srcpads (element);
+  if (get_valid_src_pad (source, source->element, &pad, has_dynamic_srcpad)) {
     priv->staticpad = pad;
     nle_object_ghost_pad_set_target (NLE_OBJECT (source),
         NLE_OBJECT_SRC (source), pad);
     priv->dynamicpads = FALSE;
-  } else {
-    priv->dynamicpads = has_dynamic_srcpads (element);
-    GST_DEBUG_OBJECT (source, "No valid source pad yet, dynamicpads:%d",
-        priv->dynamicpads);
-    if (priv->dynamicpads) {
-      /* connect to pad-added/removed signals */
-      priv->padremovedid = g_signal_connect
-          (G_OBJECT (element), "pad-removed",
-          G_CALLBACK (element_pad_removed_cb), source);
-      priv->padaddedid =
-          g_signal_connect (G_OBJECT (element), "pad-added",
-          G_CALLBACK (element_pad_added_cb), source);
-    }
+  } else if (has_dynamic_srcpad) {
+    GST_DEBUG_OBJECT (source,
+        "No valid source pad yet, waiting for dynamic pads");
+    priv->dynamicpads = TRUE;
+    /* connect to pad-added/removed signals */
+    priv->padremovedid = g_signal_connect
+        (G_OBJECT (element), "pad-removed",
+        G_CALLBACK (element_pad_removed_cb), source);
+    priv->padaddedid =
+        g_signal_connect (G_OBJECT (element), "pad-added",
+        G_CALLBACK (element_pad_added_cb), source);
   }
 
   return TRUE;
@@ -427,7 +432,7 @@ nle_source_add_element (GstBin * bin, GstElement * element)
   pret = GST_BIN_CLASS (parent_class)->add_element (bin, element);
 
   if (pret) {
-    nle_source_control_element_func (source, element);
+    pret = nle_source_control_element_func (source, element);
   }
   return pret;
 }
@@ -582,7 +587,9 @@ nle_source_prepare (NleObject * object)
     return FALSE;
   }
 
-  if (!priv->staticpad && !(get_valid_src_pad (source, source->element, &pad))) {
+  if (!priv->staticpad
+      && !(get_valid_src_pad (source, source->element, &pad,
+              priv->dynamicpads))) {
     GST_DEBUG_OBJECT (source, "Couldn't find a valid source pad");
     gst_object_unref (parent);
     return FALSE;
