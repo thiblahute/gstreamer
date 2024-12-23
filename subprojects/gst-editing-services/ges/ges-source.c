@@ -146,7 +146,8 @@ _set_ghost_pad_target (GESSource * self, GstPad * srcpad, GstElement * element)
     }
 
     sinkpad = gst_element_get_static_pad (priv->first_converter, "sink");
-    link_return = gst_pad_link (srcpad, sinkpad);
+    link_return =
+        gst_pad_link_full (srcpad, sinkpad, GST_PAD_LINK_CHECK_NOTHING);
 #ifndef GST_DISABLE_GST_DEBUG
     if (link_return != GST_PAD_LINK_OK) {
       GstCaps *srccaps = NULL;
