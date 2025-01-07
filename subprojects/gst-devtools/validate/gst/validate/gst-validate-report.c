@@ -1332,7 +1332,7 @@ gst_validate_report_print_details (GstValidateReport * report)
 static void
 gst_validate_report_print_trace (GstValidateReport * report)
 {
-  if (report->trace && report->level != GST_VALIDATE_REPORT_LEVEL_EXPECTED) {
+  if (report->trace) {
     gint i;
     gchar **lines = g_strsplit (report->trace, "\n", -1);
 

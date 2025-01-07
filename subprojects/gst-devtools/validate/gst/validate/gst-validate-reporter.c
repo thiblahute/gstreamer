@@ -175,8 +175,8 @@ gst_validate_reporter_get_report (GstValidateReporter * reporter,
   return report;
 }
 
-static GstValidateReport *
-gst_validate_report_valist_full (GstValidateReporter * reporter,
+void
+gst_validate_report_valist (GstValidateReporter * reporter,
     GstValidateIssueId issue_id, const gchar * format, va_list var_args)
 {
   GstValidateReport *report, *prev_report;
@@ -189,18 +189,38 @@ gst_validate_report_valist_full (GstValidateReporter * reporter,
 
   issue = gst_validate_issue_from_id (issue_id);
 
-  g_return_val_if_fail (issue != NULL, NULL);
-  g_return_val_if_fail (GST_IS_VALIDATE_REPORTER (reporter), NULL);
+  g_return_if_fail (issue != NULL);
+  g_return_if_fail (GST_IS_VALIDATE_REPORTER (reporter));
 
   G_VA_COPY (vacopy, var_args);
   message = gst_info_strdup_vprintf (format, vacopy);
   report = gst_validate_report_new (issue, reporter, message);
 
+#ifndef GST_DISABLE_GST_DEBUG
+  combo =
+      g_strdup_printf ("<%s> %" GST_VALIDATE_ISSUE_FORMAT " : %s", priv->name,
+      GST_VALIDATE_ISSUE_ARGS (issue), format);
+  G_VA_COPY (vacopy, var_args);
+  if (report->level == GST_VALIDATE_REPORT_LEVEL_CRITICAL) {
+    gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_ERROR, __FILE__,
+        GST_FUNCTION, __LINE__, NULL, combo, vacopy);
+  } else if (report->level == GST_VALIDATE_REPORT_LEVEL_WARNING)
+    gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_WARNING, __FILE__,
+        GST_FUNCTION, __LINE__, NULL, combo, vacopy);
+  else if (report->level == GST_VALIDATE_REPORT_LEVEL_ISSUE)
+    gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_LOG, __FILE__,
+        GST_FUNCTION, __LINE__, (GObject *) NULL, combo, vacopy);
+  else
+    gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_DEBUG, __FILE__,
+        GST_FUNCTION, __LINE__, NULL, combo, vacopy);
+  g_free (combo);
+#endif
+  va_end (vacopy);
+
   int_ret = gst_validate_reporter_intercept_report (reporter, report);
 
   if (int_ret == GST_VALIDATE_REPORTER_DROP) {
     gst_validate_report_unref (report);
-    report = NULL;
     goto done;
   }
 
@@ -234,29 +254,6 @@ gst_validate_report_valist_full (GstValidateReporter * reporter,
   if (runner && int_ret == GST_VALIDATE_REPORTER_REPORT) {
     gst_validate_runner_add_report (runner, report);
   }
-#ifndef GST_DISABLE_GST_DEBUG
-
-  if (report->level == GST_VALIDATE_REPORT_LEVEL_EXPECTED) {
-    combo =
-        g_strdup_printf ("<%s> %" GST_VALIDATE_ISSUE_FORMAT " : %s", priv->name,
-        GST_VALIDATE_ISSUE_ARGS (issue), format);
-    G_VA_COPY (vacopy, var_args);
-    if (report->level == GST_VALIDATE_REPORT_LEVEL_CRITICAL) {
-      gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_ERROR, __FILE__,
-          GST_FUNCTION, __LINE__, NULL, combo, vacopy);
-    } else if (report->level == GST_VALIDATE_REPORT_LEVEL_WARNING)
-      gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_WARNING, __FILE__,
-          GST_FUNCTION, __LINE__, NULL, combo, vacopy);
-    else if (report->level == GST_VALIDATE_REPORT_LEVEL_ISSUE)
-      gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_LOG, __FILE__,
-          GST_FUNCTION, __LINE__, (GObject *) NULL, combo, vacopy);
-    else
-      gst_debug_log_valist (GST_CAT_DEFAULT, GST_LEVEL_DEBUG, __FILE__,
-          GST_FUNCTION, __LINE__, NULL, combo, vacopy);
-    g_free (combo);
-  }
-#endif
-  va_end (vacopy);
 
   if (gst_validate_report_check_abort (report)) {
     if (runner)
@@ -272,18 +269,6 @@ done:
     gst_object_unref (runner);
 
   g_free (message);
-
-  return report ? gst_validate_report_ref (report) : NULL;
-}
-
-void
-gst_validate_report_valist (GstValidateReporter * reporter,
-    GstValidateIssueId issue_id, const gchar * format, va_list var_args)
-{
-  GstValidateReport *report = gst_validate_report_valist_full (reporter,
-      issue_id, format, var_args);
-  if (report)
-    gst_validate_report_unref (report);
 }
 
 static void
@@ -391,10 +376,8 @@ gst_validate_report_action (GstValidateReporter * reporter,
 done:
   va_start (var_args, format);
   G_VA_COPY (var_copy, var_args);
-  GstValidateReport *report =
-      gst_validate_report_valist_full (reporter, issue_id, f->str, var_args);
-  if (action && (!report
-          || report->level != GST_VALIDATE_REPORT_LEVEL_EXPECTED)) {
+  gst_validate_report_valist (reporter, issue_id, f->str, var_args);
+  if (action) {
     gint i, indent = gst_validate_action_get_level (action) * 2;
     gchar *message, **lines, *color = NULL;
     const gchar *endcolor = "";
@@ -418,8 +401,6 @@ done:
   va_end (var_args);
   va_end (var_copy);
 
-  if (report)
-    gst_validate_report_unref (report);
   g_string_free (f, TRUE);
 }
 
