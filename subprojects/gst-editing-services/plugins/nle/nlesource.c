@@ -485,7 +485,7 @@ has_dynamic_srcpads (GstElement * element)
     templates = templates->next;
   }
 
-  return ret;
+  return ret && templates;
 }
 
 static gboolean
