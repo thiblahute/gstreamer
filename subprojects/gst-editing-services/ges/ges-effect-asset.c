@@ -255,8 +255,8 @@ ghost_pad (GstElement * effect, const gchar * bin_desc, GstPad * pad,
 
   gst_bin_add (GST_BIN (effect), converter);
   lret =
-      gst_pad_link (GST_PAD_IS_SINK (pad) ? peer : pad,
-      GST_PAD_IS_SINK (pad) ? pad : peer);
+      gst_pad_link_full (GST_PAD_IS_SINK (pad) ? peer : pad,
+      GST_PAD_IS_SINK (pad) ? pad : peer, GST_PAD_LINK_CHECK_NOTHING);
 
   if (lret != GST_PAD_LINK_OK) {
     gst_object_unref (converter);
