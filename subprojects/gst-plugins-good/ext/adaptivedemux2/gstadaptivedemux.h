@@ -187,6 +187,8 @@ struct _GstAdaptiveDemuxTrack
   /* Output segment and time (in running time) */
   GstSegment output_segment;
   GstClockTimeDiff output_time;
+  /* Offset to apply to outgoing segments (in running time) */
+  GstClockTime base_offset;
 
   /* Track position and duration for emitting gap
    * events */

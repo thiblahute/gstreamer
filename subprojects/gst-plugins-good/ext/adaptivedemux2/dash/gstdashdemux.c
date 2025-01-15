@@ -966,6 +966,16 @@ gst_dash_demux_setup_all_streams (GstDashDemux2 * demux)
       gst_adaptive_demux2_stream_add_track (GST_ADAPTIVE_DEMUX2_STREAM_CAST
           (stream), track);
       stream->track = track;
+      if (active_stream->segments->len > 0) {
+        GstMediaSegment *first_segment =
+            g_ptr_array_index (active_stream->segments, 0);
+
+        track->base_offset = first_segment->start;
+
+        GST_DEBUG_ID (track->id,
+            "Setting base offset from first chunk start %" GST_TIMEP_FORMAT,
+            &track->base_offset);
+      }
     }
     stream->active_stream = active_stream;
 

@@ -1686,10 +1686,16 @@ gst_mpd_client2_stream_seek (GstMPDClient2 * client, GstActiveStream * stream,
   gint index = 0;
   gint repeat_index = 0;
   GstMediaSegment *selectedChunk = NULL;
+  GstClockTime start_time = 0;
 
   g_return_val_if_fail (stream != NULL, 0);
 
   if (stream->segments) {
+    start_time = ((GstMediaSegment *) stream->segments->pdata[0])->start;
+    if (ts >= start_time) {
+      ts -= start_time;
+    }
+
     for (index = 0; index < stream->segments->len; index++) {
       gboolean in_segment = FALSE;
       GstMediaSegment *segment = g_ptr_array_index (stream->segments, index);
