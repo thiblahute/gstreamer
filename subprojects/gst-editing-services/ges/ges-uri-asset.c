@@ -90,6 +90,9 @@ struct _GESUriSourceAssetPrivate
 
   const gchar *uri;
   gchar id[11];
+
+  // Used as atomic
+  guint n_extracted;
 };
 
 G_DEFINE_TYPE_WITH_CODE (GESUriClipAsset, ges_uri_clip_asset,
