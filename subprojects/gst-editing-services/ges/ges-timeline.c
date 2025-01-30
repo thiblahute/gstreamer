@@ -2238,8 +2238,8 @@ _pad_probe_cb (GstPad * track_pad, GstPadProbeInfo * info,
 
     if (seek_probe_info->awaited_seek_tracks) {
       GST_DEBUG_OBJECT (track_pad,
-        "Got FLUSH_START but we still wait for %d pads to receive the seek event, dropping it.",
-        g_list_length (seek_probe_info->awaited_seek_tracks));
+          "Got FLUSH_START but we still wait for %d pads to receive the seek event, dropping it.",
+          g_list_length (seek_probe_info->awaited_seek_tracks));
 
       /* We are blocking the thread on FLUSH_START(serialized) so we know that this pad
        * won't receive a FLUSH_STOP event, so the FlushingSeekInfo won't be cleaned
@@ -2248,7 +2248,8 @@ _pad_probe_cb (GstPad * track_pad, GstPadProbeInfo * info,
 
       g_mutex_lock (&seek_probe_info->waiting_for_seeks_lock);
       while (seek_probe_info->awaited_seek_tracks)
-        g_cond_wait (&seek_probe_info->waiting_for_seeks_cond, &seek_probe_info->waiting_for_seeks_lock);
+        g_cond_wait (&seek_probe_info->waiting_for_seeks_cond,
+            &seek_probe_info->waiting_for_seeks_lock);
       g_mutex_unlock (&seek_probe_info->waiting_for_seeks_lock);
 
       g_mutex_lock (&timeline->priv->flushing_seek_info_lock);
@@ -2329,12 +2330,15 @@ ges_timeline_src_pad_event (GstPad * pad, GstObject * parent, GstEvent * event)
         FlushingSeekInfo seek_probe_info = {
           .seqnum = seqnum,
           .forwarded_flush_starts = FALSE,
-          .awaited_seek_tracks = g_list_copy_deep(GST_ELEMENT (timeline)->srcpads, (GCopyFunc) gst_object_ref, NULL),
+          .awaited_seek_tracks =
+              g_list_copy_deep (GST_ELEMENT (timeline)->srcpads,
+              (GCopyFunc) gst_object_ref, NULL),
           .awaited_flush_stop_pads = NULL,
         };
         GST_OBJECT_UNLOCK (timeline);
 
-        seek_probe_info.awaited_seek_tracks = g_list_remove (seek_probe_info.awaited_seek_tracks, pad);
+        seek_probe_info.awaited_seek_tracks =
+            g_list_remove (seek_probe_info.awaited_seek_tracks, pad);
         gst_object_unref (pad);
 
         GST_DEBUG_OBJECT (parent, "Start following seek with seqnum %d",
@@ -2342,7 +2346,8 @@ ges_timeline_src_pad_event (GstPad * pad, GstObject * parent, GstEvent * event)
         g_array_append_val (timeline->priv->flushing_seek_infos,
             seek_probe_info);
       } else {
-        info->awaited_seek_tracks = g_list_remove (info->awaited_seek_tracks, pad);
+        info->awaited_seek_tracks =
+            g_list_remove (info->awaited_seek_tracks, pad);
         gst_object_unref (pad);
 
         if (!info->awaited_seek_tracks) {
