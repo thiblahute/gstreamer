@@ -7,9 +7,6 @@
 #undef GST_CAT_DEFAULT
 #define GST_CAT_DEFAULT ges_pipeline_pool_manager_debug
 
-/* FIXME Make that a public setting */
-#define MAX_PRELOADED_SOURCES 10
-
 GST_DEBUG_CATEGORY_STATIC (GST_CAT_DEFAULT);
 
 typedef struct
@@ -56,7 +53,7 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
   GstClockTime window_dur = 60 * GST_SECOND;
   GstClockTime window_start;
   GstClockTime window_stop = stack_end + window_dur;
-  gint max_preloaded_sources = MAX_PRELOADED_SOURCES;
+  gint max_preloaded_sources = self->max_preloaded_sources;
 
   if (!GES_IS_VIDEO_TRACK (track)) {
     GST_DEBUG_OBJECT (self->timeline,

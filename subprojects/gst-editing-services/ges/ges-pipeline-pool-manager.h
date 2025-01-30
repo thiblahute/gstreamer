@@ -28,6 +28,8 @@ typedef struct {
     gboolean has_subtimelines;
 
     gboolean rendering;
+
+    guint max_preloaded_sources;
 } GESPipelinePoolManager;
 
 void ges_pipeline_pool_manager_init   (GESPipelinePoolManager *self, GESTimeline *timeline);

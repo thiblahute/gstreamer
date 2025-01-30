@@ -282,8 +282,11 @@ enum
   PROP_AUTO_TRANSITION,
   PROP_SNAPPING_DISTANCE,
   PROP_UPDATE,
+  PROP_MAX_PRELOADED_SOURCES,
   PROP_LAST
 };
+
+#define DEFAULT_MAX_PRELOADED_SOURCES 10
 
 static GParamSpec *properties[PROP_LAST];
 
@@ -396,6 +399,10 @@ ges_timeline_get_property (GObject * object, guint property_id,
     case PROP_SNAPPING_DISTANCE:
       g_value_set_uint64 (value, timeline->priv->snapping_distance);
       break;
+    case PROP_MAX_PRELOADED_SOURCES:
+      g_value_set_uint (value,
+          timeline->priv->pool_manager.max_preloaded_sources);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
   }
@@ -413,6 +420,10 @@ ges_timeline_set_property (GObject * object, guint property_id,
       break;
     case PROP_SNAPPING_DISTANCE:
       timeline->priv->snapping_distance = g_value_get_uint64 (value);
+      break;
+    case PROP_MAX_PRELOADED_SOURCES:
+      timeline->priv->pool_manager.max_preloaded_sources =
+          g_value_get_uint (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -755,6 +766,24 @@ ges_timeline_class_init (GESTimelineClass * klass)
       properties[PROP_SNAPPING_DISTANCE]);
 
   /**
+   * GESTimeline:max-preloaded-sources:
+   *
+   * The maximum number of preloaded sources to use
+   * when using `uridecodepoolsrc`. 0 means no preloading.
+   *
+   * Bigger values implies more memory and CPU usage for better
+   * performance.
+   *
+   * Since: 1.28
+   */
+  properties[PROP_MAX_PRELOADED_SOURCES] =
+      g_param_spec_uint ("max-preloaded-sources", "Max preloaded sources",
+      "The maximum number of preloaded sources to use",
+      0, G_MAXINT, DEFAULT_MAX_PRELOADED_SOURCES, G_PARAM_READWRITE);
+  g_object_class_install_property (object_class, PROP_MAX_PRELOADED_SOURCES,
+      properties[PROP_MAX_PRELOADED_SOURCES]);
+
+  /**
    * GESTimeline::track-added:
    * @timeline: The #GESTimeline
    * @track: The track that was added to @timeline
@@ -990,6 +1019,7 @@ ges_timeline_class_init (GESTimelineClass * klass)
   ges_timeline_signals[COMMITED] =
       g_signal_new ("commited", G_TYPE_FROM_CLASS (klass),
       G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_NONE, 0);
+
 }
 
 static void
@@ -1029,6 +1059,7 @@ ges_timeline_init (GESTimeline * self)
       g_array_new (FALSE, TRUE, sizeof (FlushingSeekInfo));
 
   ges_pipeline_pool_manager_init (&priv->pool_manager, self);
+  priv->pool_manager.max_preloaded_sources = DEFAULT_MAX_PRELOADED_SOURCES;
 }
 
 /* Private methods */
