@@ -219,6 +219,7 @@ struct _GstBaseParsePrivate
   gint64 estimated_drift;
 
   guint min_frame_size;
+  gboolean error_no_valid_frames;
   gboolean disable_passthrough;
   gboolean passthrough;
   gboolean pts_interpolate;
@@ -356,11 +357,13 @@ typedef struct _GstBaseParseSeek
 } GstBaseParseSeek;
 
 #define DEFAULT_DISABLE_PASSTHROUGH        FALSE
+#define DEFAULT_ERROR_NO_VALID_FRAMES           TRUE
 
 enum
 {
   PROP_0,
   PROP_DISABLE_PASSTHROUGH,
+  PROP_ERROR_NO_VALID_FRAMES,
   PROP_LAST
 };
 
@@ -567,6 +570,24 @@ gst_base_parse_class_init (GstBaseParseClass * klass)
           DEFAULT_DISABLE_PASSTHROUGH,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  /**
+   * GstBaseParse:error-no-valid-frames:
+   *
+   * If set to %TRUE, baseparse will post an error on the bus if no valid frames
+   * were produced on EOS. This is the default legacy behaviour. If set to
+   * %FALSE, a warning message will be posted instead, the user will have to
+   * ensure it properly handles the fact that a parser might potentially push
+   * EOS without any data.
+   *
+   * Since: 1.26
+   */
+  g_object_class_install_property (gobject_class, PROP_ERROR_NO_VALID_FRAMES,
+      g_param_spec_boolean ("error-no-valid-frames",
+          "Post ERROR message if no valid frames before EOS",
+          "Post ERROR message if no valid frames were produced before EOS (FALSE: Post a WARNING message instead)",
+          DEFAULT_ERROR_NO_VALID_FRAMES,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
   gstelement_class = (GstElementClass *) klass;
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_base_parse_change_state);
@@ -645,6 +666,7 @@ gst_base_parse_init (GstBaseParse * parse, GstBaseParseClass * bclass)
   parse->priv->parser_tags = NULL;
   parse->priv->parser_tags_merge_mode = GST_TAG_MERGE_APPEND;
   parse->priv->disable_passthrough = DEFAULT_DISABLE_PASSTHROUGH;
+  parse->priv->error_no_valid_frames = DEFAULT_ERROR_NO_VALID_FRAMES;
 }
 
 static void
@@ -656,6 +678,9 @@ gst_base_parse_set_property (GObject * object, guint prop_id,
   switch (prop_id) {
     case PROP_DISABLE_PASSTHROUGH:
       parse->priv->disable_passthrough = g_value_get_boolean (value);
+      break;
+    case PROP_ERROR_NO_VALID_FRAMES:
+      parse->priv->error_no_valid_frames = g_value_get_boolean (value);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -672,6 +697,9 @@ gst_base_parse_get_property (GObject * object, guint prop_id, GValue * value,
   switch (prop_id) {
     case PROP_DISABLE_PASSTHROUGH:
       g_value_set_boolean (value, parse->priv->disable_passthrough);
+      break;
+    case PROP_ERROR_NO_VALID_FRAMES:
+      g_value_set_boolean (value, parse->priv->error_no_valid_frames);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
@@ -1421,8 +1449,13 @@ gst_base_parse_sink_event_default (GstBaseParse * parse, GstEvent * event)
       /* If we STILL have zero frames processed, fire an error */
       if (parse->priv->framecount == 0 && !parse->priv->saw_gaps &&
           !parse->priv->first_buffer) {
-        GST_ELEMENT_ERROR (parse, STREAM, WRONG_TYPE,
-            ("No valid frames found before end of stream"), (NULL));
+        if (parse->priv->error_no_valid_frames) {
+          GST_ELEMENT_ERROR (parse, STREAM, WRONG_TYPE,
+              ("No valid frames found before end of stream"), (NULL));
+        } else {
+          GST_ELEMENT_WARNING (parse, STREAM, WRONG_TYPE,
+              ("No valid frames found before end of stream"), (NULL));
+        }
       }
 
       if (!parse->priv->saw_gaps
@@ -3691,8 +3724,13 @@ pause:
       } else {
         /* If we STILL have zero frames processed, fire an error */
         if (parse->priv->framecount == 0) {
-          GST_ELEMENT_ERROR (parse, STREAM, WRONG_TYPE,
-              ("No valid frames found before end of stream"), (NULL));
+          if (parse->priv->error_no_valid_frames) {
+            GST_ELEMENT_ERROR (parse, STREAM, WRONG_TYPE,
+                ("No valid frames found before end of stream"), (NULL));
+          } else {
+            GST_ELEMENT_WARNING (parse, STREAM, WRONG_TYPE,
+                ("No valid frames found before end of stream"), (NULL));
+          }
         }
         push_eos = TRUE;
       }
