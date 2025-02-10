@@ -322,12 +322,12 @@ gst_cuda_nvrtc_compile (const gchar * source)
   if (ret != NVRTC_SUCCESS) {
     gsize log_size;
 
-    GST_ERROR ("couldn't compile nvrtc program, ret %d", ret);
+    GST_WARNING ("couldn't compile nvrtc program, ret %d", ret);
     if (NvrtcGetProgramLogSize (prog, &log_size) == NVRTC_SUCCESS &&
         log_size > 0) {
       gchar *compile_log = (gchar *) g_alloca (log_size);
       if (NvrtcGetProgramLog (prog, compile_log) == NVRTC_SUCCESS) {
-        GST_ERROR ("nvrtc compile log %s", compile_log);
+        GST_INFO ("nvrtc compile log %s", compile_log);
       }
     }
 
@@ -408,7 +408,8 @@ gst_cuda_nvrtc_compile_cubin (const gchar * source, gint device)
 
   ret = NvrtcCreateProgram (&prog, source, nullptr, 0, nullptr, nullptr);
   if (ret != NVRTC_SUCCESS) {
-    GST_ERROR ("couldn't create nvrtc program, ret %d", ret);
+    GST_WARNING ("couldn't create nvrtc program, ret %d: %s", ret,
+               gst_debug_get_stack_trace(GST_STACK_TRACE_SHOW_FULL) );
     return nullptr;
   }
 
@@ -418,12 +419,13 @@ gst_cuda_nvrtc_compile_cubin (const gchar * source, gint device)
   if (ret != NVRTC_SUCCESS) {
     gsize log_size;
 
-    GST_ERROR ("couldn't compile nvrtc program, ret %d", ret);
+    GST_WARNING ("couldn't compile nvrtc program, ret %d\n%s", ret,
+               gst_debug_get_stack_trace(GST_STACK_TRACE_SHOW_FULL));
     if (NvrtcGetProgramLogSize (prog, &log_size) == NVRTC_SUCCESS &&
         log_size > 0) {
       gchar *compile_log = (gchar *) g_alloca (log_size);
       if (NvrtcGetProgramLog (prog, compile_log) == NVRTC_SUCCESS) {
-        GST_ERROR ("nvrtc compile log %s", compile_log);
+        GST_INFO ("nvrtc compile log %s", compile_log);
       }
     }
 
