@@ -34,12 +34,8 @@ gst_playback_utils_get_n_common_capsfeatures (GstElementFactory * fact1,
                                         GstPlayFlags flags,
                                         gboolean isaudioelement);
 G_GNUC_INTERNAL
-gint gst_playback_utils_compare_factories_func(gconstpointer p1,
-                                               gconstpointer p2);
-
-G_GNUC_INTERNAL
-gboolean gst_playback_utils_stream_in_list(GList *streams, GstStream *stream);
-
+gint
+gst_playback_utils_compare_factories_func (gconstpointer p1, gconstpointer p2);
 G_END_DECLS
 
 #endif /* __GST_PLAYBACK_UTILS_H__ */

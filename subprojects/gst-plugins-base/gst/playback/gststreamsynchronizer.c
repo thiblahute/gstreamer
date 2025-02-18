@@ -444,7 +444,7 @@ gst_stream_synchronizer_wait (GstStreamSynchronizer * self, GstPad * pad)
       break;
     }
 
-    if (stream->send_gap_event && GST_PAD_IS_SRC (pad)) {
+    if (stream->send_gap_event) {
       GstEvent *event;
 
       if (!GST_CLOCK_TIME_IS_VALID (stream->segment.position)) {

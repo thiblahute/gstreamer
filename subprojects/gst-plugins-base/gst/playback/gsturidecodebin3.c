@@ -167,6 +167,9 @@ struct _GstSourcePad
   /* Decodebin3 pad to which src_pad is linked to */
   GstPad *db3_sink_pad;
 
+  /* TRUE if db3_sink_pad is a request pad */
+  gboolean db3_pad_is_request;
+
   /* TRUE if EOS went through the source pad. Marked as TRUE if decodebin3
    * notified `about-to-finish` for pull mode */
   gboolean saw_eos;
@@ -217,6 +220,7 @@ struct _GstURIDecodeBin3
   GstBin parent_instance;
 
   /* Properties */
+  GstElement *source;
   guint64 connection_speed;     /* In bits/sec (0 = unknown) */
   GstCaps *caps;
   guint64 buffer_duration;      /* When buffering, buffer duration (ns) */
@@ -308,6 +312,7 @@ enum
   PROP_CURRENT_URI,
   PROP_SUBURI,
   PROP_CURRENT_SUBURI,
+  PROP_SOURCE,
   PROP_CONNECTION_SPEED,
   PROP_BUFFER_SIZE,
   PROP_BUFFER_DURATION,
@@ -438,6 +443,10 @@ gst_uri_decode_bin3_class_init (GstURIDecodeBin3Class * klass)
       g_param_spec_string ("current-suburi", "Current .sub-URI",
           "The currently playing URI of a subtitle",
           NULL, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class, PROP_SOURCE,
+      g_param_spec_object ("source", "Source", "Source object used",
+          GST_TYPE_ELEMENT, G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class, PROP_CONNECTION_SPEED,
       g_param_spec_uint64 ("connection-speed", "Connection Speed",
@@ -979,7 +988,20 @@ link_src_pad_to_db3 (GstURIDecodeBin3 * uridecodebin, GstSourcePad * spad)
   GstSourceHandler *handler = spad->handler;
   GstPad *sinkpad = NULL;
 
-  sinkpad = gst_element_request_pad_simple (uridecodebin->decodebin, "sink_%u");
+  /* Try to link to main sink pad only if it's from a main handler */
+  if (handler->is_main_source) {
+    sinkpad = gst_element_get_static_pad (uridecodebin->decodebin, "sink");
+    if (gst_pad_is_linked (sinkpad)) {
+      gst_object_unref (sinkpad);
+      sinkpad = NULL;
+    }
+  }
+
+  if (sinkpad == NULL) {
+    sinkpad =
+        gst_element_request_pad_simple (uridecodebin->decodebin, "sink_%u");
+    spad->db3_pad_is_request = TRUE;
+  }
 
   if (sinkpad) {
     GstPadLinkReturn res;
@@ -1113,6 +1135,7 @@ switch_and_activate_input_locked (GstURIDecodeBin3 * uridecodebin,
           GST_DEBUG_PAD_NAME (new_spad->src_pad));
       gst_pad_unlink (old_spad->src_pad, old_spad->db3_sink_pad);
       new_spad->db3_sink_pad = old_spad->db3_sink_pad;
+      new_spad->db3_pad_is_request = old_spad->db3_pad_is_request;
       old_spad->db3_sink_pad = NULL;
 
       /* NOTE : Pad will be linked further down */
@@ -1123,10 +1146,37 @@ switch_and_activate_input_locked (GstURIDecodeBin3 * uridecodebin,
     }
   }
 
+  /* If the old pads contains the static decodebin3 sinkpad *and* we have a new
+   *  pad to activate, we re-use it */
+  if (to_activate) {
+    /* Remove unmatched old source pads */
+    for (iterold = old_pads; iterold; iterold = iterold->next) {
+      GstSourcePad *old_spad = iterold->data;
+      if (old_spad->db3_sink_pad && !old_spad->db3_pad_is_request) {
+        GstSourcePad *new_spad = to_activate->data;
+
+        GST_DEBUG_OBJECT (uridecodebin, "Static sinkpad can be re-used");
+        GST_DEBUG_OBJECT (uridecodebin, "Relinking %s:%s from %s:%s to %s:%s",
+            GST_DEBUG_PAD_NAME (old_spad->db3_sink_pad),
+            GST_DEBUG_PAD_NAME (old_spad->src_pad),
+            GST_DEBUG_PAD_NAME (new_spad->src_pad));
+        gst_pad_unlink (old_spad->src_pad, old_spad->db3_sink_pad);
+        new_spad->db3_sink_pad = old_spad->db3_sink_pad;
+        new_spad->db3_pad_is_request = old_spad->db3_pad_is_request;
+        old_spad->db3_sink_pad = NULL;
+
+        /* NOTE : Pad will be linked further down */
+        old_pads = g_list_remove (old_pads, old_spad);
+        to_activate = g_list_remove (to_activate, new_spad);
+        break;
+      }
+    }
+  }
+
   /* Remove unmatched old source pads */
   for (iterold = old_pads; iterold; iterold = iterold->next) {
     GstSourcePad *old_spad = iterold->data;
-    if (old_spad->db3_sink_pad) {
+    if (old_spad->db3_sink_pad && old_spad->db3_pad_is_request) {
       GST_DEBUG_OBJECT (uridecodebin, "Releasing no longer used db3 pad");
       gst_element_release_request_pad (uridecodebin->decodebin,
           old_spad->db3_sink_pad);
@@ -1471,7 +1521,7 @@ src_pad_removed_cb (GstElement * element, GstPad * pad,
       "Source %" GST_PTR_FORMAT " removed pad %" GST_PTR_FORMAT " peer %"
       GST_PTR_FORMAT, element, pad, spad->db3_sink_pad);
 
-  if (spad->db3_sink_pad)
+  if (spad->db3_sink_pad && spad->db3_pad_is_request)
     gst_element_release_request_pad (uridecodebin->decodebin,
         spad->db3_sink_pad);
 
@@ -1664,6 +1714,13 @@ gst_uri_decode_bin3_get_property (GObject * object, guint prop_id,
       } else {
         g_value_set_string (value, NULL);
       }
+      break;
+    }
+    case PROP_SOURCE:
+    {
+      GST_OBJECT_LOCK (dec);
+      g_value_set_object (value, dec->source);
+      GST_OBJECT_UNLOCK (dec);
       break;
     }
     case PROP_CONNECTION_SPEED:
@@ -2197,7 +2254,9 @@ update_message_with_uri (GstURIDecodeBin3 * uridecodebin, GstMessage * msg)
     GstStructure *details;
     msg = gst_message_make_writable (msg);
     details = gst_message_writable_details (msg);
-    gst_structure_set (details, "uri", G_TYPE_STRING, uri, NULL);
+    if (details) {
+      gst_structure_set (details, "uri", G_TYPE_STRING, uri, NULL);
+    }
   }
 
   if (unlock_after)
