@@ -43,6 +43,25 @@ jobs:
         run: |
           docker run --rm $ECR_REPOSITORY:arm64-$GITHUB_SHA gst-inspect-1.0
 
+  run-ges-tests:
+    name: Run GES Tests with uridecodepoolsrc
+    runs-on: big-runner
+    container:
+      image: registry.freedesktop.org/thiblahute/gstreamer/amd64/fedora:2025-01-11.0-main
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Setup and Run Tests
+        run: |
+          export RUSTUP_HOME="/usr/local/rustup"
+          export CARGO_HOME="/usr/local/cargo"
+          export PATH="/usr/local/cargo/bin:$PATH"
+          meson setup --native-file ci/docker/tella/native.ini builddir
+          ninja -C builddir
+          git config --global --add safe.directory $PWD
+          GES_ENABLE_URIDECODEPOOLSRC=true ./gst-env.py gst-validate-launcher ges --dump-on-failure -j 5 --no-retry-on-failures --sync -b "ges.test.*" -b ".*title.*"
+
   create-multiarch-manifest:
     name: Create and push multiarch manifest AWS
     runs-on: ubuntu-latest
