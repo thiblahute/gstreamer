@@ -94,6 +94,7 @@ COPY girs /gstreamer/girs
 COPY scripts /gstreamer/scripts
 COPY subprojects /gstreamer/subprojects
 COPY tests /gstreamer/tests
+COPY ci /gstreamer/ci
 COPY gst-env.py meson.build meson_options.txt /gstreamer/
 
 WORKDIR /gstreamer
@@ -101,105 +102,8 @@ WORKDIR /gstreamer
 # Configure, build and install GStreamer
 RUN meson builddir \
   --prefix /usr \
-  -Db_lto=true \
-  -Dbuildtype=debugoptimized \
-  -Dintrospection=disabled \
-  -Dgstreamer:tools=enabled \
-  -Dpython=disabled \
-  -Dorc=enabled \
-  -Ddevtools=enabled \
-  -Drtsp_server=disabled \
-  -Dges=enabled \
-  -Dgpl=enabled \
-  -Dlibav=enabled \
-  -Dbase=enabled \
-  -Dgstreamer:check=enabled \
-  -Dgst-examples=disabled \
-  -Dgst-plugins-base:examples=disabled \
-  -Dgst-plugins-base:tests=disabled \
-  -Dgst-plugins-base:adder=enabled \
-  -Dgst-plugins-base:app=enabled \
-  -Dgst-plugins-base:audioconvert=enabled \
-  -Dgst-plugins-base:audiomixer=enabled \
-  -Dgst-plugins-base:audiorate=enabled \
-  -Dgst-plugins-base:audioresample=enabled \
-  -Dgst-plugins-base:audiotestsrc=enabled \
-  -Dgst-plugins-base:compositor=enabled \
-  -Dgst-plugins-base:encoding=enabled \
-  -Dgst-plugins-base:gl=disabled \
-  -Dgst-plugins-base:pango=disabled \
-  -Dgst-plugins-base:overlaycomposition=enabled \
-  -Dgst-plugins-base:pbtypes=enabled \
-  -Dgst-plugins-base:playback=enabled \
-  -Dgst-plugins-base:rawparse=enabled \
-  -Dgst-plugins-base:subparse=enabled \
-  -Dgst-plugins-base:tcp=enabled \
-  -Dgst-plugins-base:typefind=enabled \
-  -Dgst-plugins-base:videoconvertscale=enabled \
-  -Dgst-plugins-base:videorate=enabled \
-  -Dgst-plugins-base:videotestsrc=enabled \
-  -Dgst-plugins-base:volume=enabled \
-  -Dgst-plugins-base:x11=disabled \
-  -Dgood=enabled \
-  -Dgst-plugins-good:adaptivedemux2=enabled \
-  -Dgst-plugins-good:alpha=enabled \
-  -Dgst-plugins-good:asm=enabled \
-  -Dgst-plugins-good:audioparsers=enabled \
-  -Dgst-plugins-good:autodetect=enabled \
-  -Dgst-plugins-good:cairo=disabled \
-  -Dgst-plugins-good:cutter=enabled \
-  -Dgst-plugins-good:debugutils=enabled \
-  -Dgst-plugins-good:gtk3=disabled \
-  -Dgst-plugins-good:imagefreeze=enabled \
-  -Dgst-plugins-good:interleave=enabled \
-  -Dgst-plugins-good:isomp4=enabled \
-  -Dgst-plugins-good:jack=disabled \
-  -Dgst-plugins-good:law=enabled \
-  -Dgst-plugins-good:level=enabled \
-  -Dgst-plugins-good:matroska=enabled \
-  -Dgst-plugins-good:multifile=enabled \
-  -Dgst-plugins-good:multipart=enabled \
-  -Dgst-plugins-good:png=enabled \
-  -Dgst-plugins-good:replaygain=enabled \
-  -Dgst-plugins-good:smpte=enabled \
-  -Dgst-plugins-good:spectrum=enabled \
-  -Dgst-plugins-good:udp=enabled \
-  -Dgst-plugins-good:v4l2=disabled \
-  -Dgst-plugins-good:videobox=enabled \
-  -Dgst-plugins-good:videocrop=enabled \
-  -Dgst-plugins-good:videofilter=enabled \
-  -Dgst-plugins-good:videomixer=enabled \
-  -Dgst-plugins-good:ximagesrc=disabled \
-  -Dgst-plugins-good:soup=enabled \
-  -Dgst-plugins-good:wavenc=enabled \
-  -Dbad=enabled \
-  -Dgst-plugins-bad:applemedia=disabled \
-  -Dgst-plugins-bad:bz2=disabled \
-  -Dgst-plugins-bad:closedcaption=disabled \
-  -Dgst-plugins-bad:codec2json=disabled \
-  -Dgst-plugins-bad:curl=disabled \
-  -Dgst-plugins-bad:drm=disabled \
-  -Dgst-plugins-bad:faac=disabled \
-  -Dgst-plugins-bad:fdkaac=enabled \
-  -Dgst-plugins-bad:kms=disabled \
-  -Dgst-plugins-bad:librfb=disabled \
-  -Dgst-plugins-bad:mpegtsdemux=enabled \
-  -Dgst-plugins-bad:mpegtsmux=enabled \
-  -Dgst-plugins-bad:msdk=disabled \
-  -Dgst-plugins-bad:nvcodec=disabled \
-  -Dgst-plugins-bad:openh264=disabled \
-  -Dgst-plugins-bad:qroverlay=disabled \
-  -Dgst-plugins-bad:rsvg=enabled \
-  -Dgst-plugins-bad:ttml=disabled \
-  -Dgst-plugins-bad:videoparsers=enabled \
-  -Dgst-plugins-bad:wayland=disabled \
-  -Dgst-plugins-bad:webrtc=disabled \
-  -Dgst-plugins-bad:aja=disabled \
-  -Dugly=enabled \
-  -Dgst-plugins-ugly:x264=enabled \
-  -Dgst-plugins-bad:x265=enabled \
-  -Drs=disabled && \
-  ninja -C builddir
+  --native-file ci/docker/tella/native.ini \
+  -Drs=disabled
 
 RUN ninja -C builddir install && rm -rf builddir
 
