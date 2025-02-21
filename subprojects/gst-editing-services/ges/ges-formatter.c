@@ -612,6 +612,7 @@ load_python_formatters (void)
     state = PyGILState_Ensure ();
   }
 
+  goto done;
   if (!bytes) {
     GST_DEBUG ("Could not load gesotioformatter: %s\n", err->message);
 
