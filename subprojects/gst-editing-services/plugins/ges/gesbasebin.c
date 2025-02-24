@@ -321,7 +321,9 @@ ges_base_bin_set_timeline (GESBaseBin * self, GESTimeline * timeline)
       continue;
     }
 
-    queue = gst_element_factory_make ("queue", NULL);
+    gchar *queue_name = g_strdup_printf ("%p_%s_queue", timeline, name);
+    queue = gst_element_factory_make ("queue", queue_name);
+    g_free (queue_name);
     /* Add queues the same way as in GESPipeline */
     g_object_set (G_OBJECT (queue), "max-size-buffers", 0,
         "max-size-bytes", 0, "max-size-time", (gint64) GST_SECOND / 20, NULL);
