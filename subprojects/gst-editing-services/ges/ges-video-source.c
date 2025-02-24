@@ -121,7 +121,18 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
   const gchar *videoflip_props[] = { "video-direction", NULL };
   gchar *ename = NULL;
 
-  g_ptr_array_add (elements, gst_element_factory_make ("queue", NULL));
+  GESAsset *asset = ges_extractable_get_asset (GES_EXTRACTABLE (self));
+  gboolean is_subtimeline = FALSE;
+
+  if (GES_IS_URI_SOURCE_ASSET (asset)) {
+    const GESUriClipAsset *uri_asset =
+        ges_uri_source_asset_get_filesource_asset (GES_URI_SOURCE_ASSET
+        (asset));
+
+    g_object_get (uri_asset, "is-nested-timeline", &is_subtimeline, NULL);
+  }
+
+
 
   /* If there's image-orientation tag, make sure the image is correctly oriented
    * before we scale it. */
@@ -140,13 +151,16 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
             ename));
     g_free (ename);
   }
-  ename = g_strdup_printf ("ges%s-rate", GES_TIMELINE_ELEMENT_NAME (self));
-  videorate = gst_element_factory_make ("videorate", ename);
-  g_object_set (videorate, "max-closing-segment-duplication-duration",
-      GST_CLOCK_TIME_NONE, NULL);
-  g_ptr_array_add (elements, videorate);
 
-  g_free (ename);
+  if (!is_subtimeline) {
+    ename = g_strdup_printf ("ges%s-rate", GES_TIMELINE_ELEMENT_NAME (self));
+    videorate = gst_element_factory_make ("videorate", ename);
+    g_object_set (videorate, "max-closing-segment-duplication-duration",
+        GST_CLOCK_TIME_NONE, NULL);
+    g_ptr_array_add (elements, videorate);
+    g_free (ename);
+  }
+
   ename =
       g_strdup_printf ("ges%s-capsfilter", GES_TIMELINE_ELEMENT_NAME (self));
   capsfilter = gst_element_factory_make ("capsfilter", ename);
