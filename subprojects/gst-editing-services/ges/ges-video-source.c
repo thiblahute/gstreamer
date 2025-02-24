@@ -133,6 +133,9 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
   }
 
 
+  if (ges_source_uses_uridecodepoolsrc (GES_SOURCE (self))) {
+    g_ptr_array_add (elements, gst_element_factory_make ("queue", NULL));
+  }
 
   /* If there's image-orientation tag, make sure the image is correctly oriented
    * before we scale it. */
