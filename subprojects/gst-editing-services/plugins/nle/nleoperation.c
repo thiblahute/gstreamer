@@ -486,6 +486,7 @@ nle_operation_set_property (GObject * object, guint prop_id,
       GST_OBJECT_LOCK (operation);
       operation->time_effect = g_value_get_boolean (value);
       GST_OBJECT_UNLOCK (operation);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
