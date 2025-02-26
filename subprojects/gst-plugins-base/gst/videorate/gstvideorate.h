@@ -76,6 +76,9 @@ struct _GstVideoRate
   gdouble rate;
   gdouble pending_rate;
 
+  /* Rate mode properties */
+  int rate_mode;
+
   GstCaps *in_caps;
   /* Only set right after caps were set so that we still have a reference to
    * the caps matching the content of `->prevbuf`, this way, if we get an EOS
