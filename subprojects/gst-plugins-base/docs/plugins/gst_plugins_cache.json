@@ -15350,6 +15350,18 @@
                         "type": "gdouble",
                         "writable": true
                     },
+                    "rate-mode": {
+                        "blurb": "Control how rate property affects seeking",
+                        "conditionally-available": false,
+                        "construct": false,
+                        "construct-only": false,
+                        "controllable": false,
+                        "default": "traditional (0)",
+                        "mutable": "null",
+                        "readable": true,
+                        "type": "GstVideoRateMode",
+                        "writable": true
+                    },
                     "silent": {
                         "blurb": "Don't emit notify for dropped and duplicated frames",
                         "conditionally-available": false,
