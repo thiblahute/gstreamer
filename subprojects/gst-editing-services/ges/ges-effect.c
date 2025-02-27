@@ -343,11 +343,26 @@ ges_effect_create_element (GESTrackElement * object)
 
   for (tmp = class->rate_properties; tmp; tmp = tmp->next) {
     gchar *prop = tmp->data;
+    GObject *child = NULL;
     if (ges_timeline_element_lookup_child (GES_TIMELINE_ELEMENT (object), prop,
-            NULL, NULL)) {
+            &child, NULL)) {
       if (!ges_base_effect_register_time_property (base_effect, prop))
         GST_ERROR_OBJECT (object, "Failed to register rate property %s", prop);
       is_rate_effect = TRUE;
+    }
+
+    if (child ) {
+      GParamSpec *pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (child), "rate-mode");
+      if (pspec) {
+        GValue value = G_VALUE_INIT;
+        g_value_init (&value, pspec->value_type);
+        if (gst_value_deserialize_with_pspec(&value, "source-aligned", pspec)) {
+          g_object_set_property(child, "rate-mode", &value);
+
+          g_value_unset(&value);
+        }
+      }
+
     }
   }
   if (is_rate_effect
