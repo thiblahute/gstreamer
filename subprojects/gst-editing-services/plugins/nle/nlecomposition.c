@@ -306,7 +306,7 @@ static gboolean
 nle_composition_event_handler (GstPad * ghostpad, GstObject * parent,
     GstEvent * event);
 static void _relink_single_node (NleComposition * comp, GNode * node,
-    GstEvent * toplevel_seek);
+    GstEvent * toplevel_seek, gboolean has_time_effect);
 static void _update_pipeline_func (NleComposition * comp,
     UpdateCompositionData * ucompo);
 static void _commit_func (NleComposition * comp,
@@ -2566,7 +2566,7 @@ beach:
 static GNode *
 get_stack_list (NleComposition * comp, GstClockTime timestamp,
     guint32 priority, gboolean activeonly, GstClockTime * start,
-    GstClockTime * stop, guint * highprio)
+    GstClockTime * stop, guint * highprio, gboolean * has_time_effect)
 {
   GList *tmp;
   GList *stack = NULL;
@@ -2602,6 +2602,11 @@ get_stack_list (NleComposition * comp, GstClockTime timestamp,
               GST_OBJECT_NAME (object));
           stack = g_list_insert_sorted (stack, object,
               (GCompareFunc) priority_comp);
+          if (!*has_time_effect && NLE_IS_OPERATION (object)) {
+            g_object_get (object, "time-effect", has_time_effect, NULL);
+            GST_DEBUG_OBJECT (object, "Checking if is a time effect: %d",
+                *has_time_effect);
+          }
         }
       } else {
         GST_LOG_OBJECT (comp, "too far, stopping iteration");
@@ -2627,6 +2632,12 @@ get_stack_list (NleComposition * comp, GstClockTime timestamp,
               GST_OBJECT_NAME (object));
           stack = g_list_insert_sorted (stack, object,
               (GCompareFunc) priority_comp);
+
+          if (!*has_time_effect && NLE_IS_OPERATION (object)) {
+            g_object_get (object, "time-effect", has_time_effect, NULL);
+            GST_DEBUG_OBJECT (object, "Checking if is a time effect: %d",
+                *has_time_effect);
+          }
         }
       } else {
         GST_LOG_OBJECT (comp, "too far, stopping iteration");
@@ -2683,7 +2694,8 @@ get_stack_list (NleComposition * comp, GstClockTime timestamp,
  */
 static GNode *
 get_clean_toplevel_stack (NleComposition * comp, GstClockTime * timestamp,
-    GstClockTime * start_time, GstClockTime * stop_time)
+    GstClockTime * start_time, GstClockTime * stop_time,
+    gboolean * has_time_effect)
 {
   GNode *stack = NULL;
   GstClockTime start = G_MAXUINT64;
@@ -2696,7 +2708,9 @@ get_clean_toplevel_stack (NleComposition * comp, GstClockTime * timestamp,
   GST_DEBUG ("start:%" GST_TIME_FORMAT ", stop:%" GST_TIME_FORMAT,
       GST_TIME_ARGS (start), GST_TIME_ARGS (stop));
 
-  stack = get_stack_list (comp, *timestamp, 0, TRUE, &start, &stop, &highprio);
+  stack =
+      get_stack_list (comp, *timestamp, 0, TRUE, &start, &stop, &highprio,
+      has_time_effect);
 
   if (!stack &&
       ((reverse && (*timestamp > COMP_REAL_START (comp))) ||
@@ -2760,7 +2774,7 @@ get_clean_toplevel_stack (NleComposition * comp, GstClockTime * timestamp,
 
       GNode *next_stack =
           get_clean_toplevel_stack (comp, &next_timestamp, &next_start_time,
-          &next_stop_time);
+          &next_stop_time, has_time_effect);
       if (next_stack) {
         *timestamp = next_timestamp;
         *start_time = next_start_time;
@@ -3303,7 +3317,8 @@ _link_to_parent (NleComposition * comp, NleObject * newobj,
 
 static void
 _relink_children_recursively (NleComposition * comp,
-    NleObject * newobj, GNode * node, GstEvent * toplevel_seek)
+    NleObject * newobj, GNode * node, GstEvent * toplevel_seek,
+    gboolean has_time_effect)
 {
   GNode *child;
   guint nbchildren = g_node_n_children (node);
@@ -3317,7 +3332,7 @@ _relink_children_recursively (NleComposition * comp,
     g_object_set (G_OBJECT (newobj), "sinks", nbchildren, NULL);
 
   for (child = node->children; child; child = child->next)
-    _relink_single_node (comp, child, toplevel_seek);
+    _relink_single_node (comp, child, toplevel_seek, has_time_effect);
 
   if (G_UNLIKELY (nbchildren < oper->num_sinks))
     GST_ELEMENT_ERROR (comp, STREAM, FAILED,
@@ -3348,7 +3363,7 @@ _relink_children_recursively (NleComposition * comp,
  */
 static void
 _relink_single_node (NleComposition * comp, GNode * node,
-    GstEvent * toplevel_seek)
+    GstEvent * toplevel_seek, gboolean has_time_effect)
 {
   NleObject *newobj;
   NleObject *newparent;
@@ -3367,17 +3382,22 @@ _relink_single_node (NleComposition * comp, GNode * node,
 
   gst_bin_add (GST_BIN (comp->priv->current_bin), GST_ELEMENT (newobj));
   gst_element_sync_state_with_parent (GST_ELEMENT_CAST (newobj));
-  GstEvent *translated_seek = nle_object_translate_incoming_seek (newobj,
-      gst_event_ref (toplevel_seek));
-  GstEvent *event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
-      gst_structure_new ("nlecomposition-seek",
-          "seek", GST_TYPE_EVENT, translated_seek, NULL));
-  GST_EVENT_SEQNUM (event) = gst_event_get_seqnum (translated_seek);
 
-  GST_DEBUG_OBJECT (comp, "Sending nlecomposition-seek with seqnum: %d(%d)",
-      GST_EVENT_SEQNUM (event), GST_EVENT_SEQNUM (toplevel_seek));
-  gst_element_send_event (GST_ELEMENT (newobj), event);
-  gst_event_unref (translated_seek);
+  if (!has_time_effect) {
+    GstEvent *translated_seek = nle_object_translate_incoming_seek (newobj,
+        gst_event_ref (toplevel_seek));
+    GstEvent *event = gst_event_new_custom (GST_EVENT_CUSTOM_UPSTREAM,
+        gst_structure_new ("nlecomposition-seek",
+            "seek", GST_TYPE_EVENT, translated_seek, NULL));
+    GST_EVENT_SEQNUM (event) = gst_event_get_seqnum (translated_seek);
+
+    GST_DEBUG_OBJECT (comp, "Sending nlecomposition-seek with seqnum: %d(%d)",
+        GST_EVENT_SEQNUM (event), GST_EVENT_SEQNUM (toplevel_seek));
+    gst_element_send_event (GST_ELEMENT (newobj), event);
+    gst_event_unref (translated_seek);
+  } else {
+    GST_DEBUG_OBJECT (comp, "Not sending seek, we have a time effect");
+  }
 
 
   /* link to parent if needed.  */
@@ -3392,8 +3412,10 @@ _relink_single_node (NleComposition * comp, GNode * node,
   }
 
   /* Handle children */
-  if (NLE_IS_OPERATION (newobj))
-    _relink_children_recursively (comp, newobj, node, toplevel_seek);
+  if (NLE_IS_OPERATION (newobj)) {
+    _relink_children_recursively (comp, newobj, node, toplevel_seek,
+        has_time_effect);
+  }
 
   GST_LOG_OBJECT (comp, "done with object %s",
       GST_ELEMENT_NAME (GST_ELEMENT (newobj)));
@@ -3444,9 +3466,9 @@ _deactivate_stack (NleComposition * comp, NleUpdateStackReason reason)
 
 static void
 _relink_new_stack (NleComposition * comp, GNode * stack,
-    GstEvent * toplevel_seek)
+    GstEvent * toplevel_seek, gboolean has_time_effect)
 {
-  _relink_single_node (comp, stack, toplevel_seek);
+  _relink_single_node (comp, stack, toplevel_seek, has_time_effect);
 
   gst_event_unref (toplevel_seek);
 }
@@ -3751,7 +3773,10 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
       gst_element_state_get_name (state));
 
   /* Get new stack and compare it to current one */
-  stack = get_clean_toplevel_stack (comp, &currenttime, &new_start, &new_stop);
+  gboolean has_time_effect = FALSE;
+  stack =
+      get_clean_toplevel_stack (comp, &currenttime, &new_start, &new_stop,
+      &has_time_effect);
   is_new_stack = !are_same_stacks (priv->current, stack);
   tear_down = is_new_stack
       || nle_composition_query_needs_teardown (comp, update_reason);
@@ -3804,7 +3829,8 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
   if (tear_down) {
     _dump_stack (comp, update_reason, stack);
     _deactivate_stack (comp, update_reason);
-    _relink_new_stack (comp, stack, gst_event_ref (toplevel_seek));
+    _relink_new_stack (comp, stack, gst_event_ref (toplevel_seek),
+        has_time_effect);
   }
 
   /* Unlock all elements in new stack */

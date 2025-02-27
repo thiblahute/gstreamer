@@ -142,6 +142,7 @@ ges_base_effect_create_nle_object (GESTrackElement * self)
       (self);
 
   if (GES_BASE_EFFECT (self)->priv->time_properties) {
+    GST_DEBUG_OBJECT (self, "Setting time-effect property to TRUE");
     g_object_set (nleobject, "time-effect", TRUE, NULL);
   }
 
