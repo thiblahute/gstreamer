@@ -1318,7 +1318,7 @@ gst_video_rate_src_event (GstBaseTransform * trans, GstEvent * event)
         }
       } else if (videorate->rate_mode == GST_VIDEO_RATE_MODE_SOURCE_ALIGNED) {
         /* Source-aligned mode: preserve inpoint position but scale duration */
-        if (GST_CLOCK_TIME_IS_VALID (stop)) {
+        if (GST_CLOCK_TIME_IS_VALID (stop) && videorate->rate != 0.0) {
           if (srate > 0.0) {
             /* Forward playback: keep start, scale duration to calculate new stop */
             gint64 duration = stop - start;
