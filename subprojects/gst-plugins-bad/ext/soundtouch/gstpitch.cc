@@ -167,19 +167,19 @@ gst_pitch_class_init (GstPitchClass * klass)
 
   g_object_class_install_property (gobject_class, ARG_PITCH,
       g_param_spec_float ("pitch", "Pitch",
-          "Audio stream pitch", 0.1, 10.0, 1.0,
+          "Audio stream pitch", 0.0, 10.0, 1.0,
           (GParamFlags) (G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
               G_PARAM_STATIC_STRINGS)));
 
   g_object_class_install_property (gobject_class, ARG_TEMPO,
       g_param_spec_float ("tempo", "Tempo",
-          "Audio stream tempo", 0.1, 10.0, 1.0,
+          "Audio stream tempo", 0.0, 10.0, 1.0,
           (GParamFlags) (G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
               G_PARAM_STATIC_STRINGS)));
 
   g_object_class_install_property (gobject_class, ARG_RATE,
       g_param_spec_float ("rate", "Rate",
-          "Audio stream rate", 0.1, 10.0, 1.0,
+          "Audio stream rate", 0.0, 10.0, 1.0,
           (GParamFlags) (G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
               G_PARAM_STATIC_STRINGS)));
 
@@ -337,7 +337,7 @@ gst_pitch_set_property (GObject * object, guint prop_id,
       break;
     case ARG_RATE_MODE:
       GST_OBJECT_LOCK (pitch);
-      pitch->rate_mode = g_value_get_enum (value);
+      pitch->rate_mode = (GstPitchRateMode) g_value_get_enum (value);
       GST_OBJECT_UNLOCK (pitch);
       break;
     default:
@@ -571,7 +571,7 @@ gst_pitch_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
             stop = (gint64) (stop * stream_time_ratio);
         } else if (pitch->rate_mode == GST_PITCH_RATE_MODE_SOURCE_ALIGNED) {
           /* Source-aligned mode: preserve inpoint position but scale duration */
-          if (stop != -1) {
+          if (stop != -1 && stream_time_ratio != 0.0) {
             if (rate > 0.0) {
               /* Forward playback: keep cur, scale duration to calculate new stop */
               gint64 duration = stop - cur;
@@ -862,7 +862,7 @@ gst_pitch_process_segment (GstPitch * pitch, GstEvent ** event)
 
   if (stream_time_ratio == 0) {
     GST_LOG_OBJECT (pitch->sinkpad, "stream_time_ratio is zero");
-    return FALSE;
+    goto done;
   }
 
   /* Update the playback rate */
@@ -909,6 +909,7 @@ gst_pitch_process_segment (GstPitch * pitch, GstEvent ** event)
       seg.duration = (gint64) (seg.duration / stream_time_ratio);
   }
 
+done:
   GST_LOG_OBJECT (pitch->sinkpad, "out segment %" GST_SEGMENT_FORMAT, &seg);
 
   seqnum = gst_event_get_seqnum (*event);
@@ -1057,7 +1058,19 @@ gst_pitch_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
   GstEvent *pending_segment = priv->pending_segment;
   priv->pending_segment = NULL;
 
+  GstPitchRateMode rate_mode = pitch->rate_mode;
   GST_OBJECT_UNLOCK (pitch);
+
+  if (stream_time_ratio == 0.0
+      && rate_mode == GST_PITCH_RATE_MODE_SOURCE_ALIGNED) {
+    buffer = gst_buffer_make_writable (buffer);
+    GstMapInfo map;
+
+    gst_buffer_map (buffer, &map, GST_MAP_WRITE);
+    gst_audio_format_info_fill_silence (pitch->info.finfo, map.data, map.size);
+
+    return gst_pitch_forward_buffer (pitch, buffer);
+  }
 
   gst_object_sync_values (GST_OBJECT (pitch), next_buffer_time);
 
