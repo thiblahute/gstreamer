@@ -291,8 +291,8 @@ set_pad_properties_from_composition_meta (GstPad * mixer_pad,
   if (self->ABI.abi.has_operator)
     g_object_set (mixer_pad, "operator", meta->operator, NULL);
 
-  gst_structure_foreach (meta->extra_properties,
-      (GstStructureForeachFunc) set_property_foreach, mixer_pad);
+  gst_structure_foreach_id_str (meta->extra_properties,
+      (GstStructureForeachIdStrFunc) set_property_foreach, mixer_pad);
 }
 
 /****************************************************
