@@ -18,7 +18,6 @@
  * Boston, MA 02110-1301, USA.
  */
 
-#include "gst/gstutils.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -198,10 +197,8 @@ ges_source_uses_uridecodepoolsrc (GESSource * self)
 }
 
 static GstEvent *
-ges_uri_source_query_seek (GESUriSource * self, GstEvent * seek)
+nle_source_query_seek (GstElement * nlesrc, GstEvent * seek)
 {
-  GstElement *nlesrc = ges_track_element_get_nleobject (self->element);
-
   g_assert (seek);
 
   GstStructure *structure =
@@ -210,6 +207,7 @@ ges_uri_source_query_seek (GESUriSource * self, GstEvent * seek)
       gst_query_new_custom (GST_QUERY_CUSTOM, structure);
 
   if (!gst_element_query (nlesrc, query_translate_seek)) {
+    gst_event_unref (seek);
     GST_ERROR_OBJECT (nlesrc, "Failed to translate seek!!");
     return NULL;
   }
@@ -221,6 +219,41 @@ ges_uri_source_query_seek (GESUriSource * self, GstEvent * seek)
 
   gst_query_unref (query_translate_seek);
   gst_event_unref (seek);
+
+  return translated_seek;
+}
+
+static GstEvent *
+ges_uri_source_query_seek (GESUriSource * self, GstEvent * seek)
+{
+  GstElement *nlesrc = ges_track_element_get_nleobject (self->element);
+  GESClip *parent_clip =
+      GES_CLIP (ges_timeline_element_get_parent (GES_TIMELINE_ELEMENT
+          (self->element)));
+
+  g_assert (parent_clip);
+  GstEvent *nle_src_seek = gst_event_ref (seek);
+  gboolean has_time_effect = ges_clip_apply_time_effect_on_seek (parent_clip,
+      GES_SOURCE (self->element), &seek);
+
+  GstEvent *translated_seek = nle_source_query_seek (nlesrc, seek);
+  if (has_time_effect) {
+    nle_src_seek = nle_source_query_seek (nlesrc, nle_src_seek);
+    g_assert (nle_src_seek);
+  }
+
+  gint64 start, stop, duration = GST_CLOCK_TIME_NONE;
+  gdouble rate;
+  gst_event_parse_seek (nle_src_seek, &rate, NULL, NULL, NULL, &start, NULL,
+      &stop);
+  g_assert (GST_CLOCK_TIME_IS_VALID (start));
+  if (GST_CLOCK_TIME_IS_VALID (stop))
+    duration = stop - start;
+
+  g_object_set (self->decodebin, "inpoint", start, "duration", duration,
+      "reverse", rate < 0.0, NULL);
+
+  gst_object_unref (parent_clip);
 
   return translated_seek;
 }

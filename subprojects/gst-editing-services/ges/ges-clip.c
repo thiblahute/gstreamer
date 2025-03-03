@@ -4458,6 +4458,123 @@ ges_clip_get_timeline_time_from_source_frame (GESClip * clip,
   return timeline_time;
 }
 
+/* @clip: A #GESClip
+ * @source_track_element: A #GESSource track element of @clip
+ * @seek: The seek event to adjust
+ *
+ * Modifies the seek event from ges_uri_source_query_seek() to include
+ * the global playback rate that will be applied to the source, taking into
+ * account all time effects that will be applied to it inside that clip.
+ *
+ * This method examines all time effects applied to the specific source
+ * based on priority and track, and transforms the start/stop values in the seek event accordingly.
+ *
+ * Returns: %TRUE if the seek event was modified %FALSE otherwise
+ */
+gboolean
+ges_clip_apply_time_effect_on_seek (GESClip * clip,
+    GESSource * source_track_element, GstEvent ** seek)
+{
+  GList *tmp;
+  GESTrack *track;
+  gdouble rate;
+  GstSeekFlags flags;
+  GstFormat format;
+  GstSeekType start_type, stop_type;
+  gint64 start, stop;
+  GList *time_effects;
+  gboolean reverse = FALSE;
+  gboolean modified = FALSE;
+
+  g_return_val_if_fail (GES_IS_CLIP (clip), FALSE);
+  g_return_val_if_fail (GES_IS_SOURCE (source_track_element), FALSE);
+  g_return_val_if_fail (GST_IS_EVENT (*seek), FALSE);
+  g_return_val_if_fail (GST_EVENT_TYPE (*seek) == GST_EVENT_SEEK, FALSE);
+
+  /* Parse the original seek event to get its parameters */
+  gst_event_parse_seek (*seek, &rate, &format, &flags,
+      &start_type, &start, &stop_type, &stop);
+
+  g_return_val_if_fail (format == GST_FORMAT_TIME, FALSE);
+
+  /* Check if we're in reverse mode */
+  if (rate < 0)
+    reverse = TRUE;
+
+  track =
+      ges_track_element_get_track (GES_TRACK_ELEMENT (source_track_element));
+  if (!track) {
+    GST_WARNING_OBJECT (clip, "Source track element has no track");
+    return FALSE;
+  }
+
+  /* Get all time effects in the track after the source in priority order */
+  time_effects = _active_time_effects_in_track_after_priority (clip, track,
+      _PRIORITY (source_track_element));
+
+  GstClockTime initial_start = start, initial_stop = stop;
+  /* Transform the start time through all time effects */
+  if (start_type != GST_SEEK_TYPE_NONE && GST_CLOCK_TIME_IS_VALID (start)) {
+    for (tmp = time_effects; tmp; tmp = tmp->next) {
+      GESBaseEffect *effect = tmp->data;
+
+      GHashTable *values = ges_base_effect_get_time_property_values (effect);
+
+      if (reverse) {
+        /* In reverse mode, we need to transform times differently */
+        start = ges_base_effect_translate_sink_to_source_time (effect,
+            start, values);
+      } else {
+        start = ges_base_effect_translate_source_to_sink_time (effect,
+            start, values);
+      }
+
+      g_hash_table_unref (values);
+    }
+  }
+
+  /* Transform the stop time through all time effects */
+  if (stop_type != GST_SEEK_TYPE_NONE && GST_CLOCK_TIME_IS_VALID (stop)) {
+    for (tmp = time_effects; tmp; tmp = tmp->next) {
+      GESBaseEffect *effect = tmp->data;
+
+      /* Skip inactive effects */
+      if (!ges_track_element_is_active (GES_TRACK_ELEMENT (effect)))
+        continue;
+
+      GHashTable *values = ges_base_effect_get_time_property_values (effect);
+
+      if (reverse) {
+        /* In reverse mode, we need to transform times differently */
+        stop = ges_base_effect_translate_sink_to_source_time (effect,
+            stop, values);
+      } else {
+        stop = ges_base_effect_translate_source_to_sink_time (effect,
+            stop, values);
+      }
+
+      g_hash_table_unref (values);
+    }
+  }
+
+  g_list_free (time_effects);
+
+  GST_DEBUG_OBJECT (clip,
+      "Creating adjusted seek event with rate %f, start: %" GST_TIME_FORMAT
+      ", stop: %" GST_TIME_FORMAT, rate, GST_TIME_ARGS (start),
+      GST_TIME_ARGS (stop));
+
+  /* Create a new seek event with the transformed parameters */
+  if (start != initial_start || stop != initial_stop) {
+    gst_event_unref (*seek);
+    *seek = gst_event_new_seek (rate, format, flags,
+        start_type, start, stop_type, stop);
+    return TRUE;
+  }
+
+  return FALSE;
+}
+
 /**
  * ges_clip_add_child_to_track:
  * @clip: A #GESClip
