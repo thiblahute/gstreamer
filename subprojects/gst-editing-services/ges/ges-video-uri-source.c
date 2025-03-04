@@ -23,6 +23,7 @@
  * @title: GESVideoUriSource
  * @short_description: outputs a single video stream from a given file
  */
+#include "ges-types.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -41,6 +42,8 @@
 struct _GESVideoUriSourcePrivate
 {
   GESUriSource parent;
+
+  const gchar *flip_gtype_name;
 };
 
 enum
@@ -53,7 +56,49 @@ enum
 static GstElement *
 ges_video_uri_source_create_source (GESSource * element)
 {
-  return ges_uri_source_create_source (GES_VIDEO_URI_SOURCE (element)->priv);
+  GstElement *source =
+      ges_uri_source_create_source (GES_VIDEO_URI_SOURCE (element)->priv);
+  GESVideoUriSourcePrivate *priv =
+      (GESVideoUriSourcePrivate *) GES_VIDEO_URI_SOURCE (element)->priv;
+
+  if (source && GST_IS_BIN (source)) {
+    GstIterator *it = gst_bin_iterate_recurse (GST_BIN (source));
+    GValue item = G_VALUE_INIT;
+    gboolean done = FALSE;
+
+    while (!done) {
+      switch (gst_iterator_next (it, &item)) {
+        case GST_ITERATOR_OK:{
+          GstElement *child = g_value_get_object (&item);
+          GParamSpec *pspec =
+              g_object_class_find_property (G_OBJECT_GET_CLASS (child),
+              "method");
+
+          if (pspec && G_PARAM_SPEC_VALUE_TYPE (pspec) == G_TYPE_ENUM) {
+            priv->flip_gtype_name = G_OBJECT_TYPE_NAME (child);
+            done = TRUE;
+          }
+          g_value_reset (&item);
+          break;
+        }
+        case GST_ITERATOR_DONE:
+          done = TRUE;
+          break;
+        case GST_ITERATOR_RESYNC:
+          gst_iterator_resync (it);
+          break;
+        case GST_ITERATOR_ERROR:
+          done = TRUE;
+          break;
+      }
+    }
+    g_value_unset (&item);
+    gst_iterator_free (it);
+  } else {
+    priv->flip_gtype_name = G_OBJECT_TYPE_NAME (source);
+  }
+
+  return source;
 }
 
 static gboolean
@@ -133,12 +178,18 @@ ges_video_uri_source_get_natural_size (GESVideoSource * source, gint * width,
     }
   }
 
-  propname = g_strdup_printf ("%s::video-direction",
-      g_type_name (gst_element_factory_get_element_type
-          (ges_get_video_flip_factory ())));
-  if (!ges_timeline_element_lookup_child (GES_TIMELINE_ELEMENT (source),
-          propname, NULL, NULL))
+  /* Create a temporary element to get its type name */
+  GESVideoUriSourcePrivate *priv =
+      (GESVideoUriSourcePrivate *) GES_VIDEO_URI_SOURCE (source)->priv;
+  if (priv->flip_gtype_name) {
+    propname = g_strdup_printf ("%s::video-direction", priv->flip_gtype_name);
+    if (!ges_timeline_element_lookup_child (GES_TIMELINE_ELEMENT (source),
+            propname, NULL, NULL))
+      goto done;
+  } else {
+    GST_INFO_OBJECT (source, "No flip element found");
     goto done;
+  }
 
   ges_timeline_element_get_child_properties (GES_TIMELINE_ELEMENT (source),
       propname, &videoflip_method, NULL);
@@ -238,8 +289,7 @@ ges_video_uri_source_create_filters (GESVideoSource * source,
 
   if (gst_discoverer_video_info_is_interlaced (info)) {
     const gchar *deinterlace_props[] = { "mode", "fields", "tff", NULL };
-    GstElement *deinterlace =
-        gst_element_factory_create (ges_get_deinterlace_factory (), NULL);
+    GstElement *deinterlace = ges_deinterlace_make ();
 
     if (deinterlace == NULL) {
       post_missing_element_message (ges_track_element_get_nleobject
@@ -251,8 +301,7 @@ ges_video_uri_source_create_filters (GESVideoSource * source,
               "deinterlace"), ("deinterlacing won't work"));
     } else {
       /* Right after the queue */
-      g_ptr_array_insert (elements, 1,
-          gst_element_factory_create (ges_get_videoconvert_factory (), NULL));
+      g_ptr_array_insert (elements, 1, ges_videoconvert_make ());
       g_ptr_array_insert (elements, 2, deinterlace);
       ges_track_element_add_children_props (GES_TRACK_ELEMENT (source),
           deinterlace, NULL, NULL, deinterlace_props);

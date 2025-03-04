@@ -36,13 +36,9 @@
 #include "ges.h"
 #include <gst/base/base.h>
 
-static gboolean use_autoconverters = FALSE;
+static GESConverterType __converter_type = GES_CONVERTER_SOFTWARE;
 static GstElement *compositor_pad_creator = NULL;
 static GstElementFactory *compositor_factory = NULL;
-static GstElementFactory *videoconvert_factory = NULL;
-static GstElementFactory *videoconvert_scale_factory = NULL;
-static GstElementFactory *deinterlace_factory = NULL;
-static GstElementFactory *videoflip_factory = NULL;
 
 /**
  * ges_timeline_new_audio_video:
@@ -472,94 +468,160 @@ ges_nle_object_commit (GstElement * nlesource, gboolean recurse)
   return ret;
 }
 
-gboolean
-ges_use_auto_converters (void)
+GESConverterType
+ges_converter_type (void)
 {
   static gboolean checked = FALSE;
 
   if (checked)
-    return use_autoconverters;
+    return __converter_type;
 
   checked = TRUE;
 
-  const gchar *envvar = g_getenv ("GST_USE_AUTOCONVERT");
-
-  use_autoconverters = !g_strcmp0 (envvar, "1") ||
-      !g_strcmp0 (envvar, "yes") ||
-      !g_strcmp0 (envvar, "true") ||
-      !g_strcmp0 (envvar, "on") || !g_strcmp0 (envvar, "y");
+  const gchar *envvar = g_getenv ("GES_CONVERTER_TYPE");
 
 
-  return use_autoconverters;
-}
+  if (!envvar) {
+    const gchar *autoconvert = g_getenv ("GST_USE_AUTOCONVERT");
 
-GstElementFactory *
-ges_get_videoconvert_factory (void)
-{
-  if (videoconvert_factory)
-    return videoconvert_factory;
-
-  if (ges_use_auto_converters ()) {
-    videoconvert_factory = gst_element_factory_find ("autovideoconvert");
-    if (!videoconvert_factory) {
-      GST_ERROR
-          ("Trying to use autoconverters but they are not present on the system");
+    envvar = "software";
+    if (!g_strcmp0 (autoconvert, "1") ||
+        !g_strcmp0 (autoconvert, "yes") ||
+        !g_strcmp0 (autoconvert, "true") ||
+        !g_strcmp0 (autoconvert, "on") || !g_strcmp0 (autoconvert, "y")) {
+      envvar = "auto";
     }
   }
 
-  if (!videoconvert_factory) {
-    videoconvert_factory = gst_element_factory_find ("videoconvert");
-  }
+  GST_ERROR ("---> CONVERTER TYPE: %s", envvar);
+  envvar = g_ascii_strdown (envvar, -1);
+  if (!g_strcmp0 (envvar, "auto"))
+    __converter_type = GES_CONVERTER_AUTO;
+  else if (!g_strcmp0 (envvar, "software"))
+    __converter_type = GES_CONVERTER_SOFTWARE;
+  else if (!g_strcmp0 (envvar, "gl"))
+    __converter_type = GES_CONVERTER_GL;
+  else
+    g_warning ("Unknown value for GST_USE_AUTOCONVERT: %s", envvar);
 
-  return videoconvert_factory;
+  return __converter_type;
 }
 
-GstElementFactory *
-ges_get_videoconvert_scale_factory (void)
+G_GNUC_INTERNAL const gchar *
+ges_videoconvert_bin_desc (void)
 {
-  if (videoconvert_scale_factory)
-    return videoconvert_scale_factory;
-
-  if (ges_use_auto_converters ()) {
-    videoconvert_scale_factory =
-        gst_element_factory_find ("autovideoconvertscale");
+  switch (ges_converter_type ()) {
+    case GES_CONVERTER_SOFTWARE:
+      return "videoconvert";
+    case GES_CONVERTER_AUTO:
+      return "autovideoconvert";
+    case GES_CONVERTER_GL:
+      return "glfilterbin filter=identity";
+    default:
+      g_assert_not_reached ();
   }
-  if (!videoconvert_scale_factory) {
-    videoconvert_scale_factory = gst_element_factory_find ("videoconvertscale");
-  }
-
-  return videoconvert_scale_factory;
 }
 
-GstElementFactory *
-ges_get_deinterlace_factory (void)
+G_GNUC_INTERNAL GstElement *
+ges_videoconvert_make (void)
 {
-  if (deinterlace_factory)
-    return deinterlace_factory;
+  GstElement *element = NULL;
+  GError *error = NULL;
+  const gchar *bin_desc = ges_videoconvert_bin_desc ();
 
-  if (ges_use_auto_converters ()) {
-    deinterlace_factory = gst_element_factory_find ("autodeinterlace");
-  }
-  if (!deinterlace_factory) {
-    deinterlace_factory = gst_element_factory_find ("deinterlace");
+  element = gst_parse_bin_from_description (bin_desc, TRUE, &error);
+  if (error) {
+    GST_ERROR ("Failed to create %s: %s", bin_desc, error->message);
+    g_clear_error (&error);
+    return NULL;
   }
 
-  return deinterlace_factory;
+  return element;
 }
 
-GstElementFactory *
-ges_get_video_flip_factory (void)
+G_GNUC_INTERNAL GstElement *
+ges_videoconvert_scale_make (void)
 {
-  if (videoflip_factory)
-    return videoflip_factory;
+  GstElement *element = NULL;
+  GError *error = NULL;
+  const gchar *bin_desc = NULL;
 
-  if (ges_use_auto_converters ()) {
-    videoflip_factory = gst_element_factory_find ("autovideoflip");
+  switch (ges_converter_type ()) {
+    case GES_CONVERTER_SOFTWARE:
+      bin_desc = "videoconvertscale";
+      break;
+    case GES_CONVERTER_AUTO:
+      bin_desc = "autovideoconvertscale";
+      break;
+    case GES_CONVERTER_GL:
+      bin_desc = "glfilterbin filter=glcolorscale";
+      break;
   }
 
-  if (!videoflip_factory) {
-    videoflip_factory = gst_element_factory_find ("videoflip");
+  element = gst_parse_bin_from_description (bin_desc, TRUE, &error);
+  if (error) {
+    GST_ERROR ("Failed to create %s: %s", bin_desc, error->message);
+    g_clear_error (&error);
+    return NULL;
   }
 
-  return videoflip_factory;
+  return element;
+}
+
+G_GNUC_INTERNAL GstElement *
+ges_deinterlace_make (void)
+{
+  GstElement *element = NULL;
+  GError *error = NULL;
+  const gchar *bin_desc = NULL;
+
+  switch (ges_converter_type ()) {
+    case GES_CONVERTER_SOFTWARE:
+      bin_desc = "deinterlace";
+      break;
+    case GES_CONVERTER_AUTO:
+      bin_desc = "autodeinterlace";
+      break;
+    case GES_CONVERTER_GL:
+      bin_desc = "glfilterbin filter=gldeinterlace";
+      break;
+  }
+
+  element = gst_parse_bin_from_description (bin_desc, TRUE, &error);
+  if (error) {
+    GST_ERROR ("Failed to create %s: %s", bin_desc, error->message);
+    g_clear_error (&error);
+    return NULL;
+  }
+
+  return element;
+}
+
+G_GNUC_INTERNAL GstElement *
+ges_video_flip_make (void)
+{
+  GstElement *element = NULL;
+  GError *error = NULL;
+  const gchar *bin_desc = NULL;
+
+  switch (ges_converter_type ()) {
+    case GES_CONVERTER_SOFTWARE:
+      bin_desc = "videoflip video-direction=auto";
+      break;
+    case GES_CONVERTER_AUTO:
+      bin_desc = "autovideoflip video-direction=auto";
+      break;
+    case GES_CONVERTER_GL:
+      bin_desc = "glfilterbin filter=\"glvideoflip video-direction=auto\"";
+      break;
+  }
+
+  element = gst_parse_bin_from_description (bin_desc, TRUE, &error);
+  if (error) {
+    GST_ERROR ("Failed to create %s: %s", bin_desc, error->message);
+    g_clear_error (&error);
+    return NULL;
+  }
+
+  return element;
 }
