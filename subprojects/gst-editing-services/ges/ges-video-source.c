@@ -126,20 +126,21 @@ ges_video_source_create_filters (GESVideoSource * self, GPtrArray * elements,
 
   /* If there's image-orientation tag, make sure the image is correctly oriented
    * before we scale it. */
-  videoflip =
-      gst_element_factory_create (ges_get_video_flip_factory (),
-      "track-element-videoflip");
-  g_object_set (videoflip, "video-direction", GST_VIDEO_ORIENTATION_AUTO, NULL);
-  g_ptr_array_add (elements, videoflip);
+  videoflip = ges_video_flip_make ();
+  if (videoflip) {
+    gst_object_set_name (GST_OBJECT (videoflip), "track-element-videoflip");
+    g_ptr_array_add (elements, videoflip);
+  }
 
   if (needs_converters) {
-    ename =
-        g_strdup_printf ("ges%s-videoconvertscale",
-        GES_TIMELINE_ELEMENT_NAME (self));
-    g_ptr_array_add (elements,
-        gst_element_factory_create (ges_get_videoconvert_scale_factory (),
-            ename));
-    g_free (ename);
+    GstElement *converter = ges_videoconvert_scale_make ();
+    if (converter) {
+      ename = g_strdup_printf ("ges%s-videoconvertscale",
+          GES_TIMELINE_ELEMENT_NAME (self));
+      gst_object_set_name (GST_OBJECT (converter), ename);
+      g_ptr_array_add (elements, converter);
+      g_free (ename);
+    }
   }
 
   ename = g_strdup_printf ("ges%s-rate", GES_TIMELINE_ELEMENT_NAME (self));
@@ -229,20 +230,23 @@ _lookup_child (GESTimelineElement * object,
   gboolean res;
 
   gchar *clean_name;
-  gboolean use_autoconverters = ges_use_auto_converters ();
+  GESConverterType converter_type = ges_converter_type ();
 
   if (!g_strcmp0 (prop_name, "deinterlace-fields")) {
     clean_name =
         g_strdup_printf ("%s::fields",
-        use_autoconverters ? "GstAutoDeinterlace" : "GstDeinterlace");
+        converter_type ==
+        GES_CONVERTER_AUTO ? "GstAutoDeinterlace" : "GstDeinterlace");
   } else if (!g_strcmp0 (prop_name, "deinterlace-mode")) {
     clean_name =
         g_strdup_printf ("%s::mode",
-        use_autoconverters ? "GstAutoDeinterlace" : "GstDeinterlace");
+        converter_type ==
+        GES_CONVERTER_AUTO ? "GstAutoDeinterlace" : "GstDeinterlace");
   } else if (!g_strcmp0 (prop_name, "deinterlace-tff")) {
     clean_name =
         g_strdup_printf ("%s::tff",
-        use_autoconverters ? "GstAutoDeinterlace" : "GstDeinterlace");
+        converter_type ==
+        GES_CONVERTER_AUTO ? "GstAutoDeinterlace" : "GstDeinterlace");
   } else if (!g_strcmp0 (prop_name, "tff") || !g_strcmp0 (prop_name, "fields")
       || !g_strcmp0 (prop_name, "mode")) {
     GST_DEBUG_OBJECT (object,

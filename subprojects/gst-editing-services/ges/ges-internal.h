@@ -428,16 +428,26 @@ G_GNUC_INTERNAL GstElementFactory *
 ges_get_compositor_factory                                (void);
 G_GNUC_INTERNAL GstPad *
 ges_compositor_pad_new                                    (void);
-G_GNUC_INTERNAL gboolean
-ges_use_auto_converters                                   (void);
-G_GNUC_INTERNAL GstElementFactory *
-ges_get_videoconvert_factory                              (void);
-G_GNUC_INTERNAL GstElementFactory *
-ges_get_videoconvert_scale_factory                        (void);
-G_GNUC_INTERNAL GstElementFactory *
-ges_get_deinterlace_factory                               (void);
-G_GNUC_INTERNAL GstElementFactory *
-ges_get_video_flip_factory                                (void);
+
+typedef enum
+{
+  GES_CONVERTER_SOFTWARE,
+  GES_CONVERTER_AUTO,
+  GES_CONVERTER_GL,
+} GESConverterType;
+
+G_GNUC_INTERNAL GESConverterType
+ges_converter_type                                 (void);
+G_GNUC_INTERNAL GstElement *
+ges_videoconvert_make                              (void);
+G_GNUC_INTERNAL const gchar *
+ges_videoconvert_bin_desc                          (void);
+G_GNUC_INTERNAL GstElement *
+ges_videoconvert_scale_make                        (void);
+G_GNUC_INTERNAL GstElement *
+ges_deinterlace_make                               (void);
+G_GNUC_INTERNAL GstElement *
+ges_video_flip_make                                (void);
 
 G_GNUC_INTERNAL void
 ges_idle_add (GSourceFunc func, gpointer udata, GDestroyNotify notify);

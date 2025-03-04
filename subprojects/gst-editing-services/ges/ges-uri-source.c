@@ -18,6 +18,7 @@
  * Boston, MA 02110-1301, USA.
  */
 
+#include "gst/gstutils.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -28,6 +29,18 @@
 GST_DEBUG_CATEGORY_STATIC (uri_source_debug);
 #undef GST_CAT_DEFAULT
 #define GST_CAT_DEFAULT uri_source_debug
+
+static void
+ges_uri_source_init_debug (void)
+{
+  static gsize once = 0;
+
+  if (g_once_init_enter (&once)) {
+    GST_DEBUG_CATEGORY_INIT (uri_source_debug, "gesurisource", 0,
+        "GES uri source");
+    g_once_init_leave (&once, 1);
+  }
+}
 
 #define DEFAULT_RAW_CAPS			\
   "video/x-raw; "				\
@@ -152,6 +165,7 @@ ges_source_uses_uridecodepoolsrc (GESSource * self)
   static gsize once = 0;
   const gchar *envvar;
 
+  ges_uri_source_init_debug ();
   if (g_once_init_enter (&once)) {
     envvar = g_getenv ("GES_ENABLE_URIDECODEPOOLSRC");
 
@@ -376,16 +390,26 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
   GstCaps *caps = NULL;
   if (GES_IS_VIDEO_SOURCE (self->element)) {
 
-    if (ges_use_auto_converters ())
-      caps = gst_caps_from_string ("video/x-raw(ANY)");
+    if (ges_converter_type () == GES_CONVERTER_SOFTWARE)
+      caps = gst_caps_from_string ("video/x-raw");
     else
-      caps = gst_caps_new_empty_simple ("video/x-raw");
+      caps = gst_caps_from_string ("video/x-raw(ANY)");
 
     const gchar *filter = NULL;
     if (ges_uri_source_asset_is_image (asset)) {
-      filter = "imagefreeze";
+      if (ges_converter_type () == GES_CONVERTER_GL) {
+        filter =
+            "glupload ! glcolorconvert ! capsfilter caps=\"video/x-raw(memory:GLMemory),format=RGBA\" ! imagefreeze";
+      } else {
+        filter = "imagefreeze";
+      }
     } else {
-      filter = "segmentclipper";
+      if (ges_converter_type () == GES_CONVERTER_GL) {
+        filter =
+            "glupload ! glcolorconvert ! capsfilter caps=\"video/x-raw(memory:GLMemory),format=RGBA\" ! segmentclipper";
+      } else {
+        filter = "segmentclipper";
+      }
     }
     g_signal_connect_data (decodebin, "create-filter",
         G_CALLBACK (uridecodepoolsrc_create_filter), (gpointer) filter, NULL,
@@ -480,13 +504,7 @@ ges_uri_source_track_set_cb (GESTrackElement * element,
 void
 ges_uri_source_init (GESTrackElement * element, GESUriSource * self)
 {
-  static gsize once = 0;
-
-  if (g_once_init_enter (&once)) {
-    GST_DEBUG_CATEGORY_INIT (uri_source_debug, "gesurisource", 0,
-        "GES uri source");
-    g_once_init_leave (&once, 1);
-  }
+  ges_uri_source_init_debug ();
 
   self->element = element;
   g_signal_connect (element, "notify::track",

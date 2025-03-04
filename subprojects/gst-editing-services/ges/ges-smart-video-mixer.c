@@ -504,8 +504,7 @@ ges_smart_mixer_constructed (GObject * obj)
   g_object_set (identity, "drop-allocation", TRUE, NULL);
   g_assert (identity);
 
-  videoconvert =
-      gst_element_factory_create (ges_get_videoconvert_factory (), NULL);
+  videoconvert = ges_videoconvert_make ();
   g_assert (videoconvert);
 
   gst_bin_add_many (GST_BIN (self), self->mixer, identity, videoconvert, NULL);
