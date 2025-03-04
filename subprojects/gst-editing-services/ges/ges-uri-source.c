@@ -338,11 +338,13 @@ uridecodepoolsrc_create_filter (GstElement * uridecodepoolsrc,
     GstElement * _underlying_pipeline, GstPad * srcpad,
     const gchar * filter_desc)
 {
-  GstElement *filter = gst_element_factory_make (filter_desc, NULL);
+  GError *err = NULL;
+  GstElement *filter = gst_parse_bin_from_description (filter_desc, TRUE, &err);
 
   if (!filter) {
-    GST_INFO_OBJECT (uridecodepoolsrc, "Could not create filter: %s",
-        filter_desc);
+    GST_INFO_OBJECT (uridecodepoolsrc, "Could not create filter: %s: %s",
+        filter_desc, err->message);
+    g_clear_error (&err);
     return NULL;
   }
 
