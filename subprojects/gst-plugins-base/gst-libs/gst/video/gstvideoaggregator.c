@@ -757,7 +757,8 @@ G_DEFINE_TYPE_WITH_PRIVATE (GstVideoAggregatorParallelConvertPad,
 #define PARALLEL_CONVERT_PAD_GET_PRIVATE(o) \
     gst_video_aggregator_parallel_convert_pad_get_instance_private (o)
 
-typedef struct {
+typedef struct
+{
   GstPad *pad;
   GstBuffer *outbuf;
 } CopyMetaData;
@@ -875,7 +876,7 @@ static void
     converted_size = converted_size > outsize ? converted_size : outsize;
     converted_buf = gst_buffer_new_allocate (NULL, converted_size, &params);
 
-    CopyMetaData data = { (GstPad*) vpad, converted_buf, };
+    CopyMetaData data = { (GstPad *) vpad, converted_buf, };
 
     gst_buffer_foreach_meta (pcp_priv->src_frame.buffer, foreach_metadata,
         &data);
@@ -2816,8 +2817,14 @@ gst_video_aggregator_decide_allocation (GstAggregator * agg, GstQuery * query)
   gst_query_parse_allocation (query, &caps, NULL);
 
   /* no downstream pool, make our own */
-  if (pool == NULL)
+  if (pool == NULL) {
     pool = gst_video_buffer_pool_new ();
+    {
+      gchar *name = g_strdup_printf ("%s-pool", GST_OBJECT_NAME (agg));
+      g_object_set (pool, "name", name, NULL);
+      g_free (name);
+    }
+  }
 
   config = gst_buffer_pool_get_config (pool);
 
@@ -2838,6 +2845,12 @@ gst_video_aggregator_decide_allocation (GstAggregator * agg, GstQuery * query)
 
       gst_object_unref (pool);
       pool = gst_video_buffer_pool_new ();
+      {
+        gchar *name =
+            g_strdup_printf ("%s-fallback-pool", GST_OBJECT_NAME (agg));
+        g_object_set (pool, "name", name, NULL);
+        g_free (name);
+      }
       gst_buffer_pool_config_set_params (config, caps, size, min, max);
       gst_buffer_pool_config_set_allocator (config, allocator, &params);
 
