@@ -57,6 +57,7 @@ jobs:
           export RUSTUP_HOME="/usr/local/rustup"
           export CARGO_HOME="/usr/local/cargo"
           export PATH="/usr/local/cargo/bin:$PATH"
+          meson subprojects update --reset
           meson setup --native-file ci/docker/tella/native.ini builddir
           ninja -C builddir
           git config --global --add safe.directory $PWD
