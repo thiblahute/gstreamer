@@ -489,9 +489,8 @@ unblock_pending_input (DecodebinInput * input, gboolean unblock_other_inputs)
     }
 
     if (input_stream->saw_eos) {
-      GST_DEBUG_OBJECT (dbin, "Removing EOS'd stream");
-      remove_input_stream (dbin, input_stream);
-      tmp = dbin->input_streams;
+      GST_FIXME_OBJECT (dbin, "EOS'd stream... just keep it around as it can still be seeked (remove that code path)");
+      tmp = next;
     } else
       tmp = next;
   }
