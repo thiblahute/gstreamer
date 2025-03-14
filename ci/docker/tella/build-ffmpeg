@@ -163,7 +163,7 @@ fi
 ##
 
 build "ffmpeg"
-download "https://www.ffmpeg.org/releases/ffmpeg-4.4.4.tar.gz"
+download "https://www.ffmpeg.org/releases/ffmpeg-7.1.1.tar.gz"
 
 # shellcheck disable=SC2086
 ./configure \
