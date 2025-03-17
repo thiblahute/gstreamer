@@ -1213,11 +1213,11 @@ gst_decodebin_input_unblock_streams (DecodebinInput * input,
     }
 
     if (input_stream->saw_eos) {
-      GST_DEBUG_OBJECT (dbin, "Removing EOS'd stream");
-      remove_input_stream (dbin, input_stream);
-      tmp = dbin->input_streams;
-    } else
-      tmp = next;
+      GST_FIXME_OBJECT (dbin,
+          "EOS'd stream... just keep it around as it can still be seeked (remove that code path)");
+    }
+
+    tmp = next;
   }
 
   /* Weed out unused multiqueue slots */
