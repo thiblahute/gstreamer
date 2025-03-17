@@ -1,5 +1,5 @@
 [wrap-git]
 directory=gst-plugins-rs
-url=https://gitlab.freedesktop.org/thiblahute/gst-plugins-rs.git
-push-url=git@gitlab.freedesktop.org:thiblahute/gst-plugins-rs.git
+url=https://github.com/thiblahute/gst-plugins-rs.git
+push-url=git@github.com:thiblahute/gst-plugins-rs.git
 revision=sequence
