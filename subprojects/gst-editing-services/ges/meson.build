@@ -39,6 +39,7 @@ ges_sources = files([
     'ges-video-test-source.c',
     'ges-audio-test-source.c',
     'ges-title-source.c',
+    'ges-title-bin.c',
     'ges-text-overlay.c',
     'ges-base-effect.c',
     'ges-effect.c',
