@@ -33,6 +33,7 @@
 #include "ges-internal.h"
 #include "ges-track-element.h"
 #include "ges-title-source.h"
+#include "ges-title-bin.h"
 #include "ges-video-test-source.h"
 
 #define DEFAULT_TEXT ""
@@ -179,62 +180,50 @@ ges_title_source_set_property (GObject * object,
 static GstElement *
 ges_title_source_create_source (GESSource * source)
 {
-  GstElement *topbin, *background, *text;
-  GstPad *src, *pad;
+  GESTitleBin *title_bin;
+  GstElement *text_el, *background_el;
 
   GESTitleSource *self = GES_TITLE_SOURCE (source);
   GESTitleSourcePrivate *priv = self->priv;
-  const gchar *bg_props[] = { "pattern", "foreground-color", NULL };
+  const gchar *bg_props[] =
+      { "pattern", "foreground-color", "num-buffers", NULL };
   const gchar *text_props[] = { "text", "font-desc", "valignment", "halignment",
     "color", "xpos", "ypos", "x-absolute", "y-absolute", "outline-color",
     "shaded-background", "draw-shadow",
     "text-x", "text-y", "text-width", "text-height", NULL
   };
 
-  topbin = gst_bin_new ("titlesrc-bin");
-  background = gst_element_factory_make ("videotestsrc", "titlesrc-bg");
-
-  text = gst_element_factory_make ("textoverlay", "titlsrc-text");
-  if (priv->text) {
-    g_object_set (text, "text", priv->text, NULL);
+  /* Create the title bin */
+  title_bin = ges_title_bin_new (self, "titlesrc-bin");
+  if (!title_bin) {
+    GST_ERROR_OBJECT (self, "Failed to create title bin");
+    return NULL;
   }
-  if (priv->font_desc) {
-    g_object_set (text, "font-desc", priv->font_desc, NULL);
-  }
-  g_object_set (text, "valignment", (gint) priv->valign, "halignment",
-      (gint) priv->halign, NULL);
-  g_object_set (text, "color", (guint) self->priv->color, NULL);
-  g_object_set (text, "xpos", (gdouble) self->priv->xpos, NULL);
-  g_object_set (text, "ypos", (gdouble) self->priv->ypos, NULL);
 
+  /* Get references to the internal elements */
+  text_el = ges_title_bin_get_text_element (title_bin);
+  background_el = ges_title_bin_get_background_element (title_bin);
 
-  g_object_set (background, "pattern", (gint) GES_VIDEO_TEST_PATTERN_SOLID,
-      NULL);
-  g_object_set (background, "foreground-color", (guint) self->priv->background,
-      NULL);
+  /* Configure the title bin with our properties */
+  ges_title_bin_configure_text (title_bin,
+      priv->text,
+      priv->font_desc,
+      priv->valign, priv->halign, priv->color, priv->xpos, priv->ypos);
 
-  gst_bin_add_many (GST_BIN (topbin), background, text, NULL);
+  ges_title_bin_configure_background (title_bin,
+      GES_VIDEO_TEST_PATTERN_SOLID, priv->background);
 
-  gst_element_link_pads_full (background, "src", text, "video_sink",
-      GST_PAD_LINK_CHECK_NOTHING);
+  /* Store element references for property control */
+  priv->text_el = text_el;
+  priv->background_el = background_el;
 
-  pad = gst_element_get_static_pad (text, "src");
-  src = gst_ghost_pad_new ("src", pad);
-  gst_object_unref (pad);
-  gst_element_add_pad (topbin, src);
+  /* Add child properties */
+  ges_track_element_add_children_props (GES_TRACK_ELEMENT (source), text_el,
+      NULL, NULL, text_props);
+  ges_track_element_add_children_props (GES_TRACK_ELEMENT (source),
+      background_el, NULL, NULL, bg_props);
 
-  gst_object_ref (text);
-  gst_object_ref (background);
-
-  priv->text_el = text;
-  priv->background_el = background;
-
-  ges_track_element_add_children_props (GES_TRACK_ELEMENT (source), text, NULL,
-      NULL, text_props);
-  ges_track_element_add_children_props (GES_TRACK_ELEMENT (source), background,
-      NULL, NULL, bg_props);
-
-  return topbin;
+  return GST_ELEMENT (title_bin);
 }
 
 /**
