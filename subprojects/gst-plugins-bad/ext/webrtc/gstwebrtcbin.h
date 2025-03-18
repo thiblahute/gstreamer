@@ -104,7 +104,6 @@ struct _GstWebRTCBinPrivate
 {
   guint max_sink_pad_serial;
   guint src_pad_counter;
-  gboolean reuse_source_pads;
 
   gboolean bundle;
   GPtrArray *transceivers;
