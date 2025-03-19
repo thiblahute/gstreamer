@@ -1457,6 +1457,11 @@ ges_asset_request_async (GType extractable_type,
             GST_ERROR ("Asset %s proxied against an asset (%s) we do not"
                 " have in cache, something massively screwed",
                 asset->priv->id, asset->priv->proxied_asset_id);
+            g_task_return_error (task,
+                g_error_new (GES_ERROR, 0,
+                    "Asset %s proxied against an asset (%s) we do not"
+                    " have in cache, (this should never happen)",
+                    asset->priv->id, asset->priv->proxied_asset_id));
 
             goto done;
           }
