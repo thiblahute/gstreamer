@@ -185,7 +185,7 @@ ges_pipeline_pool_manager_prepare_pipelines_around (GESPipelinePoolManager *
           GST_TIMEP_FORMAT "]", GST_OBJECT_NAME (source->element),
           &source->start, &source->end);
       g_ptr_array_add (to_remove, gst_object_ref (source->element));
-      GST_ERROR_OBJECT (self->timeline, "Unprepared %s",
+      GST_DEBUG_OBJECT (self->timeline, "Unprepared %s",
           GST_OBJECT_NAME (source->element));
     }
   }
