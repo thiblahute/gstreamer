@@ -50,6 +50,7 @@ typedef enum
 
 struct _GESLauncherPrivate
 {
+  GstClockTime start_loading_ts;
   GESTimeline *timeline;
   GESPipeline *pipeline;
   gboolean seenerrors;
@@ -956,6 +957,12 @@ _project_loaded_cb (GESProject * project, GESTimeline * timeline,
   } else {
     print_timeline (self->priv->timeline);
   }
+
+  if (opts->load_path) {
+    gst_print ("Loading project took %" GST_TIME_FORMAT "\n",
+        GST_TIME_ARGS (gst_util_get_timestamp () -
+            self->priv->start_loading_ts));
+  }
 }
 
 static void
@@ -990,6 +997,7 @@ _create_timeline (GESLauncher * self, const gchar * serialized_timeline,
   g_signal_connect (project, "error-loading",
       G_CALLBACK (_project_loading_error_cb), self);
 
+  self->priv->start_loading_ts = gst_util_get_timestamp ();
   self->priv->timeline =
       GES_TIMELINE (ges_asset_extract (GES_ASSET (project), &error));
   gst_object_unref (project);
