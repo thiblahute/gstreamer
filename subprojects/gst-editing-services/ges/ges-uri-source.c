@@ -370,6 +370,7 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
 {
   GESTrack *track;
   GstElement *decodebin;
+  const gchar *filter = NULL;
   GESUriSourceAsset *asset = GES_URI_SOURCE_ASSET
       (ges_extractable_get_asset (GES_EXTRACTABLE (self->element)));
   const gchar *wanted_id = gst_discoverer_stream_info_get_stream_id
@@ -395,7 +396,6 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
     else
       caps = gst_caps_from_string ("video/x-raw(ANY)");
 
-    const gchar *filter = NULL;
     if (ges_uri_source_asset_is_image (asset)) {
       if (ges_converter_type () == GES_CONVERTER_GL) {
         filter =
@@ -411,16 +411,16 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
         filter = "segmentclipper";
       }
     }
-    g_signal_connect_data (decodebin, "create-filter",
-        G_CALLBACK (uridecodepoolsrc_create_filter), (gpointer) filter, NULL,
-        0);
-
     GST_DEBUG ("Using caps: %" GST_PTR_FORMAT " for uridecodepoolsrc", caps);
   } else if (GES_IS_AUDIO_SOURCE (self->element)) {
     caps = gst_caps_new_empty_simple ("audio/x-raw");
+    filter = "audioconvert ! scaletempo ! audioconvert";
   } else {
     g_assert_not_reached ();
   }
+
+  g_signal_connect_data (decodebin, "create-filter",
+      G_CALLBACK (uridecodepoolsrc_create_filter), (gpointer) filter, NULL, 0);
 
   g_signal_connect (decodebin, "source-setup",
       G_CALLBACK (source_setup_cb), self);
