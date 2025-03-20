@@ -1134,7 +1134,7 @@ _serialize_properties (GObject * object, gint * ret_n_props,
       field = va_arg (varargs, gchar *);
     }
     ignored_fieldsv = g_strv_builder_end (ignored_fields_builder);
-    g_object_unref (ignored_fields_builder);
+    g_strv_builder_unref (ignored_fields_builder);
     va_end (varargs);
   }
 
