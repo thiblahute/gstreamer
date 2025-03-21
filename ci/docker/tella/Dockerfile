@@ -102,8 +102,7 @@ WORKDIR /gstreamer
 # Configure, build and install GStreamer
 RUN meson builddir \
   --prefix /usr \
-  --native-file ci/docker/tella/native.ini \
-  -Drs=disabled
+  --native-file ci/docker/tella/native.ini
 
 RUN ninja -C builddir install && rm -rf builddir
 
