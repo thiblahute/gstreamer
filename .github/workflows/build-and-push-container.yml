@@ -47,7 +47,7 @@ jobs:
     name: Run GES Tests with uridecodepoolsrc
     runs-on: big-runner
     container:
-      image: registry.freedesktop.org/thiblahute/gstreamer/amd64/fedora:2025-01-11.0-main
+      image: registry.freedesktop.org/thiblahute/gstreamer/amd64/fedora:2025-03-13.0-main
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -60,7 +60,7 @@ jobs:
           meson setup --native-file ci/docker/tella/native.ini builddir
           ninja -C builddir
           git config --global --add safe.directory $PWD
-          GES_ENABLE_URIDECODEPOOLSRC=true ./gst-env.py gst-validate-launcher ges --dump-on-failure -j 5 --no-retry-on-failures --sync -b "ges.test.*" -b ".*title.*"
+          GES_ENABLE_URIDECODEPOOLSRC=true ./gst-env.py gst-validate-launcher ges --dump-on-failure -j 5 --sync -b "ges.test.*" -b ".*title.*"
 
   create-multiarch-manifest:
     name: Create and push multiarch manifest AWS
