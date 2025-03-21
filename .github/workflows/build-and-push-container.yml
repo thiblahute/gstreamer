@@ -47,7 +47,7 @@ jobs:
     name: Run GES Tests with uridecodepoolsrc
     runs-on: big-runner
     container:
-      image: registry.freedesktop.org/thiblahute/gstreamer/amd64/fedora:2025-01-11.0-main
+      image: registry.freedesktop.org/thiblahute/gstreamer/amd64/fedora:2025-03-13.0-main
     steps:
       - name: Checkout
         uses: actions/checkout@v2
