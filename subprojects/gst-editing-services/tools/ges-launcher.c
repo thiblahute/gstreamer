@@ -158,11 +158,11 @@ toggle_paused (GESLauncher * self)
 }
 
 static void
-relative_seek (GESLauncher * self, gdouble percent)
+relative_seek (GESLauncher * self, gdouble percent, GESFrameNumber nframes)
 {
   gint64 pos = -1, step, dur;
 
-  g_return_if_fail (percent >= -1.0 && percent <= 1.0);
+  g_return_if_fail ((percent >= -1.0 && percent <= 1.0) || nframes);
 
   if (!gst_element_query_position (GST_ELEMENT (self->priv->pipeline),
           GST_FORMAT_TIME, &pos))
@@ -171,6 +171,21 @@ relative_seek (GESLauncher * self, gdouble percent)
   if (!gst_element_query_duration (GST_ELEMENT (self->priv->pipeline),
           GST_FORMAT_TIME, &dur)) {
     goto seek_failed;
+  }
+
+  if (nframes) {
+    GESFrameNumber cframe =
+        ges_timeline_get_frame_at (self->priv->timeline, pos);
+    GstClockTime new_pos =
+        ges_timeline_get_frame_time (self->priv->timeline, MAX (0,
+            cframe + nframes));
+
+    gst_println ("Setting from frame %" G_GINT64_FORMAT "(%" GST_TIMEP_FORMAT
+        ") to %" G_GINT64_FORMAT " (%" GST_TIMEP_FORMAT ")", cframe, &pos,
+        cframe + nframes, &new_pos);
+    play_do_seek (self, new_pos, self->priv->rate, self->priv->trick_mode);
+
+    return;
   }
 
   step = dur * percent;
@@ -292,7 +307,9 @@ print_keyboard_help (void)
         "t", "enable/disable trick modes"}, {
         "s", "change subtitle track"}, {
         "0", "seek to beginning"}, {
-        "k", "show keyboard shortcuts"},
+        "?", "show keyboard shortcuts"}, {
+        "j", "Step one frame backward (pauses the pipeline if required)"}, {
+        "k", "Step one frame forward (pauses the pipeline if required)"}
   };
   guint i, chars_to_pad, desc_len, max_desc_len = 0;
 
@@ -1674,11 +1691,33 @@ keyboard_cb (const gchar * key_input, gpointer user_data)
     key = g_ascii_tolower (key_input[0]);
 
   switch (key) {
-    case 'k':
+    case '?':
       print_keyboard_help ();
       break;
     case ' ':
       toggle_paused (self);
+      break;
+    case 'j':
+      if (self->priv->desired_state != GST_STATE_PAUSED) {
+        gst_println ("Pausing pipeline to step frame");
+        toggle_paused (self);
+        if (gst_element_get_state (GST_ELEMENT (self->priv->pipeline), NULL,
+                NULL, GST_SECOND * 10) != GST_STATE_CHANGE_SUCCESS) {
+          GST_ERROR_OBJECT (self, "Could not get state after pausing?");
+        }
+      }
+      relative_seek (self, 0, -1);
+      break;
+    case 'l':
+      if (self->priv->desired_state != GST_STATE_PAUSED) {
+        gst_println ("Pausing pipeline to step frame");
+        toggle_paused (self);
+        if (gst_element_get_state (GST_ELEMENT (self->priv->pipeline), NULL,
+                NULL, GST_SECOND * 10) != GST_STATE_CHANGE_SUCCESS) {
+          GST_ERROR_OBJECT (self, "Could not get state after pausing?");
+        }
+      }
+      relative_seek (self, 0, 1);
       break;
     case 'q':
     case 'Q':
@@ -1714,9 +1753,9 @@ keyboard_cb (const gchar * key_input, gpointer user_data)
       /* FALLTHROUGH */
     default:
       if (strcmp (key_input, GST_PLAY_KB_ARROW_RIGHT) == 0) {
-        relative_seek (self, +0.08);
+        relative_seek (self, +0.08, 0);
       } else if (strcmp (key_input, GST_PLAY_KB_ARROW_LEFT) == 0) {
-        relative_seek (self, -0.01);
+        relative_seek (self, -0.01, 0);
       } else {
         GST_INFO ("keyboard input:");
         for (; *key_input != '\0'; ++key_input)
@@ -1745,7 +1784,7 @@ _startup (GApplication * application)
 
   if (opts->interactive && !opts->outputuri) {
     if (gst_play_kb_set_key_handler (keyboard_cb, self)) {
-      gst_print ("Press 'k' to see a list of keyboard shortcuts.\n");
+      gst_print ("Press '?' to see a list of keyboard shortcuts.\n");
       atexit (restore_terminal);
     } else {
       gst_print ("Interactive keyboard handling in terminal not available.\n");
