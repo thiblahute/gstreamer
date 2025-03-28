@@ -843,15 +843,6 @@ gst_video_rate_push_buffer (GstVideoRate * videorate, GstBuffer * outbuf,
       "old is best, dup, pushing buffer outgoing ts %" GST_TIME_FORMAT,
       GST_TIME_ARGS (push_ts));
 
-  if (!gst_segment_clip (&videorate->segment, GST_FORMAT_TIME,
-          GST_BUFFER_PTS (outbuf),
-          GST_BUFFER_PTS (outbuf) + GST_BUFFER_DURATION (outbuf), NULL, NULL)) {
-    GST_INFO_OBJECT (videorate, "Out buffer is out of segment, marking as EOS");
-    gst_buffer_unref (outbuf);
-
-    return GST_FLOW_EOS;
-  }
-
   if (videorate->drop_out_of_segment
       && !gst_segment_clip (&videorate->segment, GST_FORMAT_TIME,
           GST_BUFFER_PTS (outbuf),
