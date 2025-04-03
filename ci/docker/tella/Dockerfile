@@ -102,7 +102,8 @@ WORKDIR /gstreamer
 # Configure, build and install GStreamer
 RUN meson builddir \
   --prefix /usr \
-  --native-file ci/docker/tella/native.ini
+  --native-file ci/docker/tella/native.ini \
+  -Dpackage-origin="Tella $(git rev-parse --short HEAD)"
 
 RUN ninja -C builddir install && rm -rf builddir
 
@@ -110,6 +111,7 @@ RUN ninja -C builddir install && rm -rf builddir
 ENV GST_REGISTRY=/etc/gstreamer/registry-1.0.bin
 RUN mkdir -p /etc/gstreamer
 RUN gst-inspect-1.0
+RUN gst-inspect-1.0 --version
 RUN chmod a+r /etc/gstreamer/registry-1.0.bin
 ENV GST_REGISTRY_UPDATE=no
 ENV GST_REGISTRY_FORK=no

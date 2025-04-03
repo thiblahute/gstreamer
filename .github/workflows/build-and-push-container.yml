@@ -41,7 +41,7 @@ jobs:
 
       - name: Run gst-inspect-1.0
         run: |
-          docker run --rm $ECR_REPOSITORY:arm64-$GITHUB_SHA gst-inspect-1.0
+          docker run --rm $ECR_REPOSITORY:arm64-$GITHUB_SHA gst-inspect-1.0 && gst-inspect-1.0 --version
 
   run-ges-tests:
     name: Run GES Tests with uridecodepoolsrc
@@ -58,7 +58,7 @@ jobs:
           export CARGO_HOME="/usr/local/cargo"
           export PATH="/usr/local/cargo/bin:$PATH"
           meson subprojects update --reset
-          meson setup --native-file ci/docker/tella/native.ini builddir
+          meson setup --native-file ci/docker/tella/native.ini -Dpackage-origin="Tella $(git rev-parse --short HEAD)" builddir
           ninja -C builddir
           git config --global --add safe.directory $PWD
           GES_ENABLE_URIDECODEPOOLSRC=true ./gst-env.py gst-validate-launcher ges --dump-on-failure -j 5 --sync -b "ges.test.*" -b ".*title.*"
