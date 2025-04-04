@@ -414,7 +414,7 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
     GST_DEBUG ("Using caps: %" GST_PTR_FORMAT " for uridecodepoolsrc", caps);
   } else if (GES_IS_AUDIO_SOURCE (self->element)) {
     caps = gst_caps_new_empty_simple ("audio/x-raw");
-    filter = "audioconvert ! scaletempo ! audioconvert";
+    filter = "audioconvert";
   } else {
     g_assert_not_reached ();
   }
