@@ -70,7 +70,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
 # Install rust toolchain
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 ENV PATH="/root/.cargo/bin:${PATH}"
-RUN cargo install cargo-c
+RUN cargo install --locked cargo-c --version 0.10.11+cargo-0.86.0
 
 # Build FFmpeg
 FROM deps as ffmpeg
