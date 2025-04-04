@@ -3,7 +3,7 @@ name: Multi-Architecture build and push container for current revision
 on:
   push:
     branches:
-      - '*'
+      - "*"
 
 env:
   ECR_REPOSITORY: 486029010931.dkr.ecr.us-east-2.amazonaws.com/gstreamer-base-image
@@ -41,7 +41,7 @@ jobs:
 
       - name: Run gst-inspect-1.0
         run: |
-          docker run --rm $ECR_REPOSITORY:arm64-$GITHUB_SHA gst-inspect-1.0 && gst-inspect-1.0 --version
+          docker run --rm $ECR_REPOSITORY:arm64-$GITHUB_SHA sh -c 'gst-inspect-1.0 && gst-inspect-1.0 --version'
 
   run-ges-tests:
     name: Run GES Tests with uridecodepoolsrc
