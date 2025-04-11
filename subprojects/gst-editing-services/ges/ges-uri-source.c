@@ -373,8 +373,8 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
   const gchar *filter = NULL;
   GESUriSourceAsset *asset = GES_URI_SOURCE_ASSET
       (ges_extractable_get_asset (GES_EXTRACTABLE (self->element)));
-  const gchar *wanted_id = gst_discoverer_stream_info_get_stream_id
-      (ges_uri_source_asset_get_stream_info (asset));
+  GstDiscovererStreamInfo *sinfo = ges_uri_source_asset_get_stream_info (asset);
+  const gchar *wanted_id = gst_discoverer_stream_info_get_stream_id (sinfo);
   const GESUriClipAsset *clip_asset =
       ges_uri_source_asset_get_filesource_asset (asset);
 
@@ -405,8 +405,28 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
       }
     } else {
       if (ges_converter_type () == GES_CONVERTER_GL) {
-        filter =
-            "glupload ! glcolorconvert ! capsfilter caps=\"video/x-raw(memory:GLMemory),format=RGBA\" ! segmentclipper";
+        if (gst_registry_find_feature (gst_registry_get (), "nvh265dec",
+                GST_TYPE_ELEMENT_FACTORY)
+            && gst_registry_find_feature (gst_registry_get (), "cudaconvert",
+                GST_TYPE_ELEMENT_FACTORY)) {
+          GstCaps *scaps = gst_discoverer_stream_info_get_caps (sinfo);
+          GstCaps *h26x_caps =
+              gst_caps_from_string ("video/x-h264;video/x-h265");
+
+          if (scaps && gst_caps_can_intersect (scaps, h26x_caps)) {
+            filter =
+                "cudaconvert ! cudadownload ! gldownload ! capsfilter caps=\"video/x-raw(memory:GLMemory),format=RGBA\" ! segmentclipper";
+          }
+        }
+
+        if (!filter) {
+          filter =
+              "glupload ! glcolorconvert ! capsfilter caps=\"video/x-raw(memory:GLMemory),format=RGBA\" ! segmentclipper";
+        }
+
+        GST_DEBUG_OBJECT (self->element,
+            "Using `%s` as filter at end of underlying pipeline", filter);
+
       } else {
         filter = "segmentclipper";
       }
