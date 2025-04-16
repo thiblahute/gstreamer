@@ -102,60 +102,6 @@ enum
 #define DEFAULT_MAX_DUPLICATION_TIME      0
 #define DEFAULT_MAX_CLOSING_SEGMENT_DUPLICATION_DURATION   GST_SECOND
 #define DEFAULT_DROP_OUT_OF_SEGMENT       FALSE
-#define DEFAULT_RATE_MODE       GST_VIDEO_RATE_MODE_TRADITIONAL
-
-/**
- * GstVideoRateMode:
- *
- * Modes controlling how the rate property affects seeking behavior.
- *
- * Since: 1.28
- */
-typedef enum
-{
-  /**
-   * GST_VIDEO_RATE_MODE_TRADITIONAL:
-   *
-   * Transform seek positions by rate factor (e.g., seeking to 10s with rate=2.0
-   * seeks to 20s in the source).
-   *
-   * Since: 1.28
-   */
-  GST_VIDEO_RATE_MODE_TRADITIONAL,
-
-  /**
-   * GST_VIDEO_RATE_MODE_SOURCE_ALIGNED:
-   *
-   * Preserve original source positions during seeking (e.g., seeking to 10s
-   * always gets the frame at 10s from source).
-   *
-   * Since: 1.28
-   */
-  GST_VIDEO_RATE_MODE_SOURCE_ALIGNED
-} GstVideoRateMode;
-
-static GType
-gst_video_rate_mode_get_type (void)
-{
-  static GType video_rate_mode_type = 0;
-  static const GEnumValue video_rate_mode[] = {
-    /* Since: 1.28 */
-    {GST_VIDEO_RATE_MODE_TRADITIONAL, "Transform seek positions by rate factor",
-        "traditional"},
-    /* Since: 1.28 */
-    {GST_VIDEO_RATE_MODE_SOURCE_ALIGNED,
-        "Preserve source positions when seeking", "source-aligned"},
-    {0, NULL, NULL},
-  };
-
-  if (!video_rate_mode_type) {
-    video_rate_mode_type =
-        g_enum_register_static ("GstVideoRateMode", video_rate_mode);
-  }
-  return video_rate_mode_type;
-}
-
-#define GST_TYPE_VIDEO_RATE_MODE (gst_video_rate_mode_get_type())
 
 enum
 {
@@ -173,8 +119,7 @@ enum
   PROP_RATE,
   PROP_MAX_DUPLICATION_TIME,
   PROP_MAX_CLOSING_SEGMENT_DUPLICATION_DURATION,
-  PROP_DROP_OUT_OF_SEGMENT,
-  PROP_RATE_MODE
+  PROP_DROP_OUT_OF_SEGMENT
 };
 
 static GstStaticPadTemplate gst_video_rate_src_template =
@@ -386,22 +331,6 @@ gst_video_rate_class_init (GstVideoRateClass * klass)
       g_param_spec_boolean ("drop-out-of-segment",
           "Drop out of segment buffers", "Drop out of segment buffers",
           DEFAULT_DROP_OUT_OF_SEGMENT,
-          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
-  /**
-   * GstVideoRate:rate-mode:
-   *
-   * Mode controlling how the rate property affects seeking.
-   *
-   * The rate property controls the speed at which content plays back.
-   * This property determines how seek positions are handled in relation to this rate.
-   *
-   * Since: 1.28
-   */
-  g_object_class_install_property (object_class, PROP_RATE_MODE,
-      g_param_spec_enum ("rate-mode", "Rate Mode",
-          "Control how rate property affects seeking",
-          GST_TYPE_VIDEO_RATE_MODE, DEFAULT_RATE_MODE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   gst_element_class_set_static_metadata (element_class,
@@ -846,7 +775,6 @@ gst_video_rate_init (GstVideoRate * videorate)
   videorate->max_duplication_time = DEFAULT_MAX_DUPLICATION_TIME;
   videorate->max_closing_segment_duplication_duration =
       DEFAULT_MAX_CLOSING_SEGMENT_DUPLICATION_DURATION;
-  videorate->rate_mode = DEFAULT_RATE_MODE;
 
   videorate->from_rate_numerator = 0;
   videorate->from_rate_denominator = 0;
@@ -1162,27 +1090,11 @@ gst_video_rate_sink_event (GstBaseTransform * trans, GstEvent * event)
       if (segment.format != GST_FORMAT_TIME)
         goto format_error;
 
-      if (videorate->rate_mode == GST_VIDEO_RATE_MODE_TRADITIONAL) {
-        /* Traditional mode: transform all segment values by rate */
-        segment.start = (gint64) (segment.start / videorate->rate);
-        segment.position = (gint64) (segment.position / videorate->rate);
-        if (GST_CLOCK_TIME_IS_VALID (segment.stop))
-          segment.stop = (gint64) (segment.stop / videorate->rate);
-        segment.time = (gint64) (segment.time / videorate->rate);
-      } else if (videorate->rate_mode == GST_VIDEO_RATE_MODE_SOURCE_ALIGNED) {
-        /* Source-aligned mode: preserve start/time but scale duration */
-        if (segment.stop != (guint64) - 1) {
-          if (segment.rate > 0.0) {
-            /* Forward playback: preserve start, scale duration for stop */
-            gint64 duration = segment.stop - segment.start;
-            segment.stop = segment.start + (gint64) (duration / videorate->rate);
-          } else {
-            /* Reverse playback: preserve stop, scale duration for start */
-            gint64 duration = segment.stop - segment.start;
-            segment.start = segment.stop - (gint64) (duration / videorate->rate);
-          }
-        }
-      }
+      segment.start = (gint64) (segment.start / videorate->rate);
+      segment.position = (gint64) (segment.position / videorate->rate);
+      if (GST_CLOCK_TIME_IS_VALID (segment.stop))
+        segment.stop = (gint64) (segment.stop / videorate->rate);
+      segment.time = (gint64) (segment.time / videorate->rate);
 
       if (!gst_segment_is_equal (&segment, &videorate->segment)) {
         rolled_back_caps =
@@ -1374,25 +1286,9 @@ gst_video_rate_src_event (GstBaseTransform * trans, GstEvent * event)
       gst_event_parse_seek (event, &srate, NULL, &flags, &start_type, &start,
           &stop_type, &stop);
 
-      if (videorate->rate_mode == GST_VIDEO_RATE_MODE_TRADITIONAL) {
-        /* Traditional mode: transform both start and stop by rate */
-        start = (gint64) (start * videorate->rate);
-        if (GST_CLOCK_TIME_IS_VALID (stop)) {
-          stop = (gint64) (stop * videorate->rate);
-        }
-      } else if (videorate->rate_mode == GST_VIDEO_RATE_MODE_SOURCE_ALIGNED) {
-        /* Source-aligned mode: preserve inpoint position but scale duration */
-        if (GST_CLOCK_TIME_IS_VALID (stop) && videorate->rate != 0.0) {
-          if (srate > 0.0) {
-            /* Forward playback: keep start, scale duration to calculate new stop */
-            gint64 duration = stop - start;
-            stop = start + (gint64) (duration * videorate->rate);
-          } else {
-            /* Reverse playback: keep stop, scale duration to calculate new start */
-            gint64 duration = stop - start;
-            start = stop - (gint64) (duration * videorate->rate);
-          }
-        }
+      start = (gint64) (start * videorate->rate);
+      if (GST_CLOCK_TIME_IS_VALID (stop)) {
+        stop = (gint64) (stop * videorate->rate);
       }
 
       gst_event_unref (event);
@@ -2285,10 +2181,6 @@ gst_video_rate_set_property (GObject * object,
       videorate->drop_out_of_segment = g_value_get_boolean (value);
       break;
     }
-    case PROP_RATE_MODE:{
-      videorate->rate_mode = g_value_get_enum (value);
-      break;
-    }
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -2357,9 +2249,6 @@ gst_video_rate_get_property (GObject * object,
       break;
     case PROP_DROP_OUT_OF_SEGMENT:
       g_value_set_boolean (value, videorate->drop_out_of_segment);
-      break;
-    case PROP_RATE_MODE:
-      g_value_set_enum (value, videorate->rate_mode);
       break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
