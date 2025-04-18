@@ -2229,12 +2229,6 @@ _seek_current_stack (NleComposition * comp, GstEvent * event,
   priv->seeking_itself = FALSE;
   gst_object_unref (peer);
 
-  if (res == FALSE) {
-    GST_ERROR_OBJECT (comp, "Failed to seek current stack");
-    GST_ELEMENT_ERROR (comp, STREAM, FAILED, (NULL),
-        ("Failed to seek current stack"));
-  }
-
   GST_DEBUG_OBJECT (comp, "Done seeking");
 
   return res;
