@@ -365,7 +365,7 @@ ges_util_object_properties_to_structure (GObject * object,
 
     } else {
       if (gst_value_compare (default_val, &val) == GST_VALUE_EQUAL) {
-        GST_INFO ("Ignoring %s as it is using the default value", spec->name);
+        GST_LOG ("Ignoring %s as it is using the default value", spec->name);
         goto next;
       }
     }
