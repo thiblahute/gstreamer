@@ -548,6 +548,16 @@ _update_duration_limit (GESClip * self)
   if (self->priv->prevent_duration_limit_update)
     return;
 
+  if (GES_TIMELINE_ELEMENT_TIMELINE (self)
+      &&
+      ges_timeline_get_edit_apis_disabled (GES_TIMELINE
+          (GES_TIMELINE_ELEMENT_TIMELINE (self)))) {
+    GST_DEBUG_OBJECT (self,
+        "No duration limit update when edit APIS are disabled");
+    return;
+  }
+
+
   duration_limit = _calculate_duration_limit (self,
       _duration_limit_data_list (self));
 

@@ -426,7 +426,12 @@ extractable_set_asset (GESExtractable * self, GESAsset * asset)
     uriclip->priv->uri = g_strdup (ges_asset_get_id (asset));
 
     if (!contains_core) {
-      if (!ges_timeline_element_set_max_duration (element, max_duration))
+      if (GES_TIMELINE_ELEMENT_TIMELINE (self)
+          &&
+          ges_timeline_get_edit_apis_disabled (GES_TIMELINE
+              (GES_TIMELINE_ELEMENT_TIMELINE (self)))) {
+        GST_DEBUG_OBJECT (self, "No max-duration when edit APIS are disabled");
+      } else if (!ges_timeline_element_set_max_duration (element, max_duration))
         GST_ERROR_OBJECT (self, "Failed to set the max-duration on the uri "
             "clip when it has no children. This should not happen");
     }

@@ -1089,6 +1089,12 @@ ges_timeline_element_set_timeline (GESTimelineElement * self,
 
   self->timeline = timeline;
 
+  if (timeline && ges_timeline_get_edit_apis_disabled (self->timeline)) {
+    GST_INFO_OBJECT (self,
+        "Timeline %p is in edit mode, disabling max-duration", self->timeline);
+    self->maxduration = GST_CLOCK_TIME_NONE;
+  }
+
   g_object_notify_by_pspec (G_OBJECT (self), properties[PROP_TIMELINE]);
   return TRUE;
 
@@ -1274,6 +1280,14 @@ ges_timeline_element_set_max_duration (GESTimelineElement * self,
   GESTimelineElementClass *klass;
 
   g_return_val_if_fail (GES_IS_TIMELINE_ELEMENT (self), FALSE);
+
+  if (GES_TIMELINE_ELEMENT_TIMELINE (self)
+      && ges_timeline_get_edit_apis_disabled (GES_TIMELINE (self->timeline))) {
+    GST_DEBUG_OBJECT (self,
+        "Can not set max-duration on a timeline that"
+        " has edit APIs disabled");
+    return FALSE;
+  }
 
   GST_DEBUG_OBJECT (self, "current max-duration: %" GST_TIME_FORMAT
       " new max-duration: %" GST_TIME_FORMAT,
