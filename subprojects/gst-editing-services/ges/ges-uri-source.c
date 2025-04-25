@@ -232,20 +232,16 @@ ges_uri_source_query_seek (GESUriSource * self, GstEvent * seek)
           (self->element)));
 
   g_assert (parent_clip);
-  GstEvent *nle_src_seek = gst_event_ref (seek);
-  gboolean has_time_effect = ges_clip_apply_time_effect_on_seek (parent_clip,
-      GES_SOURCE (self->element), &seek);
-
   GstEvent *translated_seek = nle_source_query_seek (nlesrc, seek);
-  if (has_time_effect) {
-    nle_src_seek = nle_source_query_seek (nlesrc, nle_src_seek);
-    g_assert (nle_src_seek);
-  }
-
   gint64 start, stop, duration = GST_CLOCK_TIME_NONE;
   gdouble rate;
-  gst_event_parse_seek (nle_src_seek, &rate, NULL, NULL, NULL, &start, NULL,
+  gst_event_parse_seek (translated_seek, &rate, NULL, NULL, NULL, &start, NULL,
       &stop);
+
+  ges_clip_apply_time_effect_on_seek (parent_clip,
+      GES_SOURCE (self->element), (GstClockTime *) & start,
+      (GstClockTime *) & stop, rate);
+
   g_assert (GST_CLOCK_TIME_IS_VALID (start));
   if (GST_CLOCK_TIME_IS_VALID (stop))
     duration = stop - start;
@@ -284,7 +280,6 @@ uridecodepoolsrc_get_initial_seek_cb (GstElement * uridecodepoolsrc,
       );
 
   /* TODO time-effect: Also add time effect support in ges_pipeline_pool_manager_prepare_pipelines_around */
-  GST_FIXME_OBJECT (self->element, "FIXME Add support for time effects");
   for (GList * tmp = toplevel_src_node; tmp; tmp = tmp->prev) {
     seek = ges_uri_source_query_seek (tmp->data, seek);
     GST_DEBUG_OBJECT (uridecodepoolsrc, "Parent: %s",
