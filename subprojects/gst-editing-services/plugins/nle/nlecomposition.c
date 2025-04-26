@@ -2688,6 +2688,10 @@ get_stack_list (NleComposition * comp, GstClockTime timestamp,
               GST_OBJECT_NAME (object));
 
           *can_seek_in_ready &= object->can_seek_in_ready;
+          if (NLE_IS_OPERATION (object) && NLE_OPERATION (object)->time_effect) {
+            GST_ERROR_OBJECT (comp, "TIME EFFECT DISABLE SEEK IN READY");
+            *can_seek_in_ready = FALSE;
+          }
           stack = g_list_insert_sorted (stack, object,
               (GCompareFunc) priority_comp);
         }
@@ -2714,6 +2718,10 @@ get_stack_list (NleComposition * comp, GstClockTime timestamp,
           GST_LOG_OBJECT (comp, "adding %s: sorted to the stack",
               GST_OBJECT_NAME (object));
           *can_seek_in_ready &= object->can_seek_in_ready;
+          if (NLE_IS_OPERATION (object) && NLE_OPERATION (object)->time_effect) {
+            *can_seek_in_ready = FALSE;
+            GST_ERROR_OBJECT (comp, "TIME EFFECT DISABLE SEEK IN READY");
+          }
           stack =
               g_list_insert_sorted (stack, object,
               (GCompareFunc) priority_comp);
@@ -2732,6 +2740,11 @@ get_stack_list (NleComposition * comp, GstClockTime timestamp,
       GST_DEBUG_OBJECT (comp, "Adding expandable %s sorted to the list",
           GST_OBJECT_NAME (tmp->data));
       *can_seek_in_ready &= NLE_OBJECT (tmp->data)->can_seek_in_ready;
+
+      if (NLE_IS_OPERATION (tmp->data)
+          && NLE_OPERATION (tmp->data)->time_effect) {
+        *can_seek_in_ready = FALSE;
+      }
       stack = g_list_insert_sorted (stack, tmp->data,
           (GCompareFunc) priority_comp);
     }
@@ -3634,7 +3647,8 @@ _activate_new_stack (NleComposition * comp, GstEvent * toplevel_seek)
 
   if (!toplevel_seek) {
     GST_INFO_OBJECT (comp,
-        "This is a sub composition, not seeking to initialize stack");
+        "No toplevel seek, either each object were seeked in READY or "
+        "we are in a subtimeline");
   } else {
     GST_INFO_OBJECT (comp, "Needs seeking to initialize stack");
     comp->priv->stack_initialization_seek = toplevel_seek;
@@ -3814,7 +3828,7 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
   GstClockTime new_stop = GST_CLOCK_TIME_NONE;
   GstClockTime new_start = GST_CLOCK_TIME_NONE;
   GstClockTime duration = NLE_OBJECT (comp)->duration - 1;
-  gboolean is_new_stack, can_seek_in_ready;
+  gboolean is_new_stack, can_seek_in_ready = TRUE;
 
   GstState nextstate = (GST_STATE_NEXT (comp) == GST_STATE_VOID_PENDING) ?
       GST_STATE (comp) : GST_STATE_NEXT (comp);
@@ -3913,8 +3927,12 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
      * And when seeking on ready, no initial seek will be sent ever
      */
     if ((update_reason == COMP_UPDATE_STACK_INITIALIZE
-            && priv->awaited_toplevel_seek) || can_seek_in_ready)
+            && priv->awaited_toplevel_seek) || can_seek_in_ready) {
+      GST_DEBUG_OBJECT (comp, "Do not plan pushing a toplevel seek event: "
+          "awaited_toplevel_seek: %p - can seek in ready %d",
+          priv->awaited_toplevel_seek, can_seek_in_ready);
       gst_clear_event (&toplevel_seek);
+    }
   }
 
   /* Unlock all elements in new stack */
