@@ -238,17 +238,34 @@ ges_uri_source_query_seek (GESUriSource * self, GstEvent * seek)
   gst_event_parse_seek (translated_seek, &rate, NULL, NULL, NULL, &start, NULL,
       &stop);
 
-  ges_clip_apply_time_effect_on_seek (parent_clip,
-      GES_SOURCE (self->element), (GstClockTime *) & start,
-      (GstClockTime *) & stop, rate);
+  g_assert (GST_CLOCK_TIME_IS_VALID(start));
+  if (GST_CLOCK_TIME_IS_VALID (stop)) {
+    /* NLE won't clip seek duration to handle time effects, but here we handle
+     * them ourselves */
+    duration = MIN (stop - start, GES_TIMELINE_ELEMENT_DURATION (self->element));
 
-  g_assert (GST_CLOCK_TIME_IS_VALID (start));
-  if (GST_CLOCK_TIME_IS_VALID (stop))
-    duration = stop - start;
+    stop = start + duration;
+  }
+
+  if (ges_clip_apply_time_effect_on_seek (parent_clip,
+      GES_SOURCE (self->element), (GstClockTime *) & start,
+      (GstClockTime *) & stop, rate)) {
+    GST_FIXME_OBJECT (self->element, "Initial seek when there are time effects are DISABLED for now.");
+
+    gst_clear_event (&translated_seek);
+
+    goto done;
+  }
+
+  gst_event_unref (translated_seek);
+  translated_seek = gst_event_new_seek (rate, GST_FORMAT_TIME,
+      GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE,
+      GST_SEEK_TYPE_SET, start, GST_SEEK_TYPE_SET, stop);
 
   g_object_set (self->decodebin, "inpoint", start, "duration", duration,
       "reverse", rate < 0.0, NULL);
 
+done:
   gst_object_unref (parent_clip);
 
   return translated_seek;
@@ -282,6 +299,9 @@ uridecodepoolsrc_get_initial_seek_cb (GstElement * uridecodepoolsrc,
   /* TODO time-effect: Also add time effect support in ges_pipeline_pool_manager_prepare_pipelines_around */
   for (GList * tmp = toplevel_src_node; tmp; tmp = tmp->prev) {
     seek = ges_uri_source_query_seek (tmp->data, seek);
+    if (!seek) {
+      return NULL;
+    }
     GST_DEBUG_OBJECT (uridecodepoolsrc, "Parent: %s",
         GES_TIMELINE_ELEMENT_NAME (((GESUriSource *) tmp->data)->element));
   }
