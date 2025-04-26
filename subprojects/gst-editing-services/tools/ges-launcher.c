@@ -1311,7 +1311,7 @@ _create_pipeline (GESLauncher * self, const gchar * serialized_timeline)
           "pool");
 
       GST_ERROR_OBJECT (self, "Setting pool bus to %" GST_PTR_FORMAT, bus);
-      // g_object_set (pool, "bus", bus, NULL);
+      g_object_set (pool, "bus", bus, NULL);
 
       g_object_unref (pool);
       g_object_unref (uridecodepoolsrc);
