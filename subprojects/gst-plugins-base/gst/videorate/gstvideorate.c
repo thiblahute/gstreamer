@@ -1082,7 +1082,7 @@ gst_video_rate_sink_event (GstBaseTransform * trans, GstEvent * event)
   switch (GST_EVENT_TYPE (event)) {
     case GST_EVENT_SEGMENT:
     {
-      GstSegment segment;
+      GstSegment input_segment, segment;
       gint seqnum;
       GstCaps *rolled_back_caps;
 
@@ -1090,6 +1090,7 @@ gst_video_rate_sink_event (GstBaseTransform * trans, GstEvent * event)
       if (segment.format != GST_FORMAT_TIME)
         goto format_error;
 
+      input_segment = segment;
       segment.start = (gint64) (segment.start / videorate->rate);
       segment.position = (gint64) (segment.position / videorate->rate);
       if (GST_CLOCK_TIME_IS_VALID (segment.stop))
@@ -1139,10 +1140,10 @@ gst_video_rate_sink_event (GstBaseTransform * trans, GstEvent * event)
           gst_caps_unref (rolled_back_caps);
         }
         if (segment.rate < 0) {
-          videorate->base_input_ts = segment.stop * videorate->rate;
+          videorate->base_input_ts = input_segment.stop;
           videorate->base_output_ts = segment.stop;
         } else {
-          videorate->base_input_ts = segment.start * videorate->rate;
+          videorate->base_input_ts = input_segment.start;
           videorate->base_output_ts = segment.start;
         }
         videorate->out_frame_count = 0;
@@ -1154,7 +1155,7 @@ gst_video_rate_sink_event (GstBaseTransform * trans, GstEvent * event)
 
       gst_segment_copy_into (&segment, &videorate->segment);
       GST_DEBUG_OBJECT (videorate, "updated segment: %" GST_SEGMENT_FORMAT,
-          &videorate->segment);
+          &segment);
       seqnum = gst_event_get_seqnum (event);
       gst_event_unref (event);
       event = gst_event_new_segment (&segment);
