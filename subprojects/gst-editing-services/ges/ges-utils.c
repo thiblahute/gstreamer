@@ -493,7 +493,7 @@ ges_converter_type (void)
     }
   }
 
-  GST_ERROR ("---> CONVERTER TYPE: %s", envvar);
+  GST_INFO ("Video conversion type: %s", envvar);
   envvar = g_ascii_strdown (envvar, -1);
   if (!g_strcmp0 (envvar, "auto"))
     __converter_type = GES_CONVERTER_AUTO;
