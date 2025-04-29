@@ -47,6 +47,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
   libx264-dev \
   libx265-dev \
   libfdk-aac-dev \
+  libzimg-dev \
   librsvg2-dev \
   nasm \
   python3-dev \
