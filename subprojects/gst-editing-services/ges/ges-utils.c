@@ -359,7 +359,7 @@ ges_util_object_properties_to_structure (GObject * object,
           G_TYPE_ENUM) ? g_value_get_enum (default_val) :
           g_value_get_flags (default_val);
       if (g_value_get_int (&val) == default_int) {
-        GST_INFO ("Ignoring %s as it is using the default value", spec->name);
+        GST_LOG ("Ignoring %s as it is using the default value", spec->name);
         goto next;
       }
 
