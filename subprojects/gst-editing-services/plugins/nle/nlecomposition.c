@@ -2689,7 +2689,6 @@ get_stack_list (NleComposition * comp, GstClockTime timestamp,
 
           *can_seek_in_ready &= object->can_seek_in_ready;
           if (NLE_IS_OPERATION (object) && NLE_OPERATION (object)->time_effect) {
-            GST_ERROR_OBJECT (comp, "TIME EFFECT DISABLE SEEK IN READY");
             *can_seek_in_ready = FALSE;
           }
           stack = g_list_insert_sorted (stack, object,
@@ -2720,7 +2719,6 @@ get_stack_list (NleComposition * comp, GstClockTime timestamp,
           *can_seek_in_ready &= object->can_seek_in_ready;
           if (NLE_IS_OPERATION (object) && NLE_OPERATION (object)->time_effect) {
             *can_seek_in_ready = FALSE;
-            GST_ERROR_OBJECT (comp, "TIME EFFECT DISABLE SEEK IN READY");
           }
           stack =
               g_list_insert_sorted (stack, object,
