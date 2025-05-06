@@ -303,12 +303,19 @@ GType ges_text_halign_get_type (void);
  * @GES_VIDEO_TEST_PATTERN_CHECKERS4: Checkers pattern (4px)
  * @GES_VIDEO_TEST_PATTERN_CHECKERS8: Checkers pattern (8px)
  * @GES_VIDEO_TEST_PATTERN_CIRCULAR: Circular pattern
- * @GES_VIDEO_TEST_PATTERN_SOLID: Solid color
  * @GES_VIDEO_TEST_PATTERN_BLINK: Alternate between black and white
- * @GES_VIDEO_TEST_ZONE_PLATE: Zone plate
- * @GES_VIDEO_TEST_GAMUT: Gamut checkers
- * @GES_VIDEO_TEST_CHROMA_ZONE_PLATE: Chroma zone plate
  * @GES_VIDEO_TEST_PATTERN_SMPTE75: SMPTE test pattern (75% color bars)
+ * @GES_VIDEO_TEST_ZONE_PLATE: Zone plate
+ * @GES_VIDEO_TEST_GAMUT: Gamut checking pattern
+ * @GES_VIDEO_TEST_CHROMA_ZONE_PLATE: Chroma zone plate
+ * @GES_VIDEO_TEST_PATTERN_BALL: Moving ball
+ * @GES_VIDEO_TEST_PATTERN_SMPTE100: SMPTE test pattern (100% color bars)
+ * @GES_VIDEO_TEST_PATTERN_SOLID: A solid color, defined by the #GstVideoTestSrc:foreground-color property
+ * @GES_VIDEO_TEST_PATTERN_BAR: Bar with foreground color
+ * @GES_VIDEO_TEST_PATTERN_PINWHEEL: Pinwheel
+ * @GES_VIDEO_TEST_PATTERN_SPOKES: Spokes
+ * @GES_VIDEO_TEST_PATTERN_GRADIENT: Gradient
+ * @GES_VIDEO_TEST_PATTERN_COLORS: All colors
  *
  * The test pattern to produce
  */
@@ -332,6 +339,13 @@ typedef enum {
   GES_VIDEO_TEST_GAMUT,
   GES_VIDEO_TEST_CHROMA_ZONE_PLATE,
   GES_VIDEO_TEST_PATTERN_SOLID,
+  GES_VIDEO_TEST_PATTERN_BALL,
+  GES_VIDEO_TEST_PATTERN_SMPTE100,
+  GES_VIDEO_TEST_PATTERN_BAR,
+  GES_VIDEO_TEST_PATTERN_PINWHEEL,
+  GES_VIDEO_TEST_PATTERN_SPOKES,
+  GES_VIDEO_TEST_PATTERN_GRADIENT,
+  GES_VIDEO_TEST_PATTERN_COLORS,
 } GESVideoTestPattern;
 
 
