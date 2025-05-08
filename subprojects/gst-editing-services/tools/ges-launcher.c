@@ -194,8 +194,13 @@ relative_seek (GESLauncher * self, gdouble percent, GESFrameNumber nframes)
 
   pos = pos + step;
   if (pos > dur) {
-    gst_print ("\n%s\n", "Reached end of self list.");
-    g_application_quit (G_APPLICATION (self));
+    if (!self->priv->parsed_options.ignore_eos) {
+      g_application_quit (G_APPLICATION (self));
+
+      return;
+    }
+
+    play_do_seek (self, dur - 1, self->priv->rate, self->priv->trick_mode);
   } else {
     if (pos < 0)
       pos = 0;
