@@ -63,9 +63,12 @@ struct _GESLauncherPrivate
   gdouble rate;
 
   GstState desired_state;       /* as per user interaction, PAUSED or PLAYING */
+  gulong videosink_probe_id;
 };
 
 G_DEFINE_TYPE_WITH_PRIVATE (GESLauncher, ges_launcher, G_TYPE_APPLICATION);
+
+static void handle_key_press (GESLauncher * self, const gchar * key_input);
 
 static const gchar *HELP_SUMMARY =
     "  `ges-launch-1.0` creates a multimedia timeline and plays it back,\n"
@@ -77,6 +80,18 @@ static const gchar *HELP_SUMMARY =
     "  if ges-launch-1.0 has been compiled with gst-validate, see\n"
     "  `ges-launch-1.0 --inspect-action-type` for the available commands.\n\n"
     "  By default, ges-launch-1.0 is in \"playback-mode\".";
+
+typedef struct
+{
+  const gchar *nav_name;
+  const gchar *key;
+} NavNameKey;
+
+const NavNameKey NAV_TO_KEYBOARD[] = {
+  {"space", " "},
+  {"Right", GST_PLAY_KB_ARROW_RIGHT},
+  {"Left", GST_PLAY_KB_ARROW_LEFT},
+};
 
 static gboolean
 play_do_seek (GESLauncher * self, gint64 pos, gdouble rate,
@@ -1057,6 +1072,35 @@ _set_sink (GESLauncher * self, const gchar * sink_desc, SetSinkFunc set_func)
   return TRUE;
 }
 
+static GstPadProbeReturn
+sinkpad_probe_cb (GstPad * pad, GstPadProbeInfo * info, gpointer user_data)
+{
+  GstEvent *event = info->data;
+
+  if (GST_EVENT_TYPE (event) != GST_EVENT_NAVIGATION) {
+    return GST_PAD_PROBE_OK;
+  }
+
+  GstNavigationEventType e_type = gst_navigation_event_get_type (event);
+  const gchar *key_event = NULL;
+
+  if (e_type == GST_NAVIGATION_EVENT_KEY_RELEASE) {
+    if (gst_navigation_event_parse_key_event (event, &key_event)) {
+      for (gint i = 0; i < G_N_ELEMENTS (NAV_TO_KEYBOARD); i++) {
+        if (g_strcmp0 (key_event, NAV_TO_KEYBOARD[i].nav_name) == 0) {
+          key_event = NAV_TO_KEYBOARD[i].key;
+          break;
+        }
+      }
+
+      handle_key_press (GES_LAUNCHER (user_data), key_event);
+    }
+  }
+
+
+  return GST_PAD_PROBE_OK;
+}
+
 static gboolean
 _set_playback_details (GESLauncher * self)
 {
@@ -1113,6 +1157,26 @@ bus_message_cb (GstBus * bus, GstMessage * message, GESLauncher * self)
             gst_element_state_get_name (old), gst_element_state_get_name (new));
         dump_name = g_strconcat ("ges-launch.", state_transition_name, NULL);
 
+        // Wait for PAUSED state to be reached so we are sure that the video
+        // sink has been instantiated
+        if (self->priv->videosink_probe_id == 0 && old == GST_STATE_READY && new == GST_STATE_PAUSED) {
+          GstElement *videosink =
+              ges_pipeline_preview_get_video_sink (self->priv->pipeline);
+
+          if (videosink) {
+            GST_OBJECT_LOCK (videosink);
+            GstPad *pad =
+                GST_ELEMENT (videosink)->sinkpads ?
+                gst_object_ref (GST_ELEMENT (videosink)->sinkpads->data) : NULL;
+            GST_OBJECT_UNLOCK (videosink);
+
+            if (pad) {
+              self->priv->videosink_probe_id = gst_pad_add_probe (pad, GST_PAD_PROBE_TYPE_EVENT_UPSTREAM,
+                  (GstPadProbeCallback) sinkpad_probe_cb, self, NULL);
+              gst_object_unref (pad);
+            }
+          }
+        }
 
         GST_DEBUG_BIN_TO_DOT_FILE_WITH_TS (GST_BIN (self->priv->pipeline),
             GST_DEBUG_GRAPH_SHOW_ALL, dump_name);
@@ -1686,9 +1750,8 @@ done:
 }
 
 static void
-keyboard_cb (const gchar * key_input, gpointer user_data)
+handle_key_press (GESLauncher * self, const gchar * key_input)
 {
-  GESLauncher *self = (GESLauncher *) user_data;
   gchar key = '\0';
 
   /* only want to switch/case on single char, not first char of string */
@@ -1752,12 +1815,16 @@ keyboard_cb (const gchar * key_input, gpointer user_data)
       break;
     case 27:                   /* ESC */
       if (key_input[1] == '\0') {
+        gst_println ("Pressed 'Escape' -> exiting");
         g_application_quit (G_APPLICATION (self));
         break;
       }
       /* FALLTHROUGH */
     default:
-      if (strcmp (key_input, GST_PLAY_KB_ARROW_RIGHT) == 0) {
+      if (strcmp (key_input, "Escape") == 0) {
+        gst_println ("Pressed 'Escape' -> exiting");
+        g_application_quit (G_APPLICATION (self));
+      } else if (strcmp (key_input, GST_PLAY_KB_ARROW_RIGHT) == 0) {
         relative_seek (self, +0.08, 0);
       } else if (strcmp (key_input, GST_PLAY_KB_ARROW_LEFT) == 0) {
         relative_seek (self, -0.01, 0);
@@ -1768,6 +1835,12 @@ keyboard_cb (const gchar * key_input, gpointer user_data)
       }
       break;
   }
+}
+
+static void
+keyboard_cb (const gchar * key_input, gpointer user_data)
+{
+  handle_key_press (GES_LAUNCHER (user_data), key_input);
 }
 
 static void
