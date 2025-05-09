@@ -2325,7 +2325,7 @@ ges_timeline_element_remove_child_property_full (GESTimelineElement * self,
   g_return_val_if_fail ((!child || G_IS_OBJECT (child)), FALSE);
 
   if (!(childprop = _find_child_prop (self, pspec, child, &index))) {
-    GST_WARNING_OBJECT (self, "No child property with pspec %p (%s) found",
+    GST_DEBUG_OBJECT (self, "No child property with pspec %p (%s) found",
         pspec, pspec->name);
     return FALSE;
   }
