@@ -1310,28 +1310,43 @@ gst_video_rate_src_event (GstBaseTransform * trans, GstEvent * event)
       gst_event_parse_qos (event, &type, &proportion, &diff, &timestamp);
 
       if (GST_CLOCK_TIME_IS_VALID (timestamp) && videorate->rate != 1.0) {
+        GstClockTime orig_timestamp = timestamp;
+
         GST_OBJECT_LOCK (trans);
 
-        GST_DEBUG_OBJECT (trans, "Rescaling QoS event taking our rate into"
-            "account. Timestamp:  %" GST_TIME_FORMAT " -> %" GST_TIME_FORMAT
-            " - diff %" G_GINT64_FORMAT "-> %" G_GINT64_FORMAT,
-            GST_TIME_ARGS (timestamp),
-            GST_TIME_ARGS (videorate->base_output_ts + ((timestamp -
-                        videorate->base_output_ts) * videorate->rate)), diff,
-            (GstClockTimeDiff) (diff * videorate->rate));
-
+        diff *= videorate->rate;
+        GstClockTime base_rtime =
+            gst_segment_to_running_time (&videorate->segment, GST_FORMAT_TIME,
+            videorate->base_output_ts);
         if (videorate->segment.rate < 0.0) {
+          GstClockTime stop_rtime =
+              gst_segment_to_running_time (&videorate->segment, GST_FORMAT_TIME,
+              videorate->segment.stop);
           timestamp =
-              (videorate->segment.stop - videorate->base_output_ts) -
-              ((videorate->segment.stop - videorate->base_output_ts -
-                  timestamp) * videorate->rate);
+              (stop_rtime - base_rtime) - ((stop_rtime - base_rtime -
+                  orig_timestamp) * videorate->rate);
+
+          if (diff < 0 && -diff > timestamp)
+            diff = 0;
+
+          GST_LOG_OBJECT (trans,
+              "(stop_rtime - base_rtime) - ((stop_rtime - base_rtime - orig_timestamp) * videorate->rate) = (%"
+              GST_TIMEP_FORMAT " - %" GST_TIMEP_FORMAT ")" " - ((%"
+              GST_TIMEP_FORMAT " - %" GST_TIMEP_FORMAT " - %" GST_TIMEP_FORMAT
+              ") * %f) = %" GST_TIMEP_FORMAT, &stop_rtime, &base_rtime,
+              &stop_rtime, &base_rtime, &orig_timestamp, videorate->rate,
+              &timestamp);
+
         } else {
           timestamp =
-              videorate->base_output_ts + ((timestamp -
-                  videorate->base_output_ts) * videorate->rate);
-        }
+              base_rtime + ((orig_timestamp - base_rtime) * videorate->rate);
 
-        diff *= videorate->rate;
+          GST_LOG_OBJECT (trans,
+              "timestamp = %" GST_TIMEP_FORMAT " + (%" GST_TIMEP_FORMAT
+              " - %" GST_TIMEP_FORMAT ") * %f = %" GST_TIMEP_FORMAT,
+              &videorate->base_output_ts, &orig_timestamp,
+              &videorate->base_output_ts, videorate->rate, &timestamp);
+        }
         GST_OBJECT_UNLOCK (trans);
 
         gst_event_unref (event);
