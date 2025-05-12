@@ -3862,7 +3862,9 @@ ges_timeline_disable_edit_apis (GESTimeline * self, gboolean disable_edit_apis)
     }
   }
 
+  GST_OBJECT_LOCK (self);
   self->priv->disable_edit_apis = disable_edit_apis;
+  GST_OBJECT_UNLOCK (self);
 }
 
 /**
@@ -3876,8 +3878,9 @@ ges_timeline_disable_edit_apis (GESTimeline * self, gboolean disable_edit_apis)
 gboolean
 ges_timeline_get_edit_apis_disabled (GESTimeline * self)
 {
-  CHECK_THREAD (self);
-  g_return_val_if_fail (GES_IS_TIMELINE (self), FALSE);
+  GST_OBJECT_LOCK (self);
+  gboolean res = self->priv->disable_edit_apis;
+  GST_OBJECT_UNLOCK (self);
 
-  return self->priv->disable_edit_apis;
+  return res;
 }
