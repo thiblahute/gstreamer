@@ -34,35 +34,6 @@ G_BEGIN_DECLS
   (G_TYPE_CHECK_INSTANCE_TYPE((obj),GST_TYPE_PITCH))
 #define GST_IS_PITCH_CLASS(klass) \
   (G_TYPE_CHECK_CLASS_TYPE((klass),GST_TYPE_PITCH))
-/**
- * GstPitchRateMode:
- *
- * Modes controlling how the rate property affects seeking behavior.
- *
- * Since: 1.28
- */
-typedef enum {
-  /**
-   * GST_PITCH_RATE_MODE_TRADITIONAL:
-   *
-   * Transform seek positions by rate factor (e.g., seeking to 10s with rate=2.0
-   * seeks to 20s in the source).
-   *
-   * Since: 1.28
-   */
-  GST_PITCH_RATE_MODE_TRADITIONAL,
-
-  /**
-   * GST_PITCH_RATE_MODE_SOURCE_ALIGNED:
-   *
-   * Preserve original source positions during seeking (e.g., seeking to 10s
-   * always gets the frame at 10s from source).
-   *
-   * Since: 1.28
-   */
-  GST_PITCH_RATE_MODE_SOURCE_ALIGNED
-} GstPitchRateMode;
-
 typedef struct _GstPitch GstPitch;
 typedef struct _GstPitchClass GstPitchClass;
 typedef struct _GstPitchPrivate GstPitchPrivate;
@@ -105,9 +76,6 @@ struct _GstPitch
   guint64 next_buffer_offset;
 
   GstClockTimeDiff min_latency, max_latency;
-
-  /* Rate mode properties */
-  GstPitchRateMode rate_mode;
 
   GstPitchPrivate *priv;
 };

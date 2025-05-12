@@ -51,37 +51,13 @@ struct _GstPitchPrivate
     soundtouch::SoundTouch * st;
 };
 
-static GType
-gst_pitch_rate_mode_get_type (void)
-{
-  static GType pitch_rate_mode_type = 0;
-  static const GEnumValue pitch_rate_mode[] = {
-    /* Since: 1.28 */
-    {GST_PITCH_RATE_MODE_TRADITIONAL, "Transform seek positions by rate factor",
-        "traditional"},
-    /* Since: 1.28 */
-    {GST_PITCH_RATE_MODE_SOURCE_ALIGNED,
-        "Preserve source positions when seeking", "source-aligned"},
-    {0, NULL, NULL},
-  };
-
-  if (!pitch_rate_mode_type) {
-    pitch_rate_mode_type =
-        g_enum_register_static ("GstPitchRateMode", pitch_rate_mode);
-  }
-  return pitch_rate_mode_type;
-}
-
-#define GST_TYPE_PITCH_RATE_MODE (gst_pitch_rate_mode_get_type())
-
 enum
 {
   ARG_0,
   ARG_OUTPUT_RATE,
   ARG_RATE,
   ARG_TEMPO,
-  ARG_PITCH,
-  ARG_RATE_MODE
+  ARG_PITCH
 };
 
 /* For soundtouch 1.4 */
@@ -90,8 +66,6 @@ enum
 #elif defined(FLOAT_SAMPLES)
 #define SOUNDTOUCH_FLOAT_SAMPLES 1
 #endif
-
-#define DEFAULT_RATE_MODE       GST_PITCH_RATE_MODE_TRADITIONAL
 
 #if defined(SOUNDTOUCH_FLOAT_SAMPLES)
 #define SUPPORTED_CAPS \
@@ -189,22 +163,6 @@ gst_pitch_class_init (GstPitchClass * klass)
           (GParamFlags) (G_PARAM_READWRITE | GST_PARAM_CONTROLLABLE |
               G_PARAM_STATIC_STRINGS)));
 
-  /**
-   * GstPitch:rate-mode:
-   *
-   * Mode controlling how the rate property affects seeking.
-   *
-   * The rate property controls the speed at which content plays back.
-   * This property determines how seek positions are handled in relation to this rate.
-   *
-   * Since: 1.28
-   */
-  g_object_class_install_property (gobject_class, ARG_RATE_MODE,
-      g_param_spec_enum ("rate-mode", "Rate Mode",
-          "Control how rate property affects seeking",
-          GST_TYPE_PITCH_RATE_MODE, DEFAULT_RATE_MODE,
-          (GParamFlags) (G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS)));
-
   element_class->change_state = GST_DEBUG_FUNCPTR (gst_pitch_change_state);
 
   gst_element_class_add_static_pad_template (element_class,
@@ -251,8 +209,6 @@ gst_pitch_init (GstPitch * pitch)
   pitch->pitch = 1.0;
   pitch->next_buffer_time = GST_CLOCK_TIME_NONE;
   pitch->next_buffer_offset = 0;
-
-  pitch->rate_mode = DEFAULT_RATE_MODE;
 
   priv->st->setRate (pitch->rate);
   priv->st->setTempo (pitch->tempo * pitch->segment_applied_rate);
@@ -335,11 +291,6 @@ gst_pitch_set_property (GObject * object, guint prop_id,
       priv->st->setPitch (pitch->pitch);
       GST_OBJECT_UNLOCK (pitch);
       break;
-    case ARG_RATE_MODE:
-      GST_OBJECT_LOCK (pitch);
-      pitch->rate_mode = (GstPitchRateMode) g_value_get_enum (value);
-      GST_OBJECT_UNLOCK (pitch);
-      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;
@@ -371,11 +322,6 @@ gst_pitch_get_property (GObject * object, guint prop_id,
     case ARG_PITCH:
       GST_OBJECT_LOCK (pitch);
       g_value_set_float (value, pitch->pitch);
-      GST_OBJECT_UNLOCK (pitch);
-      break;
-    case ARG_RATE_MODE:
-      GST_OBJECT_LOCK (pitch);
-      g_value_set_enum (value, pitch->rate_mode);
       GST_OBJECT_UNLOCK (pitch);
       break;
     default:
@@ -564,25 +510,9 @@ gst_pitch_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
       gst_event_unref (event);
 
       if (format == GST_FORMAT_TIME || format == GST_FORMAT_DEFAULT) {
-        if (pitch->rate_mode == GST_PITCH_RATE_MODE_TRADITIONAL) {
-          /* Traditional mode: transform both cur and stop by stream_time_ratio */
-          cur = (gint64) (cur * stream_time_ratio);
-          if (stop != -1)
-            stop = (gint64) (stop * stream_time_ratio);
-        } else if (pitch->rate_mode == GST_PITCH_RATE_MODE_SOURCE_ALIGNED) {
-          /* Source-aligned mode: preserve inpoint position but scale duration */
-          if (stop != -1 && stream_time_ratio != 0.0) {
-            if (rate > 0.0) {
-              /* Forward playback: keep cur, scale duration to calculate new stop */
-              gint64 duration = stop - cur;
-              stop = cur + (gint64) (duration * stream_time_ratio);
-            } else {
-              /* Reverse playback: keep stop, scale duration to calculate new cur */
-              gint64 duration = stop - cur;
-              cur = stop - (gint64) (duration * stream_time_ratio);
-            }
-          }
-        }
+        cur = (gint64) (cur * stream_time_ratio);
+        if (stop != -1)
+          stop = (gint64) (stop * stream_time_ratio);
 
         event = gst_event_new_seek (rate, format, flags,
             cur_type, cur, stop_type, stop);
@@ -872,42 +802,13 @@ gst_pitch_process_segment (GstPitch * pitch, GstEvent ** event)
   priv->st->setTempo (pitch->tempo * ABS (pitch->segment_applied_rate));
   GST_OBJECT_UNLOCK (pitch);
 
-  if (pitch->rate_mode == GST_PITCH_RATE_MODE_TRADITIONAL) {
-    /* Traditional mode: transform all segment values by stream_time_ratio */
-    seg.start = (gint64) (seg.start / stream_time_ratio);
-    if (seg.stop != (guint64) - 1)
-      seg.stop = (gint64) (seg.stop / stream_time_ratio);
-    seg.time = (gint64) (seg.time / stream_time_ratio);
-    seg.position = (gint64) (seg.position / stream_time_ratio);
-    if (seg.duration != (guint64) - 1)
-      seg.duration = (gint64) (seg.duration / stream_time_ratio);
-  } else if (pitch->rate_mode == GST_PITCH_RATE_MODE_SOURCE_ALIGNED) {
-    /* Source-aligned mode: preserve start/time but scale duration */
-    if (seg.stop != (guint64) - 1) {
-      if (seg.rate > 0.0) {
-        /* Forward playback: preserve start, scale duration for stop */
-        gint64 duration = seg.stop - seg.start;
-        seg.stop = seg.start + (gint64) (duration / stream_time_ratio);
-      } else {
-        /* Reverse playback: preserve stop, scale duration for start */
-        gint64 duration = seg.stop - seg.start;
-        seg.start = seg.stop - (gint64) (duration / stream_time_ratio);
-      }
-    }
-    /* Adjust position based on playback direction */
-    if (seg.rate > 0.0) {
-      seg.position = seg.start;
-    } else if (seg.stop != (guint64) - 1) {
-      seg.position = seg.stop;
-    }
-    /* Time is always set to start for consistent output segment */
-    seg.time = seg.start;
-
-    pitch->next_buffer_time = seg.position;
-    /* Scale duration if present */
-    if (seg.duration != (guint64) - 1)
-      seg.duration = (gint64) (seg.duration / stream_time_ratio);
-  }
+  seg.start = (gint64) (seg.start / stream_time_ratio);
+  if (seg.stop != (guint64) - 1)
+    seg.stop = (gint64) (seg.stop / stream_time_ratio);
+  seg.time = (gint64) (seg.time / stream_time_ratio);
+  seg.position = (gint64) (seg.position / stream_time_ratio);
+  if (seg.duration != (guint64) - 1)
+    seg.duration = (gint64) (seg.duration / stream_time_ratio);
 
 done:
   GST_LOG_OBJECT (pitch->sinkpad, "out segment %" GST_SEGMENT_FORMAT, &seg);
@@ -1058,11 +959,9 @@ gst_pitch_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
   GstEvent *pending_segment = priv->pending_segment;
   priv->pending_segment = NULL;
 
-  GstPitchRateMode rate_mode = pitch->rate_mode;
   GST_OBJECT_UNLOCK (pitch);
 
-  if (stream_time_ratio == 0.0
-      && rate_mode == GST_PITCH_RATE_MODE_SOURCE_ALIGNED) {
+  if (stream_time_ratio == 0.0) {
     buffer = gst_buffer_make_writable (buffer);
     GstMapInfo map;
 
@@ -1132,7 +1031,6 @@ gst_pitch_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
 
   return GST_FLOW_OK;
 }
-
 
 static GstStateChangeReturn
 gst_pitch_change_state (GstElement * element, GstStateChange transition)
