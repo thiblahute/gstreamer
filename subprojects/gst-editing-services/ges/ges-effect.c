@@ -283,7 +283,7 @@ _rate_source_to_sink (GESBaseEffect * effect, GstClockTime time,
   if (time == 0)
     return 0;
   if (rate_factor == 0.0) {
-    GST_ERROR_OBJECT (effect, "The rate effect has a rate of 0");
+    GST_INFO_OBJECT (effect, "The rate effect has a rate of 0");
     return 0;
   }
   return (GstClockTime) (time * rate_factor);
