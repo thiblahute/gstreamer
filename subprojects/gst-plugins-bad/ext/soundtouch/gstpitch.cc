@@ -510,9 +510,15 @@ gst_pitch_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
       gst_event_unref (event);
 
       if (format == GST_FORMAT_TIME || format == GST_FORMAT_DEFAULT) {
-        cur = (gint64) (cur * stream_time_ratio);
-        if (stop != -1)
-          stop = (gint64) (stop * stream_time_ratio);
+        if (stream_time_ratio == 0.0) {
+          GST_INFO_OBJECT (pitch, "stream_time_ratio is 0.0");
+          stop = GST_CLOCK_TIME_NONE;
+          cur_type = GST_SEEK_TYPE_END;
+        } else {
+          cur = (gint64) (cur * stream_time_ratio);
+          if (stop != -1)
+            stop = (gint64) (stop * stream_time_ratio);
+        }
 
         event = gst_event_new_seek (rate, format, flags,
             cur_type, cur, stop_type, stop);
