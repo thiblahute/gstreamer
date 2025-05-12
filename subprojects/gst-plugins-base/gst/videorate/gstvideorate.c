@@ -1095,11 +1095,14 @@ gst_video_rate_sink_event (GstBaseTransform * trans, GstEvent * event)
         goto format_error;
 
       input_segment = segment;
-      segment.start = (gint64) (segment.start / videorate->rate);
-      segment.position = (gint64) (segment.position / videorate->rate);
-      if (GST_CLOCK_TIME_IS_VALID (segment.stop))
-        segment.stop = (gint64) (segment.stop / videorate->rate);
-      segment.time = (gint64) (segment.time / videorate->rate);
+
+      if (videorate->rate != 0.) {
+        segment.start = (gint64) (segment.start / videorate->rate);
+        segment.position = (gint64) (segment.position / videorate->rate);
+        if (GST_CLOCK_TIME_IS_VALID (segment.stop))
+          segment.stop = (gint64) (segment.stop / videorate->rate);
+        segment.time = (gint64) (segment.time / videorate->rate);
+      }
 
       if (!gst_segment_is_equal (&segment, &videorate->segment)) {
         rolled_back_caps =
@@ -1291,9 +1294,16 @@ gst_video_rate_src_event (GstBaseTransform * trans, GstEvent * event)
       gst_event_parse_seek (event, &srate, NULL, &flags, &start_type, &start,
           &stop_type, &stop);
 
-      start = (gint64) (start * videorate->rate);
-      if (GST_CLOCK_TIME_IS_VALID (stop)) {
-        stop = (gint64) (stop * videorate->rate);
+      if (videorate->rate == 0.) {
+        GST_INFO_OBJECT (trans, "Got seek event with rate 0"
+            ", marking stop as TIME_NONE and start as END");
+        stop = GST_CLOCK_TIME_NONE;
+        start_type = GST_SEEK_TYPE_END;
+      } else {
+        start = (gint64) (start * videorate->rate);
+        if (GST_CLOCK_TIME_IS_VALID (stop)) {
+          stop = (gint64) (stop * videorate->rate);
+        }
       }
 
       gst_event_unref (event);
