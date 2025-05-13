@@ -38,5 +38,6 @@ ges_validate_clean (GstPipeline *pipeline);
 
 void ges_validate_handle_request_state_change (GstMessage *message, GApplication *application);
 gint ges_validate_print_action_types (const gchar **types, gint num_types);
+void gst_validate_printr(const gchar *format, ...);
 
 G_END_DECLS

@@ -27,10 +27,36 @@
 
 #include <string.h>
 
+void
+gst_validate_printr (const gchar * format, ...)
+{
+  static gint last_length = 0;
+  va_list args;
+  gchar *str;
+
+  va_start (args, format);
+  str = gst_info_strdup_vprintf (format, args);
+  va_end (args);
+
+  gint length = strlen (str);
+  gint padding = MAX (0, last_length - length);
+
+  gst_print ("\r%s%*c", str, padding, ' ');
+  last_length = length;
+
+  g_free (str);
+}
+
 static gboolean
 _print_position (GstElement * pipeline)
 {
   gint64 position = 0, duration = -1;
+  GstState state;
+
+  if ((gst_element_get_state (pipeline, &state, NULL,
+              0) != GST_STATE_CHANGE_SUCCESS) || state != GST_STATE_PLAYING) {
+    return TRUE;
+  }
 
   if (pipeline) {
     gst_element_query_position (GST_ELEMENT (pipeline), GST_FORMAT_TIME,
@@ -38,8 +64,9 @@ _print_position (GstElement * pipeline)
     gst_element_query_duration (GST_ELEMENT (pipeline), GST_FORMAT_TIME,
         &duration);
 
-    gst_print ("<position: %" GST_TIME_FORMAT " duration: %" GST_TIME_FORMAT
-        "/>\r", GST_TIME_ARGS (position), GST_TIME_ARGS (duration));
+    gst_validate_printr ("position: %" GST_TIME_FORMAT " duration: %"
+        GST_TIME_FORMAT "/>", GST_TIME_ARGS (position),
+        GST_TIME_ARGS (duration));
   }
 
   return TRUE;
