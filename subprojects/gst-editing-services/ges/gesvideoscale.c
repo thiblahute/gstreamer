@@ -17,6 +17,7 @@
  * Boston, MA 02110-1335, USA.
  */
 
+#include "ges-internal.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -157,9 +158,12 @@ ges_video_scale_init (GESVideoScale * self)
   GstPadTemplate *template =
       gst_static_pad_template_get (&gst_video_scale_sink_template);
 
-  scale = gst_element_factory_make ("videoscale", NULL);
-  g_object_set (scale, "add-borders", FALSE, NULL);
-  g_object_set (scale, "n-threads", 0, NULL);
+  scale = ges_videoconvert_scale_make ();
+  if (ges_converter_type () == GES_CONVERTER_SOFTWARE) {
+    scale = gst_element_factory_make ("videoscale", NULL);
+    g_object_set (scale, "add-borders", FALSE, NULL);
+    g_object_set (scale, "n-threads", 0, NULL);
+  }
   self->capsfilter = gst_element_factory_make ("capsfilter", NULL);
 
   gst_bin_add_many (GST_BIN (self), scale, self->capsfilter, NULL);
