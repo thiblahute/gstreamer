@@ -238,7 +238,7 @@ validate_ssim_override_new (GstStructure * config)
 
   self->priv->config = gst_structure_copy (config);
   self->priv->result_outdir =
-      g_strdup (gst_structure_get_string (config, "result-output-dir"));
+      g_canonicalize_filename (gst_structure_get_string (config, "result-output-dir"), NULL);
 
   format = gst_structure_get_string (config, "output-video-format");
   if (!format) {
