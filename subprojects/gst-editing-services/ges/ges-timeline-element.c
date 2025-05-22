@@ -873,7 +873,7 @@ ges_timeline_element_add_child_property_full (GESTimelineElement * self,
   ChildPropSpec childprop, *prev;
 
   if (_find_child_prop (self, pspec, child, NULL)) {
-    GST_INFO_OBJECT (self, "Child property already exists: %s", pspec->name);
+    GST_LOG_OBJECT (self, "Child property already exists: %s", pspec->name);
 
     return FALSE;
   }
