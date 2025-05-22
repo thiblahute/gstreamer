@@ -972,6 +972,12 @@ ges_clip_can_set_active_of_child (GESClip * clip, GESTrackElement * child,
   if (clip->priv->setting_active)
     return TRUE;
 
+  if (GES_TIMELINE_ELEMENT_TIMELINE (clip) &&
+      ges_timeline_get_edit_apis_disabled (GES_TIMELINE_ELEMENT_TIMELINE
+          (clip))) {
+    return TRUE;
+  }
+
   /* We want to ensure that each active non-core element has a
    * corresponding active core element in the same track */
   if (!track || is_core == active) {
