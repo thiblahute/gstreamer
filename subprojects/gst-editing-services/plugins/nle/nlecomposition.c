@@ -3943,6 +3943,7 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
 
   priv->current = stack;
 
+  gboolean task_paused = FALSE;
   if (priv->current) {
     if (toplevel_seek) {
       GST_INFO_OBJECT (comp,
@@ -3957,17 +3958,34 @@ update_pipeline (NleComposition * comp, GstClockTime currenttime, gint32 seqnum,
         gst_event_unref (toplevel_seek);
         return FALSE;
       }
+      task_paused = TRUE;
     } else {
       GST_INFO_OBJECT (comp,
-          "NOT pausing controller thread as we will get a seek from parent composition");
+          "NOT pausing controller thread as %s",
+          priv->awaited_toplevel_seek ?
+          "we will get a seek from parent composition" :
+          " each element of the composition have been seeked in READY");
     }
   }
 
   /* Activate stack */
-  if (tear_down)
-    return _activate_new_stack (comp, toplevel_seek);
-  return _seek_current_stack (comp, toplevel_seek,
-      _have_to_flush_downstream (update_reason));
+  if (!tear_down) {
+    return _seek_current_stack (comp, toplevel_seek,
+        _have_to_flush_downstream (update_reason));
+  }
+
+  if (!_activate_new_stack (comp, toplevel_seek)) {
+    return FALSE;
+  }
+
+  if (!task_paused && update_reason == COMP_UPDATE_STACK_ON_COMMIT) {
+    GST_INFO_OBJECT (comp, "Stack was initialized 'in ready' "
+        "so the controller thread task was not paused: "
+        "emitting `commited` signal now");
+    _emit_commited_signal_func (comp, NULL);
+  }
+
+  return TRUE;
 }
 
 static gboolean

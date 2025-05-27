@@ -1,0 +1,31 @@
+set-globals, media_file="$(test_dir)/../../medias/defaults/matroska/timed_frames_video_only_1fps.mkv"
+meta,
+    tool = "ges-launch-$(gst_api_version)",
+    handles-states=true,
+    seek=true,
+    needs_preroll=true,
+    args = {
+        --track-types, video,
+        --video-caps, "video/x-raw, format=(string)I420, width=(int)400, height=(int)400, framerate=(fraction)1/1",
+        --videosink, "$(videosink) name=videosink",
+    }
+
+pause
+
+# Add a clip and check that the first frame is displayed
+add-clip, asset-id="file://$(media_file)", layer-priority=0, type=GESUriClip, name=(string)clip, duration=10.0
+add-clip, asset-id="file://$(media_file)", layer-priority=0, type=GESUriClip, name=(string)clip1, start=10.0, duration=10.0
+commit
+
+edit-container,
+    container-name=(string)clip,
+    position=5.0
+
+# Verify that the GESTimeline::commited signal is emitted
+wait,
+  non-blocking=true,
+  signal-name="commited",
+  target-element-name="gestimeline0"
+commit
+
+stop
