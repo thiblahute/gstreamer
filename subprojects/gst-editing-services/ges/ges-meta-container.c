@@ -234,7 +234,7 @@ _set_value (GESMetaContainer * container, const gchar * meta_item,
   GstStructure *structure;
   gchar *val = gst_value_serialize (value);
 
-  if (val == NULL) {
+  if (val == NULL && !G_VALUE_HOLDS_STRING (value)) {
     GST_WARNING_OBJECT (container, "Could not set value on item: %s",
         meta_item);
 

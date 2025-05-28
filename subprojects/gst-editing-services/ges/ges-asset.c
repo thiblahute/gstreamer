@@ -1278,7 +1278,7 @@ ges_asset_request (GType extractable_type, const gchar * id, GError ** error)
         case ASSET_INITIALIZED:
           break;
         case ASSET_INITIALIZING:
-          GST_ERROR ("Asset is initializing");
+          GST_INFO_OBJECT (asset, "Asset is initializing");
           asset = NULL;
           break;
         case ASSET_PROXIED:
