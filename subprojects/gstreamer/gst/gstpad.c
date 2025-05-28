@@ -150,6 +150,8 @@ struct _GstPadPrivate
    * by a single thread at a time. Protected by the object lock */
   GCond activation_cond;
   gboolean in_activation;
+
+  GstLogContext *caps_not_compat_lctx;
 };
 
 typedef struct
@@ -429,6 +431,13 @@ gst_pad_init (GstPad * pad)
   g_cond_init (&pad->priv->activation_cond);
 
   pad->ABI.abi.last_flowret = GST_FLOW_FLUSHING;
+
+  GST_LOG_CONTEXT_INIT (pad->priv->caps_not_compat_lctx,
+      GST_LOG_CONTEXT_FLAG_THROTTLE, {
+        GST_LOG_CONTEXT_BUILDER_SET_CATEGORY (GST_CAT_CAPS);
+        GST_LOG_CONTEXT_BUILDER_SET_INTERVAL (60 * GST_SECOND);
+      }
+  );
 }
 
 /* called when setting the pad inactive. It removes all sticky events from
@@ -784,6 +793,7 @@ gst_pad_finalize (GObject * object)
   g_cond_clear (&pad->block_cond);
   g_cond_clear (&pad->priv->activation_cond);
   g_array_free (pad->priv->events, TRUE);
+  g_clear_pointer (&pad->priv->caps_not_compat_lctx, gst_log_context_free);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -3272,8 +3282,9 @@ gst_pad_query_accept_caps_default (GstPad * pad, GstQuery * query)
       result = gst_caps_is_subset (caps, allowed);
     }
     if (!result) {
-      GST_CAT_WARNING_OBJECT (GST_CAT_CAPS, pad, "caps: %" GST_PTR_FORMAT
-          " were not compatible with: %" GST_PTR_FORMAT, caps, allowed);
+      GST_CTX_WARNING_OBJECT (pad->priv->caps_not_compat_lctx, pad,
+          "caps: %" GST_PTR_FORMAT " were not compatible with: %"
+          GST_PTR_FORMAT, caps, allowed);
     }
     gst_caps_unref (allowed);
   } else {
