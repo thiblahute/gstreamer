@@ -1331,7 +1331,7 @@ ges_asset_request (GType extractable_type, const gchar * id, GError ** error)
           extractable_type, NULL);
       if (!asset)
         GST_WARNING ("Unable to extract asset");
-    } else {
+    } else if (!g_type_is_a (extractable_type, GES_TYPE_URI_CLIP)) {
       GST_WARNING ("Tried to create an Asset for type %s but no ->init method",
           g_type_name (extractable_type));
     }
