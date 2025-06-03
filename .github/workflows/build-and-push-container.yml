@@ -34,11 +34,19 @@ jobs:
       - name: Docker AWS
         run: |
           docker pull $ECR_REPOSITORY:arm64-$BRANCH_NAME || true
-          docker build . -f ci/docker/tella/Dockerfile --platform linux/arm64/v8 --cache-from $ECR_REPOSITORY:arm64-$BRANCH_NAME -t $ECR_REPOSITORY:arm64-$GITHUB_SHA
+          docker pull $ECR_REPOSITORY:arm64-$BRANCH_NAME-build || true
+
+          docker build . -f ci/docker/tella/Dockerfile --platform linux/arm64/v8 --cache-from $ECR_REPOSITORY:arm64-$BRANCH_NAME-build -t $ECR_REPOSITORY:arm64-$GITHUB_SHA-build --target build-deps-gstreamer
+          docker tag $ECR_REPOSITORY:arm64-$GITHUB_SHA-build $ECR_REPOSITORY:arm64-$BRANCH_NAME-build
+
+          docker build . -f ci/docker/tella/Dockerfile --platform linux/arm64/v8 --cache-from $ECR_REPOSITORY:arm64-$BRANCH_NAME -t $ECR_REPOSITORY:arm64-$GITHUB_SHA --target release-deps-gstreamer
           docker tag $ECR_REPOSITORY:arm64-$GITHUB_SHA $ECR_REPOSITORY:arm64-$BRANCH_NAME
+
           docker push $ECR_REPOSITORY:arm64-$GITHUB_SHA
           docker push $ECR_REPOSITORY:arm64-$BRANCH_NAME
 
+          docker push $ECR_REPOSITORY:arm64-$GITHUB_SHA-build
+          docker push $ECR_REPOSITORY:arm64-$BRANCH_NAME-build
       - name: Run gst-inspect-1.0
         run: |
           docker run --rm $ECR_REPOSITORY:arm64-$GITHUB_SHA sh -c 'gst-inspect-1.0 && gst-inspect-1.0 --version'
@@ -85,7 +93,14 @@ jobs:
 
       - name: Create and push manifest images
         run: |
+          docker manifest create $ECR_REPOSITORY:$GITHUB_SHA-build $ECR_REPOSITORY:arm64-$GITHUB_SHA-build
+          docker manifest push $ECR_REPOSITORY:$GITHUB_SHA-build
+
+          docker manifest create $ECR_REPOSITORY:$BRANCH_NAME-build $ECR_REPOSITORY:arm64-$BRANCH_NAME-build
+          docker manifest push $ECR_REPOSITORY:$BRANCH_NAME-build
+
           docker manifest create $ECR_REPOSITORY:$GITHUB_SHA $ECR_REPOSITORY:arm64-$GITHUB_SHA
           docker manifest push $ECR_REPOSITORY:$GITHUB_SHA
+
           docker manifest create $ECR_REPOSITORY:$BRANCH_NAME $ECR_REPOSITORY:arm64-$BRANCH_NAME
           docker manifest push $ECR_REPOSITORY:$BRANCH_NAME

@@ -8,4 +8,4 @@ build/
 builddir/
 .github/
 .dockerignore
-Dockerfile
+**/Dockerfile
