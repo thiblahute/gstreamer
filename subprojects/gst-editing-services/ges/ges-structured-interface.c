@@ -84,7 +84,8 @@
 #define TRY_GET_TIME(name, var, var_frames, def) G_STMT_START  {       \
   if (!ges_util_structure_get_clocktime (structure, name, var, var_frames)) { \
       *var = def;                                          \
-      *var_frames = GES_FRAME_NUMBER_NONE;                            \
+      if (var_frames)                                      \
+        *var_frames = GES_FRAME_NUMBER_NONE;               \
   }                                                        \
 } G_STMT_END
 
@@ -749,6 +750,8 @@ _ges_add_clip_from_struct (GESTimeline * timeline, GstStructure * structure,
   if (clip) {
     res = TRUE;
 
+    gst_structure_set (structure, "duration", GST_TYPE_CLOCK_TIME,
+        duration, NULL);
     if (GES_TIMELINE_ELEMENT_DURATION (clip) == 0) {
       *error = g_error_new (GES_ERROR, 0,
           "Clip %s has 0 as duration, please provide a proper duration",
@@ -756,7 +759,6 @@ _ges_add_clip_from_struct (GESTimeline * timeline, GstStructure * structure,
       res = FALSE;
       goto beach;
     }
-
 
     if (GES_IS_TEST_CLIP (clip)) {
       if (pattern) {
@@ -789,6 +791,8 @@ _ges_add_clip_from_struct (GESTimeline * timeline, GstStructure * structure,
   }
 
   if (res) {
+    g_object_set_qdata_full (G_OBJECT (clip), CLIP_STRUCTURE_QDATA,
+        gst_structure_copy (structure), (GDestroyNotify) gst_structure_free);
     g_object_set_qdata (G_OBJECT (timeline), LAST_CONTAINER_QDATA, clip);
     g_object_set_qdata (G_OBJECT (timeline), LAST_CHILD_QDATA, NULL);
   }
@@ -864,6 +868,33 @@ _ges_add_track_from_struct (GESTimeline * timeline,
   }
 
   return ges_timeline_add_track (timeline, track);
+}
+
+static void
+ges_clip_apply_pending_inpoint_duration (GESClip * container)
+{
+  GstStructure *structure = g_object_get_qdata (G_OBJECT (container),
+      CLIP_STRUCTURE_QDATA);
+
+  if (structure) {
+    GstClockTime duration, inpoint;
+    GESFrameNumber f;
+
+    TRY_GET_TIME ("duration", &duration, &f, GST_CLOCK_TIME_NONE);
+    TRY_GET_TIME ("inpoint", &inpoint, &f, 0);
+
+    if (GST_CLOCK_TIME_IS_VALID (inpoint)
+        && GES_TIMELINE_ELEMENT_INPOINT (container) != inpoint) {
+      ges_timeline_element_set_inpoint (GES_TIMELINE_ELEMENT (container),
+          inpoint);
+    }
+
+    if (GST_CLOCK_TIME_IS_VALID (duration)
+        && GES_TIMELINE_ELEMENT_DURATION (container) != duration) {
+      ges_timeline_element_set_duration (GES_TIMELINE_ELEMENT (container),
+          duration);
+    }
+  }
 }
 
 gboolean
@@ -992,6 +1023,8 @@ _ges_container_add_child_from_struct (GESTimeline * timeline,
         ges_clip_add_top_effect (GES_CLIP (container), GES_BASE_EFFECT (child),
         0, error);
 
+    ges_clip_apply_pending_inpoint_duration (GES_CLIP (container));
+
     g_list_free_full (effects, gst_object_unref);
   } else {
     res = ges_container_add (container, child);
@@ -1094,6 +1127,14 @@ _ges_set_child_property_from_struct (GESTimeline * timeline,
 
     return FALSE;
   }
+
+  if (GES_IS_BASE_EFFECT (element) &&
+      ges_base_effect_is_time_effect (GES_BASE_EFFECT (element)) &&
+      GES_IS_CLIP (GES_TIMELINE_ELEMENT_PARENT (element))) {
+    ges_clip_apply_pending_inpoint_duration (GES_CLIP
+        (GES_TIMELINE_ELEMENT_PARENT (element)));
+  }
+
   g_free (property_name);
   return _ges_save_timeline_if_needed (timeline, structure, error);
 

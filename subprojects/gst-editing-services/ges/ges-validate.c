@@ -436,6 +436,8 @@ GES_START_VALIDATE_ACTION (_edit)
   gst_structure_get_int (action->structure, "new-layer-priority",
       &new_layer_priority);
 
+  g_object_set_qdata (G_OBJECT (element), CLIP_STRUCTURE_QDATA, NULL);
+
   if (!(res = ges_timeline_element_edit (element, layers,
               new_layer_priority, mode, edge, position))) {
 

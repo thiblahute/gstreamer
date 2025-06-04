@@ -23,6 +23,8 @@
 
 G_BEGIN_DECLS
 
+#define CLIP_STRUCTURE_QDATA g_quark_from_string("ges-clip-structure")
+
 typedef gboolean (*ActionFromStructureFunc)   (GESTimeline * timeline,
                                                GstStructure * structure,
                                                GError ** error);
