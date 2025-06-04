@@ -242,7 +242,8 @@ ges_uri_source_query_seek (GESUriSource * self, GstEvent * seek)
   if (GST_CLOCK_TIME_IS_VALID (stop)) {
     /* NLE won't clip seek duration to handle time effects, but here we handle
      * them ourselves */
-    duration = MIN (stop - start, GES_TIMELINE_ELEMENT_DURATION (self->element));
+    duration =
+        MIN (stop - start, GES_TIMELINE_ELEMENT_DURATION (self->element));
 
     stop = start + duration;
   }
