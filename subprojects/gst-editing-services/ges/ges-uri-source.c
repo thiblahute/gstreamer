@@ -238,7 +238,7 @@ ges_uri_source_query_seek (GESUriSource * self, GstEvent * seek)
   gst_event_parse_seek (translated_seek, &rate, NULL, NULL, NULL, &start, NULL,
       &stop);
 
-  g_assert (GST_CLOCK_TIME_IS_VALID(start));
+  g_assert (GST_CLOCK_TIME_IS_VALID (start));
   if (GST_CLOCK_TIME_IS_VALID (stop)) {
     /* NLE won't clip seek duration to handle time effects, but here we handle
      * them ourselves */
