@@ -437,6 +437,7 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
   GST_DEBUG_OBJECT (self->element,
       "%" GST_PTR_FORMAT " - Track! %" GST_PTR_FORMAT, self->decodebin, track);
   GstCaps *caps = NULL;
+  gboolean is_image = FALSE;
   if (GES_IS_VIDEO_SOURCE (self->element)) {
 
     if (ges_converter_type () == GES_CONVERTER_SOFTWARE)
@@ -444,7 +445,8 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
     else
       caps = gst_caps_from_string ("video/x-raw(ANY)");
 
-    if (ges_uri_source_asset_is_image (asset)) {
+    is_image = ges_uri_source_asset_is_image (asset);
+    if (is_image) {
       if (ges_converter_type () == GES_CONVERTER_GL) {
         filter =
             "glupload ! glcolorconvert ! capsfilter caps=\"video/x-raw(memory:GLMemory),format=RGBA\" ! imagefreeze";
@@ -497,8 +499,11 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
   g_object_set (decodebin, "uri", self->uri, "stream-id", wanted_id, "caps",
       caps, NULL);
 
-  g_signal_connect_data (decodebin, "get-initial-seek",
-      G_CALLBACK (uridecodepoolsrc_get_initial_seek_cb), self, NULL, 0);
+  if (!is_image && !GES_IS_AUDIO_SOURCE (self->element)) {
+    g_signal_connect_data (decodebin, "get-initial-seek",
+        G_CALLBACK (uridecodepoolsrc_get_initial_seek_cb), self, NULL, 0);
+  }
+
   if (clip_asset) {
     g_object_get (G_OBJECT (clip_asset), "is-nested-timeline",
         &self->controls_nested_timeline, NULL);
