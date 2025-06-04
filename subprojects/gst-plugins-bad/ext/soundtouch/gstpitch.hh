@@ -78,6 +78,8 @@ struct _GstPitch
   GstClockTimeDiff min_latency, max_latency;
 
   GstPitchPrivate *priv;
+
+  GstSegment out_segment;
 };
 
 struct _GstPitchClass

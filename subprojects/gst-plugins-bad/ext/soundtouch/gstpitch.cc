@@ -244,6 +244,25 @@ gst_pitch_finalize (GObject * object)
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
+static GstClockTime
+gst_pitch_calculate_priming_duration (GstPitch * pitch)
+{
+  gfloat rate = pitch->rate;
+  GstPitchPrivate *priv = GST_PITCH_GET_PRIVATE (pitch);
+
+  if (rate == 1.0) {
+    // No pitch shifting, no priming needed
+    return 0;
+  }
+
+  // Query SoundTouch for its initial priming requirements
+  // This gives us the minimum samples needed to prime the processing engine
+  guint soundtouch_priming_samples = priv->st->getSetting(SETTING_INITIAL_LATENCY);
+
+  // Convert samples to time duration - this is our priming duration
+  return gst_util_uint64_scale(soundtouch_priming_samples, GST_SECOND, pitch->info.rate);
+}
+
 static void
 gst_pitch_update_duration (GstPitch * pitch)
 {
@@ -381,9 +400,11 @@ gst_pitch_forward_buffer (GstPitch * pitch, GstBuffer * buffer)
 
   GST_OBJECT_UNLOCK (pitch);
 
-  GST_LOG ("pushing buffer pts: %" GST_TIME_FORMAT ", duration: %"
-      GST_TIME_FORMAT ", samples: %" G_GUINT64_FORMAT, GST_TIME_ARGS (GST_BUFFER_PTS (buffer)),
-      GST_TIME_ARGS (GST_BUFFER_DURATION (buffer)), samples);
+  GST_LOG_OBJECT (pitch, "pushing buffer pts: %" GST_TIME_FORMAT ", dur: %"
+      GST_TIME_FORMAT ", samples: %" G_GUINT64_FORMAT ", offset: %" G_GUINT64_FORMAT
+      ", offset-end: %" G_GUINT64_FORMAT, GST_TIME_ARGS (GST_BUFFER_PTS (buffer)),
+      GST_TIME_ARGS (GST_BUFFER_DURATION (buffer)), samples,
+      GST_BUFFER_OFFSET(buffer), GST_BUFFER_OFFSET_END(buffer));
 
   return gst_pad_push (pitch->srcpad, buffer);
 }
@@ -400,6 +421,7 @@ gst_pitch_prepare_buffer (GstPitch * pitch)
   gboolean reverse_playback = (pitch->segment_applied_rate < 0);
   gint rate = pitch->info.rate;
   gint bytes_per_frame = pitch->info.bpf;
+  GstSegment out_segment = pitch->out_segment;
 
   GstPitchPrivate *priv = GST_PITCH_GET_PRIVATE (pitch);
   guint samples = priv->st->numSamples ();
@@ -445,7 +467,7 @@ gst_pitch_prepare_buffer (GstPitch * pitch)
     GST_BUFFER_OFFSET (buffer) = (gint64) samples;
   }
 
-  return buffer;
+  return gst_audio_buffer_clip (buffer, &out_segment, rate, bytes_per_frame);
 }
 
 /* process the last samples, in a later stage we should make sure no more
@@ -505,6 +527,7 @@ gst_pitch_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
       gst_event_parse_seek (event, &rate, &format, &flags,
           &cur_type, &cur, &stop_type, &stop);
 
+      gint64 wanted_stop = stop;
       seqnum = gst_event_get_seqnum (event);
 
       gst_event_unref (event);
@@ -515,9 +538,30 @@ gst_pitch_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
           stop = GST_CLOCK_TIME_NONE;
           cur_type = GST_SEEK_TYPE_END;
         } else {
+          GstClockTime priming_duration =
+              gst_pitch_calculate_priming_duration (pitch) * stream_time_ratio;
+
           cur = (gint64) (cur * stream_time_ratio);
-          if (stop != -1)
+          if (cur > priming_duration)
+            cur -= priming_duration;
+
+          if (stop != -1) {
             stop = (gint64) (stop * stream_time_ratio);
+
+            if (stream_time_ratio != 1.0 && rate != 0.0) {
+              GST_LOG_OBJECT (pitch,
+                  "scaled stop time from %" GST_TIME_FORMAT " to %" GST_TIME_FORMAT,
+                  GST_TIME_ARGS (wanted_stop), GST_TIME_ARGS (stop));
+
+              // Adjust the stop time we get some extra sample to interpolate
+              // from so we can have a clean cut at the requested stop time
+              stop += gst_pitch_calculate_priming_duration(pitch) * stream_time_ratio;
+            }
+
+            GST_LOG_OBJECT (pitch,
+                "adjusted SEEK.stop time from %" GST_TIME_FORMAT " to %" GST_TIME_FORMAT " (stream_time_ratio: %f)",
+                GST_TIME_ARGS (wanted_stop), GST_TIME_ARGS (stop), stream_time_ratio);
+          }
         }
 
         event = gst_event_new_seek (rate, format, flags,
@@ -796,6 +840,9 @@ gst_pitch_process_segment (GstPitch * pitch, GstEvent ** event)
 
   stream_time_ratio = pitch->tempo * pitch->rate * ABS (segment_applied_rate);
 
+  gint64 wanted_start = seg.start;
+  gint64 wanted_stop = seg.stop;
+  GstClockTime priming_duration = gst_pitch_calculate_priming_duration (pitch);
   if (stream_time_ratio == 0) {
     GST_LOG_OBJECT (pitch->sinkpad, "stream_time_ratio is zero");
     goto done;
@@ -809,12 +856,40 @@ gst_pitch_process_segment (GstPitch * pitch, GstEvent ** event)
   GST_OBJECT_UNLOCK (pitch);
 
   seg.start = (gint64) (seg.start / stream_time_ratio);
-  if (seg.stop != (guint64) - 1)
+  if (stream_time_ratio != 1.0 && seg.rate > 0.0 && seg.start > 0) {
+    seg.start += priming_duration;
+    GST_LOG_OBJECT (pitch,
+        "adjusted segment.start time from %" GST_TIME_FORMAT " to %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (wanted_start), GST_TIME_ARGS (seg.start));
+  }
+
+
+  if (seg.stop != (guint64) - 1) {
     seg.stop = (gint64) (seg.stop / stream_time_ratio);
+    GST_LOG_OBJECT (pitch,
+        "scaled segment.stop time from %" GST_TIME_FORMAT " to %" GST_TIME_FORMAT,
+        GST_TIME_ARGS (wanted_stop), GST_TIME_ARGS (seg.stop));
+    if (stream_time_ratio != 1.0 && seg.rate > 0.0) {
+      seg.stop -= priming_duration;
+      GST_LOG_OBJECT (pitch,
+          "adjusted segment.stop time from %" GST_TIME_FORMAT " to %" GST_TIME_FORMAT,
+          GST_TIME_ARGS (wanted_stop), GST_TIME_ARGS (seg.stop));
+    }
+  }
   seg.time = (gint64) (seg.time / stream_time_ratio);
   seg.position = (gint64) (seg.position / stream_time_ratio);
-  if (seg.duration != (guint64) - 1)
+
+  if (seg.duration != (guint64) - 1) {
+    if (stream_time_ratio != 1.0 && seg.rate > 0.0) {
+        gint64 wanted_duration = seg.duration;
+        seg.stop -= priming_duration;
+        GST_LOG_OBJECT (pitch,
+            "adjusted duration from %" GST_TIME_FORMAT " to %" GST_TIME_FORMAT,
+            GST_TIME_ARGS (wanted_duration), GST_TIME_ARGS (seg.duration));
+    }
     seg.duration = (gint64) (seg.duration / stream_time_ratio);
+  }
+
 
 done:
   GST_LOG_OBJECT (pitch->sinkpad, "out segment %" GST_SEGMENT_FORMAT, &seg);
@@ -823,6 +898,7 @@ done:
   gst_event_unref (*event);
   *event = gst_event_new_segment (&seg);
   gst_event_set_seqnum (*event, seqnum);
+  pitch->out_segment = seg;
 
   return TRUE;
 }
@@ -939,9 +1015,11 @@ gst_pitch_chain (GstPad * pad, GstObject * parent, GstBuffer * buffer)
   GST_OBJECT_LOCK (pitch);
 
   gint bytes_per_frame = pitch->info.bpf;
-  GST_LOG_OBJECT (pitch, "incoming buffer (%d samples) %" GST_TIME_FORMAT,
+  GST_LOG_OBJECT (pitch, "incoming buffer (%d samples) %" GST_TIME_FORMAT " -- offset %lld -- offset-end %lld",
       (gint) (gst_buffer_get_size (buffer) / bytes_per_frame),
-      GST_TIME_ARGS (timestamp));
+      GST_TIME_ARGS (timestamp),
+      GST_BUFFER_OFFSET(buffer),
+      GST_BUFFER_OFFSET_END(buffer));
 
   gboolean reverse_playback = (pitch->segment_applied_rate < 0);
   if (reverse_playback) {
