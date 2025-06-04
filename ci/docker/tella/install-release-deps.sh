@@ -17,7 +17,7 @@ apt-get install -y --no-install-recommends \
     iso-codes \
     libbz2-1.0 \
     libcap2 \
-    libcurl4 \
+    libcurl3-nss \
     libdrm2 \
     libfontconfig1 \
     libgirepository-1.0-1 \
