@@ -249,9 +249,10 @@ ges_uri_source_query_seek (GESUriSource * self, GstEvent * seek)
   }
 
   if (ges_clip_apply_time_effect_on_seek (parent_clip,
-      GES_SOURCE (self->element), (GstClockTime *) & start,
-      (GstClockTime *) & stop, rate)) {
-    GST_FIXME_OBJECT (self->element, "Initial seek when there are time effects are DISABLED for now.");
+          GES_SOURCE (self->element), (GstClockTime *) & start,
+          (GstClockTime *) & stop, rate)) {
+    GST_FIXME_OBJECT (self->element,
+        "Initial seek when there are time effects are DISABLED for now.");
 
     gst_clear_event (&translated_seek);
 
