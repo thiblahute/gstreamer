@@ -210,6 +210,7 @@ gst_pitch_init (GstPitch * pitch)
   pitch->next_buffer_time = GST_CLOCK_TIME_NONE;
   pitch->next_buffer_offset = 0;
 
+  gst_segment_init (&pitch->out_segment, GST_FORMAT_TIME);
   priv->st->setRate (pitch->rate);
   priv->st->setTempo (pitch->tempo * pitch->segment_applied_rate);
   priv->st->setPitch (pitch->pitch);
@@ -247,10 +248,12 @@ gst_pitch_finalize (GObject * object)
 static GstClockTime
 gst_pitch_calculate_priming_duration (GstPitch * pitch)
 {
-  gfloat rate = pitch->rate;
   GstPitchPrivate *priv = GST_PITCH_GET_PRIVATE (pitch);
 
+  GST_OBJECT_LOCK (pitch);
+  gfloat rate = priv->stream_time_ratio;
   if (rate == 1.0) {
+    GST_OBJECT_UNLOCK (pitch);
     // No pitch shifting, no priming needed
     return 0;
   }
@@ -260,7 +263,10 @@ gst_pitch_calculate_priming_duration (GstPitch * pitch)
   guint soundtouch_priming_samples = priv->st->getSetting(SETTING_INITIAL_LATENCY);
 
   // Convert samples to time duration - this is our priming duration
-  return gst_util_uint64_scale(soundtouch_priming_samples, GST_SECOND, pitch->info.rate);
+  GstClockTime res = gst_util_uint64_scale(soundtouch_priming_samples, GST_SECOND, pitch->info.rate);
+  GST_OBJECT_UNLOCK (pitch);
+
+  return res;
 }
 
 static void
@@ -397,7 +403,6 @@ gst_pitch_forward_buffer (GstPitch * pitch, GstBuffer * buffer)
       pitch->next_buffer_offset = 0;
     GST_BUFFER_OFFSET (buffer) = pitch->next_buffer_offset;
   }
-
   GST_OBJECT_UNLOCK (pitch);
 
   GST_LOG_OBJECT (pitch, "pushing buffer pts: %" GST_TIME_FORMAT ", dur: %"
@@ -440,32 +445,34 @@ gst_pitch_prepare_buffer (GstPitch * pitch)
     }
   }
   GST_OBJECT_UNLOCK (pitch);
+  if (!buffer) {
+    GST_LOG_OBJECT (pitch, "no samples received from SoundTouch");
+    return NULL;
+  }
 
-  if (buffer) {
-    if (reverse_playback && samples > 1) {
-      // If playing backwards, we need to inverse the order of all received samples
-      guint8 *dest = info.data;
-      guint8 val = 0;
-      guint half_samples = samples >> 1;
-      for (guint i = samples - 1; i >= half_samples; --i) {
-        guint8 *src = info.data + i * bytes_per_frame;
-        if (src == dest)
-          break;
+  if (reverse_playback && samples > 1) {
+    // If playing backwards, we need to inverse the order of all received samples
+    guint8 *dest = info.data;
+    guint8 val = 0;
+    guint half_samples = samples >> 1;
+    for (guint i = samples - 1; i >= half_samples; --i) {
+      guint8 *src = info.data + i * bytes_per_frame;
+      if (src == dest)
+        break;
 
-        for (gint j = 0; j < bytes_per_frame; ++j) {
-          val = *dest;
-          *dest++ = *src;
-          *src++ = val;
-        }
+      for (gint j = 0; j < bytes_per_frame; ++j) {
+        val = *dest;
+        *dest++ = *src;
+        *src++ = val;
       }
     }
-    gst_buffer_unmap (buffer, &info);
-
-    GST_BUFFER_DURATION (buffer) =
-        gst_util_uint64_scale (samples, GST_SECOND, rate);
-    /* temporary store samples here, to avoid having to recalculate this */
-    GST_BUFFER_OFFSET (buffer) = (gint64) samples;
   }
+  gst_buffer_unmap (buffer, &info);
+
+  GST_BUFFER_DURATION (buffer) =
+      gst_util_uint64_scale (samples, GST_SECOND, rate);
+  /* temporary store samples here, to avoid having to recalculate this */
+  GST_BUFFER_OFFSET (buffer) = (gint64) samples;
 
   return gst_audio_buffer_clip (buffer, &out_segment, rate, bytes_per_frame);
 }
