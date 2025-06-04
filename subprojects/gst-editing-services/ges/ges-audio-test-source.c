@@ -104,7 +104,10 @@ ges_audio_test_source_create_source (GESSource * source)
 {
   GESAudioTestSource *self;
   GstElement *ret;
-  const gchar *props[] = { "volume", "freq", NULL };
+  const gchar *props[] =
+      { "volume", "freq", "wave", "marker-tick-period", "marker-tick-volume",
+    "sine-periods-per-tick", "tick-interval", "apply-tick-ramp", NULL
+  };
 
   self = (GESAudioTestSource *) source;
   ret = gst_element_factory_make ("audiotestsrc", NULL);
