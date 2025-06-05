@@ -5069,6 +5069,7 @@ gst_play_sink_change_state (GstElement * element, GstStateChange transition)
       playsink->need_async_start = TRUE;
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:{
+      GST_PLAY_SINK_LOCK (playsink);
       if (playsink->video_sinkpad_stream_synchronizer) {
         gst_element_release_request_pad (GST_ELEMENT_CAST
             (playsink->stream_synchronizer),
@@ -5098,6 +5099,7 @@ gst_play_sink_change_state (GstElement * element, GstStateChange transition)
         gst_object_unref (playsink->text_srcpad_stream_synchronizer);
         playsink->text_srcpad_stream_synchronizer = NULL;
       }
+      GST_PLAY_SINK_UNLOCK (playsink);
     }
       /* fall through */
     case GST_STATE_CHANGE_READY_TO_NULL:
