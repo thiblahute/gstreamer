@@ -242,8 +242,7 @@ typedef enum { /*< flags >*/
  *                buffer to output inside the segment (first one during
  *                reverse playback). For example decoders will
  *                [clip](gst_segment_clip) out buffers after the stop time.
- * @time:         the stream time of the segment [start](GstSegment.start)
- *                ([stop](GstSegment.stop) if rate < 0.0).
+ * @time:         the stream time of the segment [start](GstSegment.start).
  * @position:     the buffer timestamp position in the segment is supposed to be
  *                updated by elements such as sources, demuxers or parsers to
  *                track progress by setting it to the last pushed buffer' end time
