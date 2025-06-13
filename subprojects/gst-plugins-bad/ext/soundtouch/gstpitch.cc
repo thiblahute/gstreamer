@@ -209,6 +209,8 @@ gst_pitch_init (GstPitch * pitch)
   pitch->pitch = 1.0;
   pitch->next_buffer_time = GST_CLOCK_TIME_NONE;
   pitch->next_buffer_offset = 0;
+  pitch->last_seek_start = GST_CLOCK_TIME_NONE;
+  pitch->last_seek_seqnum = GST_SEQNUM_INVALID;
 
   gst_segment_init (&pitch->out_segment, GST_FORMAT_TIME);
   priv->st->setRate (pitch->rate);
@@ -537,6 +539,15 @@ gst_pitch_src_event (GstPad * pad, GstObject * parent, GstEvent * event)
       gint64 wanted_stop = stop;
       seqnum = gst_event_get_seqnum (event);
 
+      GST_OBJECT_LOCK (pitch);
+      pitch->last_seek_seqnum = seqnum;
+      if (flags & GST_SEEK_FLAG_ACCURATE) {
+        pitch->last_seek_start = cur;
+      } else {
+        pitch->last_seek_start = GST_CLOCK_TIME_NONE;
+      }
+      GST_OBJECT_UNLOCK (pitch);
+
       gst_event_unref (event);
 
       if (format == GST_FORMAT_TIME || format == GST_FORMAT_DEFAULT) {
@@ -816,6 +827,8 @@ gst_pitch_process_segment (GstPitch * pitch, GstEvent ** event)
   g_return_val_if_fail (event, FALSE);
   g_return_val_if_fail (*event, FALSE);
 
+  seqnum = gst_event_get_seqnum (*event);
+
   GstPitchPrivate *priv = GST_PITCH_GET_PRIVATE (pitch);
 
   GST_OBJECT_LOCK (pitch);
@@ -850,6 +863,9 @@ gst_pitch_process_segment (GstPitch * pitch, GstEvent ** event)
   gint64 wanted_start = seg.start;
   gint64 wanted_stop = seg.stop;
   GstClockTime priming_duration = gst_pitch_calculate_priming_duration (pitch);
+  GstClockTime last_seek_start;
+  guint32 last_seek_seqnum;
+
   if (stream_time_ratio == 0) {
     GST_LOG_OBJECT (pitch->sinkpad, "stream_time_ratio is zero");
     goto done;
@@ -883,7 +899,24 @@ gst_pitch_process_segment (GstPitch * pitch, GstEvent ** event)
           GST_TIME_ARGS (wanted_stop), GST_TIME_ARGS (seg.stop));
     }
   }
-  seg.time = (gint64) (seg.time / stream_time_ratio);
+  GST_OBJECT_LOCK (pitch);
+  last_seek_start = pitch->last_seek_start;
+  last_seek_seqnum = pitch->last_seek_seqnum;
+  GST_OBJECT_UNLOCK (pitch);
+
+  if (GST_CLOCK_TIME_IS_VALID (last_seek_start) && seqnum == last_seek_seqnum) {
+    /* Ensure that the segment time is set to the last seek start time (on
+     * accurate seeks) */
+    seg.time = last_seek_start;
+
+    /* Clear the stored seek position after using it */
+    GST_OBJECT_LOCK (pitch);
+    pitch->last_seek_start = GST_CLOCK_TIME_NONE;
+    pitch->last_seek_seqnum = GST_SEQNUM_INVALID;
+    GST_OBJECT_UNLOCK (pitch);
+  } else {
+    seg.time = (gint64) (seg.time / stream_time_ratio);
+  }
   seg.position = (gint64) (seg.position / stream_time_ratio);
 
   if (seg.duration != (guint64) - 1) {
@@ -936,6 +969,7 @@ gst_pitch_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
       GST_OBJECT_LOCK (pitch);
       priv->st->clear ();
       pitch->min_latency = pitch->max_latency = 0;
+      pitch->last_seek_start = GST_CLOCK_TIME_NONE;
       GST_OBJECT_UNLOCK (pitch);
       break;
     case GST_EVENT_SEGMENT:
@@ -1135,6 +1169,7 @@ gst_pitch_change_state (GstElement * element, GstStateChange transition)
       GST_OBJECT_LOCK (pitch);
       pitch->next_buffer_time = GST_CLOCK_TIME_NONE;
       pitch->next_buffer_offset = 0;
+      pitch->last_seek_start = GST_CLOCK_TIME_NONE;
       priv->st->clear ();
       pitch->min_latency = pitch->max_latency = 0;
       GST_OBJECT_UNLOCK (pitch);

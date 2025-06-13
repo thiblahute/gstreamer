@@ -75,6 +75,10 @@ struct _GstPitch
   GstClockTime next_buffer_time;
   guint64 next_buffer_offset;
 
+  /* Store exact seek position for accurate seeking */
+  GstClockTime last_seek_start;
+  guint32 last_seek_seqnum;
+
   GstClockTimeDiff min_latency, max_latency;
 
   GstPitchPrivate *priv;

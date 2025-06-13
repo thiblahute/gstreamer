@@ -1,0 +1,25 @@
+# Common metadata for audio time remapping tests
+# Usage: Set variables with:
+# ```
+# set-globals, pitch_rate="0.1"
+# ```
+# and then `include, location="audio-time-remapping.meta"`
+
+meta, handles-states=true,
+    tool = "ges-launch-$(gst_api_version)",
+    args = {
+        --track-types, audio,
+        --audio-caps, "audio/x-raw,format=F32LE,layout=interleaved,rate=(int)48000,channels=(int)2",
+        --audiosink, "$(audiosink) name=audiosink",
+        -o, "$(test_dir)/lower_muted_x0_1.wav",
+    },
+    configs = {
+        "$(validateflow), pad=pitch-effect:src, record-buffers=true, buffers-checksum=as-id, ignored-fields=\"stream-start={stream-id,group-id,stream}\", ignored-event-types={tag,stream-group-done,flush-start,flush-stop}, logged-upstream-event-types={seek}",
+    }
+
+add-clip, name=audioclip, asset-id="file://$(test_dir)/../../../medias/defaults/mp4/audio_1000hz_volume_up20s_ticks.mp4", layer-priority=0, type=GESUriClip, duration=100.0
+container-add-child, container-name=audioclip, asset-id="pitch rate=$(pitch_rate) name=pitch-effect", child-type=GESEffect
+add-clip, name=testclip, asset-id="audiotestsrc", layer-priority=1, type=GESTestClip, duration=4.0, start=4.0
+set-child-property, element-name=testclip, property=volume, value=0.0
+commit
+play
