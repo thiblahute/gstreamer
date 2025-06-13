@@ -52,6 +52,124 @@ _print_position (GstElement * pipeline)
 #include <gst/validate/gst-validate-element-monitor.h>
 #include <gst/validate/gst-validate-bin-monitor.h>
 
+static GstRank
+find_max_compositor_rank (void)
+{
+  GList *all_factories, *l;
+  GstRank max_rank = GST_RANK_NONE;
+
+  all_factories =
+      gst_registry_get_feature_list (gst_registry_get (),
+      GST_TYPE_ELEMENT_FACTORY);
+
+  for (l = all_factories; l; l = l->next) {
+    GstElementFactory *f = GST_ELEMENT_FACTORY (l->data);
+    const gchar *klass =
+        gst_element_factory_get_metadata (f, GST_ELEMENT_METADATA_KLASS);
+
+    if (klass && g_strrstr (klass, "Compositor")) {
+      GstRank rank = gst_plugin_feature_get_rank (GST_PLUGIN_FEATURE (f));
+      if (rank > max_rank)
+        max_rank = rank;
+    }
+  }
+
+  gst_plugin_feature_list_free (all_factories);
+  return max_rank;
+}
+
+static void
+apply_ges_validate_defaults (void)
+{
+  const gchar *old_uridecodepoolsrc = g_getenv ("GES_ENABLE_URIDECODEPOOLSRC");
+  const gchar *old_converter_type = g_getenv ("GES_CONVERTER_TYPE");
+
+  /* Always set defaults, overriding user environment for test reproducibility */
+  if (old_uridecodepoolsrc) {
+    gst_validate_printf (NULL,
+        "Overriding user environment GES_ENABLE_URIDECODEPOOLSRC=%s with default (0)\n",
+        old_uridecodepoolsrc);
+  }
+  g_setenv ("GES_ENABLE_URIDECODEPOOLSRC", "0", TRUE);
+
+  if (old_converter_type) {
+    gst_validate_printf (NULL,
+        "Overriding user environment GES_CONVERTER_TYPE=%s with default (software)\n",
+        old_converter_type);
+  }
+  g_setenv ("GES_CONVERTER_TYPE", "software", TRUE);
+
+  /* Set default compositor rank */
+  GstElementFactory *compositor_factory =
+      gst_element_factory_find ("compositor");
+  if (compositor_factory) {
+    GstRank max_rank = find_max_compositor_rank ();
+    GstRank new_rank = max_rank + 1;
+    gst_plugin_feature_set_rank (GST_PLUGIN_FEATURE (compositor_factory),
+        new_rank);
+    gst_validate_printf (NULL,
+        "Setting default compositor factory 'compositor' rank to %d (max was %d)\n",
+        new_rank, max_rank);
+    gst_object_unref (compositor_factory);
+  }
+}
+
+static void
+process_ges_validate_structure (GstStructure * ges_struct)
+{
+  const gchar *str_value;
+  gboolean bool_value;
+
+  /* Handle uridecodepoolsrc field */
+  if (gst_structure_get_boolean (ges_struct, "uridecodepoolsrc", &bool_value)) {
+    g_setenv ("GES_ENABLE_URIDECODEPOOLSRC", bool_value ? "1" : "0", TRUE);
+    gst_validate_printf (NULL, "Setting GES_ENABLE_URIDECODEPOOLSRC=%s\n",
+        bool_value ? "1" : "0");
+  } else if ((str_value =
+          gst_structure_get_string (ges_struct, "uridecodepoolsrc"))) {
+    gboolean enable = !g_strcmp0 (str_value, "enabled")
+        || !g_strcmp0 (str_value, "true") || !g_strcmp0 (str_value, "1");
+    g_setenv ("GES_ENABLE_URIDECODEPOOLSRC", enable ? "1" : "0", TRUE);
+    gst_validate_printf (NULL, "Setting GES_ENABLE_URIDECODEPOOLSRC=%s\n",
+        enable ? "1" : "0");
+  }
+
+  /* Handle converter-type field */
+  str_value = gst_structure_get_string (ges_struct, "converter-type");
+  if (str_value) {
+    gchar *lower_str = g_ascii_strdown (str_value, -1);
+
+    if (!g_strcmp0 (lower_str, "auto") || !g_strcmp0 (lower_str, "software")
+        || !g_strcmp0 (lower_str, "gl")) {
+      g_setenv ("GES_CONVERTER_TYPE", str_value, TRUE);
+      gst_validate_printf (NULL, "Setting GES_CONVERTER_TYPE=%s\n", str_value);
+    } else {
+      gst_validate_printf (NULL, "Unknown converter type: %s\n", str_value);
+    }
+
+    g_free (lower_str);
+  }
+
+  /* Handle compositor-factory field */
+  str_value = gst_structure_get_string (ges_struct, "compositor-factory");
+  if (str_value) {
+    GstElementFactory *factory = gst_element_factory_find (str_value);
+    if (factory) {
+      GstRank max_rank = find_max_compositor_rank ();
+      GstRank new_rank = max_rank + 1;
+
+      gst_plugin_feature_set_rank (GST_PLUGIN_FEATURE (factory), new_rank);
+      gst_validate_printf (NULL,
+          "Setting compositor factory '%s' rank to %d (max was %d)\n",
+          str_value, new_rank, max_rank);
+      gst_object_unref (factory);
+    } else {
+      gst_validate_printf (NULL, "Could not find compositor factory: %s\n",
+          str_value);
+    }
+  }
+}
+
 #define MONITOR_ON_PIPELINE "validate-monitor"
 #define RUNNER_ON_PIPELINE "runner-monitor"
 #define WRONG_DECODER_ADDED g_quark_from_static_string ("ges::wrong-decoder-added")
@@ -177,6 +295,25 @@ ges_validate_activate (GstPipeline * pipeline, GESLauncher * launcher,
         ges_options = gst_validate_utils_get_strv (metas, "args");
 
       gst_structure_get_boolean (metas, "ignore-eos", &opts->ignore_eos);
+
+      /* Always apply defaults to ensure test reproducibility */
+      apply_ges_validate_defaults ();
+
+      /* Process GES-specific configuration from 'ges' field */
+      const gchar *ges_config = gst_structure_get_string (metas, "ges");
+      if (ges_config) {
+        gchar *struct_str = g_strdup_printf ("ges,%s", ges_config);
+        GstStructure *ges_struct = gst_structure_from_string (struct_str, NULL);
+        if (ges_struct) {
+          process_ges_validate_structure (ges_struct);
+          gst_structure_free (ges_struct);
+        } else {
+          gst_validate_printf (NULL, "Failed to parse ges configuration: %s\n",
+              ges_config);
+        }
+        g_free (struct_str);
+      }
+
       if (ges_options) {
         gint i;
         gchar **ges_options_full =

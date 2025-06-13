@@ -1,5 +1,60 @@
 # GES action types
 
+## GES Validate Configuration
+
+When using gst-validate with GES, you can configure GES-specific behavior through a `ges` field in the `meta` structure of `.validatetest` files. This field uses GstStructure format (without structure name) to specify configuration options that ensure test reproducibility.
+
+### ges Field
+
+The `ges` field accepts a GstStructure-formatted string with the following options:
+
+#### uridecodepoolsrc
+Controls whether GES uses `uridecodepoolsrc` for URI-based sources.
+
+**Type:** `boolean` or `string`
+**Values:**
+- Boolean: `true`, `false`
+- String: `"enabled"`, `"disabled"`, `"true"`, `"false"`, `"1"`, `"0"`
+- Default: `false` (disabled)
+
+#### converter-type
+Sets the video converter type used by GES.
+
+**Type:** `string`
+**Values:**
+- `"software"` - Use software conversion (default)
+- `"auto"` - Use autovideoconvert 
+- `"gl"` - Use GL-based conversion
+
+#### compositor-factory
+Specifies which compositor factory to use by setting its rank higher than all others.
+
+**Type:** `string`
+**Values:**
+- Any valid GStreamer element factory name (e.g., `"compositor"`, `"glvideomixer"`)
+- Default: `"compositor"` (set to highest rank)
+
+### Default Behavior
+
+When using GES validate tests, the following defaults are **always** applied to ensure test reproducibility, overriding any user environment variables:
+
+- `GES_ENABLE_URIDECODEPOOLSRC=0` (disabled)
+- `GES_CONVERTER_TYPE=software`
+- `compositor` factory is set to highest rank
+
+If user environment variables were set, warnings will be printed indicating they are being overridden.
+
+### Example Usage
+
+```
+meta,
+    handles-states=true,
+    ignore-eos=true,
+    ges="uridecodepoolsrc=true, converter-type=\"gl\", compositor-factory=\"glvideomixer\""
+```
+
+---
+
 ## edit-container
 
 ``` validate-scenario
