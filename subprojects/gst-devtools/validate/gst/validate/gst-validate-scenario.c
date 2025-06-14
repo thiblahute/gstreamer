@@ -8004,6 +8004,9 @@ register_action_types (void)
   GBytes *meta_features_rank_doc =
       g_resource_lookup_data (resource, "/validate/doc/meta-features-rank.md",
       G_RESOURCE_LOOKUP_FLAGS_NONE, NULL);
+  GBytes *meta_overrides_doc =
+      g_resource_lookup_data (resource, "/validate/doc/meta-overrides.md",
+      G_RESOURCE_LOOKUP_FLAGS_NONE, NULL);
 
   /*  *INDENT-OFF* */
   REGISTER_ACTION_TYPE ("meta", NULL,
@@ -8175,6 +8178,14 @@ register_action_types (void)
       {
         .name="expected-issues",
         .description=g_bytes_get_data (meta_expected_issues_doc, NULL),
+        .mandatory = FALSE,
+        .types = "{GstStructure as string}",
+        .possible_variables = NULL,
+        .def = "{}"
+      },
+      {
+        .name="overrides",
+        .description=g_bytes_get_data (meta_overrides_doc, NULL),
         .mandatory = FALSE,
         .types = "{GstStructure as string}",
         .possible_variables = NULL,
