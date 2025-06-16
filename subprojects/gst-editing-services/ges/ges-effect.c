@@ -49,6 +49,8 @@
 #include "config.h"
 #endif
 
+#include <math.h>
+
 #include "ges-internal.h"
 #include "ges-extractable.h"
 #include "ges-track-element.h"
@@ -264,6 +266,9 @@ _get_rate_factor (GESBaseEffect * effect, GHashTable * rate_values)
             "nor gfloat value", prop_name);
         break;
     }
+    /* Round to 6 decimal places to ensure consistent precision between
+     * float and double rate properties */
+    rate = round (rate * 1000000.0) / 1000000.0;
     factor *= rate;
   }
 
