@@ -564,6 +564,11 @@ struct _QtDemuxStream
   /* KEY_UNITS trickmode with an interval */
   GstClockTime last_keyframe_dts;
 
+#ifndef GST_DISABLE_GST_DEBUG
+  /* debug identifier */
+  gchar *debug_id;
+#endif
+
   gint ref_count;               /* atomic */
 };
 
