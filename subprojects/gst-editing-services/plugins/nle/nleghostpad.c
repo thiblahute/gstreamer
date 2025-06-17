@@ -73,15 +73,18 @@ nle_object_translate_incoming_seek (NleObject * object, GstEvent * event)
     goto invalid_format;
 
 
+  gboolean is_reverse = FALSE;
   if (NLE_IS_SOURCE (object) && NLE_SOURCE (object)->reverse) {
     GST_DEBUG_OBJECT (object, "Reverse playback! %d", seqnum);
     rate = -rate;
+    is_reverse = TRUE;
   }
 
   /* convert cur */
   ncurtype = GST_SEEK_TYPE_SET;
   if (G_LIKELY ((curtype == GST_SEEK_TYPE_SET)
-          && (nle_object_to_media_time (object, cur, &ncur)))) {
+          && (nle_object_to_media_time (object, is_reverse ? stop : cur,
+                  &ncur)))) {
     /* cur is TYPE_SET and value is valid */
     if (ncur > G_MAXINT64)
       GST_WARNING_OBJECT (object, "return value too big...");
@@ -98,7 +101,8 @@ nle_object_translate_incoming_seek (NleObject * object, GstEvent * event)
 
   /* convert stop, we also need to limit it to object->stop */
   if (G_LIKELY ((stoptype == GST_SEEK_TYPE_SET)
-          && (nle_object_to_media_time (object, stop, &nstop)))) {
+          && (nle_object_to_media_time (object, is_reverse ? cur : stop,
+                  &nstop)))) {
     if (nstop > G_MAXINT64)
       GST_WARNING_OBJECT (object, "return value too big...");
     GST_LOG_OBJECT (object, "Setting stop to %" GST_TIME_FORMAT,
@@ -235,7 +239,8 @@ invalid_format:
 }
 
 static GstEvent *
-translate_outgoing_segment (NleObject * object, GstEvent * event)
+translate_outgoing_segment (NleObject * object, NlePadPrivate * priv,
+    GstEvent * event)
 {
   const GstSegment *orig;
   GstSegment segment;
@@ -334,7 +339,7 @@ internalpad_event_function (GstPad * internal, GstObject * parent,
     case GST_PAD_SRC:{
       switch (GST_EVENT_TYPE (event)) {
         case GST_EVENT_SEGMENT:
-          event = translate_outgoing_segment (object, event);
+          event = translate_outgoing_segment (object, priv, event);
           break;
         case GST_EVENT_EOS:
           break;
