@@ -5270,6 +5270,7 @@ beach:
 static GstFlowReturn
 gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
 {
+  gboolean has_video_streams = FALSE;
   guint32 seg_idx = 0, k_index = 0;
   guint32 ref_seg_idx, ref_k_index;
   GstClockTime k_pos = 0, last_stop = 0;
@@ -5285,7 +5286,17 @@ gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
   for (i = 0; i < QTDEMUX_N_STREAMS (qtdemux); i++) {
     QtDemuxStream *str = QTDEMUX_NTH_STREAM (qtdemux, i);
 
-    /* No candidate yet, take the first stream */
+    /* Skip video streams that have reached the beginning as we might need
+     * to finish playing some other audio streams */
+    if ((str->subtype == FOURCC_vide && G_UNLIKELY (!str->from_sample))) {
+      GST_INFO_ID (str->debug_id, "reached the beginning of the file, "
+          "checking if some other stream have not yet - time position: %"
+          GST_TIME_FORMAT, GST_TIME_ARGS (str->time_position));
+      has_video_streams = TRUE;
+      continue;
+    }
+
+    /* No candidate yet, take the first valid stream */
     if (!ref_str) {
       ref_str = str;
       continue;
@@ -5293,6 +5304,7 @@ gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
 
     /* So that stream has a segment, we prefer video streams */
     if (str->subtype == FOURCC_vide) {
+      has_video_streams = TRUE;
       ref_str = str;
       break;
     }
@@ -5315,10 +5327,24 @@ gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
     k_index = gst_qtdemux_find_keyframe (qtdemux, ref_str,
         ref_str->from_sample - 1, FALSE);
   } else {
-    if (ref_str->from_sample >= 10)
-      k_index = ref_str->from_sample - 10;
-    else
+    /* For audio streams in reverse playback: if all video streams have reached
+     * the beginning, start from the first sample to ensure clean playback.
+     * Otherwise, jump back 10 samples arbitrarily. */
+    gboolean all_video_at_beginning = has_video_streams;
+
+    for (i = 0; all_video_at_beginning && i < QTDEMUX_N_STREAMS (qtdemux); i++) {
+      QtDemuxStream *str = QTDEMUX_NTH_STREAM (qtdemux, i);
+      if (str->subtype == FOURCC_vide && str->from_sample) {
+        all_video_at_beginning = FALSE;
+      }
+    }
+
+    /* Start from beginning if we're near the start or all video streams are at beginning */
+    if (ref_str->from_sample < 10 || all_video_at_beginning) {
       k_index = 0;
+    } else {
+      k_index = ref_str->from_sample - 10;
+    }
   }
 
   target_ts =
@@ -5419,7 +5445,12 @@ gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
 
     /* Remember until where we want to go */
     if (str->from_sample == 0) {
-      GST_LOG_ID (str->debug_id, "already at sample 0");
+      GST_LOG_ID (str->debug_id, "already at sample 0,");
+      if (qtdemux->segment.rate < 0) {
+        GST_LOG_ID (str->debug_id,
+            "already reached the beginning of the file in reverse playback, ignoring");
+        continue;
+      }
       str->to_sample = 0;
     } else {
       str->to_sample = str->from_sample - 1;

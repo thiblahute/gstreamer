@@ -1,0 +1,16 @@
+meta,
+    handles-states=true,
+    args = {
+        "uridecodebin3 caps=audio/x-raw uri=\"file://$(test_dir)/../../../medias/defaults/mp4/60fps_timecode_aac.mp4\" ! audioconvert  ! volume volume=0.5 ! $(audiosink) name=audiosink",
+    },
+    configs = {
+        "$(validateflow), pad=audiosink:sink, record-buffers=true, generate-expectations=true",
+        "$(validateflow), pad=qtdemux0:audio_0, record-buffers=true, generate-expectations=true",
+        "$(validateflow), pad=qtdemux0:video_0, record-buffers=true, generate-expectations=true",
+    }
+
+pause
+checkpoint, text="Seek in reverse"
+
+seek, rate=-1.0, flags=flush+accurate, start=0, stop=4.0
+play
