@@ -46,6 +46,7 @@
  *
  */
 
+#include "gst/gstpad.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -300,6 +301,14 @@ GST_STATIC_PAD_TEMPLATE ("meta_%u",
     GST_PAD_SOMETIMES,
     GST_STATIC_CAPS_ANY);
 
+enum
+{
+  SIGNAL_SELECT_REVERSE_PLAYBACK_REFERENCE_STREAM,
+  LAST_SIGNAL
+};
+
+static guint gst_qtdemux_signals[LAST_SIGNAL] = { 0 };
+
 #define gst_qtdemux_parent_class parent_class
 G_DEFINE_TYPE (GstQTDemux, gst_qtdemux, GST_TYPE_ELEMENT);
 GST_ELEMENT_REGISTER_DEFINE_WITH_CODE (qtdemux, "qtdemux",
@@ -440,6 +449,29 @@ gst_qtdemux_class_init (GstQTDemuxClass * klass)
 
   GST_DEBUG_CATEGORY_INIT (qtdemux_debug, "qtdemux", 0, "qtdemux plugin");
   gst_riff_init ();
+
+  /**
+   * GstQTDemux::select-reverse-playback-reference-stream:
+   * @qtdemux: the qtdemux instance
+   *
+   * This signal is emitted during reverse playback to determine which stream's
+   * keyframes should be used as reference points when stepping backwards through
+   * the media.
+   *
+   * During reverse playback, qtdemux needs to jump from keyframe to keyframe in
+   * reverse order. By default, it selects a reference stream (often preferring
+   * video streams) and uses that stream's keyframes as synchronization points.
+   * This signal allows applications to override this selection, which is particularly
+   * useful when only specific streams are active (e.g., when playing only audio
+   * tracks) to ensure optimal reverse playback performance.
+   *
+   * Returns: (transfer full) (nullable): The stream-id to use as reference, or NULL to use default selection
+   *
+   * Since: 1.26
+   */
+  gst_qtdemux_signals[SIGNAL_SELECT_REVERSE_PLAYBACK_REFERENCE_STREAM] =
+      g_signal_new ("select-reverse-playback-reference-stream", G_TYPE_FROM_CLASS (klass),
+      G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_STRING, 0);
 }
 
 static void
@@ -5279,36 +5311,90 @@ gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
   guint64 seg_media_start_mov;  /* segment media start time in mov format */
   guint64 target_ts;
   gint i;
+  gchar *selected_stream_id = NULL;
+
+  /* Emit signal to allow selection of reference stream */
+  g_signal_emit (qtdemux,
+      gst_qtdemux_signals[SIGNAL_SELECT_REVERSE_PLAYBACK_REFERENCE_STREAM], 0,
+      &selected_stream_id);
+
+  /* If a stream-id was returned, try to find that stream */
+  if (selected_stream_id) {
+    for (i = 0; i < QTDEMUX_N_STREAMS (qtdemux); i++) {
+      QtDemuxStream *str = QTDEMUX_NTH_STREAM (qtdemux, i);
+      if (str->stream_id && g_strcmp0 (str->stream_id, selected_stream_id) == 0) {
+        /* Only use this stream if it hasn't reached the beginning */
+        if (str->from_sample > 0) {
+          ref_str = str;
+          GST_DEBUG_OBJECT (qtdemux, "Using stream %s as reference for seeking",
+              selected_stream_id);
+        } else {
+          GST_DEBUG_OBJECT (qtdemux,
+              "Selected stream %s has reached beginning, "
+              "falling back to default selection", selected_stream_id);
+        }
+        break;
+      }
+    }
+    if (!ref_str && i == QTDEMUX_N_STREAMS (qtdemux)) {
+      GST_WARNING_OBJECT (qtdemux, "Stream with id '%s' not found, "
+          "falling back to default selection", selected_stream_id);
+    }
+    g_free (selected_stream_id);
+  }
 
   /* Now we choose an arbitrary stream, get the previous keyframe timestamp
    * and finally align all the other streams on that timestamp with their
    * respective keyframes */
-  for (i = 0; i < QTDEMUX_N_STREAMS (qtdemux); i++) {
-    QtDemuxStream *str = QTDEMUX_NTH_STREAM (qtdemux, i);
+  if (!ref_str) {
+    for (i = 0; i < QTDEMUX_N_STREAMS (qtdemux); i++) {
+      QtDemuxStream *str = QTDEMUX_NTH_STREAM (qtdemux, i);
 
-    /* Skip video streams that have reached the beginning as we might need
-     * to finish playing some other audio streams */
-    if ((str->subtype == FOURCC_vide && G_UNLIKELY (!str->from_sample))) {
-      GST_INFO_ID (str->debug_id, "reached the beginning of the file, "
-          "checking if some other stream have not yet - time position: %"
-          GST_TIME_FORMAT, GST_TIME_ARGS (str->time_position));
-      has_video_streams = TRUE;
-      continue;
+      if (str->subtype == FOURCC_vide) {
+        GST_ERROR_ID (str->debug_id, "Last return flow %s",
+            gst_flow_get_name (GST_PAD_LAST_FLOW_RETURN (str->pad)));
+      }
+
+      /* Skip video streams that have reached the beginning as we might need
+       * to finish playing some other audio streams */
+      if ((str->subtype == FOURCC_vide && G_UNLIKELY (!str->from_sample))) {
+        GST_INFO_ID (str->debug_id, "reached the beginning of the file, "
+            "checking if some other stream have not yet - time position: %"
+            GST_TIME_FORMAT, GST_TIME_ARGS (str->time_position));
+        has_video_streams = TRUE;
+        continue;
+      }
+
+      /* No candidate yet, take the first valid stream */
+      if (!ref_str && str->pad
+          && GST_PAD_LAST_FLOW_RETURN (str->pad) != GST_FLOW_NOT_LINKED) {
+        ref_str = str;
+        continue;
+      }
+
+      /* So that stream has a segment, we prefer video streams */
+      if (str->subtype == FOURCC_vide) {
+        has_video_streams = TRUE;
+        if (str->pad
+            && GST_PAD_LAST_FLOW_RETURN (str->pad) != GST_FLOW_NOT_LINKED) {
+          ref_str = str;
+          break;
+        }
+      }
     }
-
-    /* No candidate yet, take the first valid stream */
-    if (!ref_str) {
-      ref_str = str;
-      continue;
-    }
-
-    /* So that stream has a segment, we prefer video streams */
-    if (str->subtype == FOURCC_vide) {
-      has_video_streams = TRUE;
-      ref_str = str;
-      break;
+  } else {
+    /* Check if there are video streams for has_video_streams flag */
+    for (i = 0; i < QTDEMUX_N_STREAMS (qtdemux); i++) {
+      QtDemuxStream *str = QTDEMUX_NTH_STREAM (qtdemux, i);
+      if (str->subtype == FOURCC_vide) {
+        has_video_streams = TRUE;
+        break;
+      }
     }
   }
+  GST_ERROR_ID (ref_str ? ref_str->debug_id : NULL,
+      "seeking to previous keyframe for reverse playback, "
+      "has_video_streams: %d, ref_str: %p", has_video_streams, ref_str);
 
   if (G_UNLIKELY (!ref_str)) {
     GST_DEBUG_OBJECT (qtdemux, "couldn't find any stream");
@@ -12068,7 +12154,7 @@ typedef struct UncompressedFrameConfigBox
   guint32 component_count;      // Should match the cmpd component_count
   UncompressedFrameConfigComponent *components; // Array of Components
   guint8 sampling_type;         // 0=4:4:4, 1=4:2:2, 2=4:2:0, 3=4:1:1
-  guint8 interleave_type;       // Planar, interleaved, etc. 
+  guint8 interleave_type;       // Planar, interleaved, etc.
   guint8 block_size;            // Stores data in fixed-sized blocks
   gboolean components_little_endian;    // indicates that components are stored as little endian
   gboolean block_pad_lsb;       // Padding bits location
