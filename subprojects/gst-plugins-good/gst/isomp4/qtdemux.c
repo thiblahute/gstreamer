@@ -470,8 +470,9 @@ gst_qtdemux_class_init (GstQTDemuxClass * klass)
    * Since: 1.26
    */
   gst_qtdemux_signals[SIGNAL_SELECT_REVERSE_PLAYBACK_REFERENCE_STREAM] =
-      g_signal_new ("select-reverse-playback-reference-stream", G_TYPE_FROM_CLASS (klass),
-      G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL, G_TYPE_STRING, 0);
+      g_signal_new ("select-reverse-playback-reference-stream",
+      G_TYPE_FROM_CLASS (klass), G_SIGNAL_RUN_LAST, 0, NULL, NULL, NULL,
+      G_TYPE_STRING, 0);
 }
 
 static void
@@ -5422,6 +5423,19 @@ gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
      * For encoded audio, we can jump multiple samples since the decoder will
      * handle the reordering to produce correct output. */
     gboolean all_video_at_beginning = has_video_streams;
+    gboolean is_raw_audio = FALSE;
+    guint step_size = 10;
+
+    /* Check if this is raw audio */
+    if (CUR_STREAM (ref_str)->caps) {
+      GstStructure *s = gst_caps_get_structure (CUR_STREAM (ref_str)->caps, 0);
+      is_raw_audio = gst_structure_has_name (s, "audio/x-raw");
+    }
+
+    /* For raw audio, step back one sample at a time */
+    if (is_raw_audio) {
+      step_size = 1;
+    }
 
     for (i = 0; all_video_at_beginning && i < QTDEMUX_N_STREAMS (qtdemux); i++) {
       QtDemuxStream *str = QTDEMUX_NTH_STREAM (qtdemux, i);
@@ -5431,10 +5445,10 @@ gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
     }
 
     /* Start from beginning if we're near the start or all video streams are at beginning */
-    if (ref_str->from_sample < 10 || all_video_at_beginning) {
+    if (ref_str->from_sample < step_size || all_video_at_beginning) {
       k_index = 0;
     } else {
-      k_index = ref_str->from_sample - 10;
+      k_index = ref_str->from_sample - step_size;
     }
   }
 
