@@ -5392,7 +5392,7 @@ gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
       }
     }
   }
-  GST_ERROR_ID (ref_str ? ref_str->debug_id : NULL,
+  GST_DEBUG_ID (ref_str ? ref_str->debug_id : NULL,
       "seeking to previous keyframe for reverse playback, "
       "has_video_streams: %d, ref_str: %p", has_video_streams, ref_str);
 
@@ -5415,7 +5415,12 @@ gst_qtdemux_seek_to_previous_keyframe (GstQTDemux * qtdemux)
   } else {
     /* For audio streams in reverse playback: if all video streams have reached
      * the beginning, start from the first sample to ensure clean playback.
-     * Otherwise, jump back 10 samples arbitrarily. */
+     * Otherwise, jump back by an appropriate number of samples.
+     *
+     * For raw audio, we must step exactly one sample at a time to maintain proper
+     * reverse playback order, as there's no decoder to reorder buffers for us.
+     * For encoded audio, we can jump multiple samples since the decoder will
+     * handle the reordering to produce correct output. */
     gboolean all_video_at_beginning = has_video_streams;
 
     for (i = 0; all_video_at_beginning && i < QTDEMUX_N_STREAMS (qtdemux); i++) {

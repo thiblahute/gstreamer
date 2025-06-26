@@ -360,6 +360,17 @@ setup_uridecodepool_srcs (GNode * node, GESUriSource * self)
   return FALSE;
 }
 
+static gchar *
+_qtdemux_select_seek_stream_reference (GstElement * demux, gpointer user_data)
+{
+  gchar *wanted_id = (gchar *) user_data;
+
+  GST_DEBUG_OBJECT (demux,
+      "Selecting stream %s as reference for reverse playback", wanted_id);
+
+  return g_strdup (wanted_id);
+}
+
 static void
 uridecodepoolsrc_deep_element_added_cb (GstPipeline * pipeline, GstBin * bin,
     GstElement * element, GESUriSource * self)
@@ -370,6 +381,24 @@ uridecodepoolsrc_deep_element_added_cb (GstPipeline * pipeline, GstBin * bin,
         self);
     timeline_set_parent_uri_source (GES_TIMELINE (element),
         (GESSource *) self->element);
+  } else {
+    GstElementFactory *factory = gst_element_get_factory (element);
+
+    if (!g_strcmp0 (GST_OBJECT_NAME (factory), "qtdemux")) {
+      GESUriSourceAsset *asset = GES_URI_SOURCE_ASSET
+          (ges_extractable_get_asset (GES_EXTRACTABLE (self->element)));
+      GstDiscovererStreamInfo *sinfo =
+          ges_uri_source_asset_get_stream_info (asset);
+      const gchar *wanted_id = gst_discoverer_stream_info_get_stream_id (sinfo);
+
+      GST_DEBUG_OBJECT (self->element,
+          "Connecting to qtdemux select-reverse-playback-reference-stream signal "
+          "to select stream %s", wanted_id);
+      g_signal_connect_data (element,
+          "select-reverse-playback-reference-stream",
+          G_CALLBACK (_qtdemux_select_seek_stream_reference),
+          g_strdup (wanted_id), (GClosureNotify) g_free, 0);
+    }
   }
 }
 
@@ -511,11 +540,9 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
         &self->controls_nested_timeline, NULL);
   }
 
-  if (self->controls_nested_timeline) {
-    g_signal_connect_data (decodebin, "notify::pipeline",
-        G_CALLBACK (uridecodepoolsrc_pipeline_notify_cb), self, 0, 0);
-    uridecodepoolsrc_pipeline_notify_cb (decodebin, NULL, self);
-  }
+  g_signal_connect_data (decodebin, "notify::pipeline",
+      G_CALLBACK (uridecodepoolsrc_pipeline_notify_cb), self, 0, 0);
+  uridecodepoolsrc_pipeline_notify_cb (decodebin, NULL, self);
 
   gst_caps_unref (caps);
 
