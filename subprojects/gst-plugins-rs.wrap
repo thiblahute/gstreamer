@@ -2,4 +2,4 @@
 directory=gst-plugins-rs
 url=https://github.com/tellahq/gst-plugins-rs.git
 push-url=git@github.com:tellahq/gst-plugins-rs.git
-revision=tla_1.26.0
+revision=tla_main
