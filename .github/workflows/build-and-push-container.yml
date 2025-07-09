@@ -1,6 +1,7 @@
 name: Multi-Architecture build and push container for current revision
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - "*"
