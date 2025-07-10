@@ -82,7 +82,7 @@ gboolean gst_mpd_client2_get_next_fragment (GstMPDClient2 *client, guint indexSt
 gboolean gst_mpd_client2_get_next_header (GstMPDClient2 *client, gchar **uri, guint stream_idx, gint64 * range_start, gint64 * range_end);
 gboolean gst_mpd_client2_get_next_header_index (GstMPDClient2 *client, gchar **uri, guint stream_idx, gint64 * range_start, gint64 * range_end);
 gboolean gst_mpd_client2_is_live (GstMPDClient2 * client);
-gboolean gst_mpd_client2_stream_seek (GstMPDClient2 * client, GstActiveStream * stream, gboolean forward, GstSeekFlags flags, GstClockTime ts, GstClockTime * final_ts);
+GstFlowReturn gst_mpd_client2_stream_seek (GstMPDClient2 * client, GstActiveStream * stream, gboolean forward, GstSeekFlags flags, GstClockTime ts, GstClockTime * final_ts);
 gboolean gst_mpd_client2_seek_to_time (GstMPDClient2 * client, GDateTime * time);
 GstClockTime gst_mpd_client2_get_stream_presentation_offset (GstMPDClient2 *client, guint stream_idx);
 gchar** gst_mpd_client2_get_utc_timing_sources (GstMPDClient2 *client, guint methods, GstMPDUTCTimingType *selected_method);
