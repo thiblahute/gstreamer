@@ -8,15 +8,6 @@ FROM ubuntu:22.04 AS build-deps
 COPY ci/docker/tella/install-build-deps.sh /install-build-deps.sh
 RUN /install-build-deps.sh
 
-###############################################################################
-# build-ffmpeg                                                                #
-#                                                                             #
-# This stage contains the dependencies for building GStreamer plus a          #
-# built-from-source FFmpeg.                                                   #
-###############################################################################
-FROM build-deps as build-deps-ffmpeg
-COPY ci/docker/tella/build-ffmpeg.sh /build-ffmpeg.sh
-RUN /build-ffmpeg.sh --build
 
 ###############################################################################
 # build-deps-toolchain                                                        #
@@ -27,6 +18,22 @@ FROM build-deps AS build-deps-toolchain
 COPY ci/docker/tella/install-toolchain.sh /install-toolchain.sh
 ENV PATH="/root/.cargo/bin:${PATH}"
 RUN /install-toolchain.sh
+
+###############################################################################
+# build-ffmpeg                                                                #
+#                                                                             #
+# This stage contains the dependencies for building GStreamer plus a          #
+# built-from-source FFmpeg.                                                   #
+###############################################################################
+FROM build-deps-toolchain as build-deps-ffmpeg
+# Install dav1d for AV1 decoding
+RUN git clone --depth 1 --branch 1.5.0 https://code.videolan.org/videolan/dav1d.git /opt/dav1d && \
+  cd /opt/dav1d && \
+  meson build --buildtype release && \
+  ninja -C build install && \
+  ldconfig
+COPY ci/docker/tella/build-ffmpeg.sh /build-ffmpeg.sh
+RUN /build-ffmpeg.sh --build
 
 ###############################################################################
 # build-deps-toolchain-gstreamer                                              #
@@ -75,6 +82,9 @@ COPY --from=build-deps-toolchain-gstreamer /compiled-binaries /
 ###############################################################################
 FROM ubuntu:22.04 AS release-deps
 COPY --from=build-deps-ffmpeg /opt/ffmpeg /usr
+# Copy dav1d shared libraries necessary for AV1 decoding
+RUN --mount=from=build-deps-ffmpeg,source=/usr/local/lib,target=/tmp/src_lib \
+    find /tmp/src_lib -name "libdav1d.so*" -type f -exec cp -P {} /usr/local/lib/ \;
 COPY ci/docker/tella/install-release-deps.sh /install-release-deps.sh
 RUN /install-release-deps.sh
 

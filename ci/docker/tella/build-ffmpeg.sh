@@ -191,6 +191,7 @@ download "https://www.ffmpeg.org/releases/ffmpeg-7.1.1.tar.gz"
   --enable-gnutls \
   --enable-libfdk-aac \
   --enable-libzimg \
+  --enable-libdav1d \
   --extra-ldexeflags="${LDEXEFLAGS}" \
   --extra-libs="${EXTRALIBS}" \
   --prefix="/opt/ffmpeg"
