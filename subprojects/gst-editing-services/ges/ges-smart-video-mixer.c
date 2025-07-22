@@ -494,7 +494,7 @@ ges_smart_mixer_constructed (GObject * obj)
     self->real_mixer = gst_object_ref (self->mixer);
   }
 
-  g_object_set (self->real_mixer, "background", 1, "emit-signals", TRUE, NULL);
+  g_object_set (self->real_mixer, "background", 2, "emit-signals", TRUE, NULL);
   g_signal_connect (self->real_mixer, "samples-selected",
       G_CALLBACK (ges_smart_mixer_samples_selected_cb), self);
 
