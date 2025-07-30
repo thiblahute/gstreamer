@@ -272,29 +272,116 @@ gst_audio_rate_init (GstAudioRate * audiorate)
   audiorate->tolerance = DEFAULT_TOLERANCE;
 }
 
+static GstFlowReturn
+gst_audio_rate_calculate_next_ts (GstAudioRate * audiorate, GstClockTime time)
+{
+  gint rate, bpf;
+  GstClockTime pos;
+
+  g_return_val_if_fail (audiorate->next_offset == -1, GST_FLOW_ERROR);
+
+  rate = GST_AUDIO_INFO_RATE (&audiorate->info);
+  bpf = GST_AUDIO_INFO_BPF (&audiorate->info);
+  if (bpf == 0)
+    goto not_negotiated;
+
+  /* first buffer, or previous buffer's position was outside of new segment,
+   * calculate the current expected offsets based on the segment.start, which
+   * is the first media time of the segment and should match the media time of
+   * the first buffer in that segment, which is the offset expressed in
+   * DEFAULT units.
+   */
+  /* convert first timestamp of segment to sample position */
+  pos = gst_util_uint64_scale_int_round (audiorate->src_segment.start,
+      GST_AUDIO_INFO_RATE (&audiorate->info), GST_SECOND);
+
+  GST_DEBUG_OBJECT (audiorate, "resync to offset %" G_GINT64_FORMAT, pos);
+
+  /* resyncing is a discont */
+  audiorate->discont = TRUE;
+
+  audiorate->next_offset = pos;
+  audiorate->next_ts =
+      gst_util_uint64_scale_int_round (audiorate->next_offset, GST_SECOND,
+      rate);
+
+  if (audiorate->skip_to_first && GST_CLOCK_TIME_IS_VALID (time)) {
+    GST_DEBUG_OBJECT (audiorate, "but skipping to first buffer instead");
+    pos =
+        gst_util_uint64_scale_int_round (time,
+        GST_AUDIO_INFO_RATE (&audiorate->info), GST_SECOND);
+    GST_DEBUG_OBJECT (audiorate, "so resync to offset %" G_GINT64_FORMAT, pos);
+    audiorate->next_offset = pos;
+    audiorate->next_ts = time;
+  }
+
+  return GST_FLOW_OK;
+
+  /* ERRORS */
+not_negotiated:
+  {
+    return GST_FLOW_NOT_NEGOTIATED;
+  }
+}
+
 static void
-gst_audio_rate_fill_to_time (GstAudioRate * audiorate, GstClockTime time)
+gst_audio_rate_fill_to_time (GstAudioRate * audiorate,
+    GstClockTime start_time, GstClockTime end_time)
 {
   GstBuffer *buf;
 
-  GST_DEBUG_OBJECT (audiorate, "next_ts: %" GST_TIME_FORMAT
-      ", filling to %" GST_TIME_FORMAT, GST_TIME_ARGS (audiorate->next_ts),
-      GST_TIME_ARGS (time));
+  GST_DEBUG_OBJECT (audiorate,
+      "next_ts: %" GST_TIMEP_FORMAT
+      "(start_time %" GST_TIMEP_FORMAT
+      ", filling to %" GST_TIMEP_FORMAT,
+      &audiorate->next_ts, &start_time, &end_time);
 
-  if (!GST_CLOCK_TIME_IS_VALID (time) ||
-      !GST_CLOCK_TIME_IS_VALID (audiorate->next_ts))
+  if (!GST_CLOCK_TIME_IS_VALID (end_time)) {
+    GST_INFO_OBJECT (audiorate,
+        "Invalid end_time %" GST_TIMEP_FORMAT ", not filling gap", &end_time);
     return;
+  }
 
-  if (ABS (GST_CLOCK_DIFF (time, audiorate->next_ts)) <= audiorate->tolerance) {
+  if (!GST_CLOCK_TIME_IS_VALID (audiorate->next_ts)) {
+    if (audiorate->next_offset != -1) {
+
+      GST_ERROR_OBJECT (audiorate,
+          "next_ts is invalid, but next_offset is valid (%" G_GINT64_FORMAT
+          "), can not fill gap", audiorate->next_offset);
+
+      return;
+    }
+
+    switch (gst_audio_rate_calculate_next_ts (audiorate, start_time)) {
+      case GST_FLOW_NOT_NEGOTIATED:
+        GST_ERROR_OBJECT (audiorate, "Not negotiated, not filling gap");
+        return;
+      case GST_FLOW_ERROR:
+        GST_ERROR_OBJECT (audiorate,
+            "Error calculating next_ts, not filling gap");
+        return;
+      case GST_FLOW_OK:
+        /* next_ts is now valid */
+        break;
+      default:
+        g_assert_not_reached ();
+        return;
+    }
+  }
+
+  if (ABS (GST_CLOCK_DIFF (end_time, audiorate->next_ts)) <=
+      audiorate->tolerance) {
     GST_DEBUG_OBJECT (audiorate,
         "Not filling gap as its duration < tolerance ( %" GST_TIMEP_FORMAT " )",
         &audiorate->tolerance);
+
+    return;
   }
 
   /* feed an empty buffer to chain with the given timestamp,
    * it will take care of filling */
   buf = gst_buffer_new ();
-  GST_BUFFER_TIMESTAMP (buf) = time;
+  GST_BUFFER_TIMESTAMP (buf) = end_time;
   gst_audio_rate_chain (audiorate->sinkpad, GST_OBJECT_CAST (audiorate), buf);
 }
 
@@ -376,20 +463,26 @@ gst_audio_rate_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
     }
     case GST_EVENT_EOS:
       /* Fill segment until the end */
-      if (GST_CLOCK_TIME_IS_VALID (audiorate->src_segment.stop))
-        gst_audio_rate_fill_to_time (audiorate, audiorate->src_segment.stop);
+      if (GST_CLOCK_TIME_IS_VALID (audiorate->src_segment.stop)) {
+        gst_audio_rate_fill_to_time (audiorate,
+            GST_CLOCK_TIME_IS_VALID (audiorate->next_ts)
+            ? audiorate->next_ts
+            : audiorate->src_segment.start, audiorate->src_segment.stop);
+      }
       res = gst_pad_push_event (audiorate->srcpad, event);
       break;
-    case GST_EVENT_GAP:
-    {
+    case GST_EVENT_GAP:{
       /* Fill until end of gap */
-      GstClockTime timestamp, duration;
-      gst_event_parse_gap (event, &timestamp, &duration);
+      GstClockTime gap_start, gap_end, duration;
+
+      gst_event_parse_gap (event, &gap_start, &duration);
       gst_event_unref (event);
-      if (GST_CLOCK_TIME_IS_VALID (timestamp)) {
-        if (GST_CLOCK_TIME_IS_VALID (duration))
-          timestamp += duration;
-        gst_audio_rate_fill_to_time (audiorate, timestamp);
+
+      if (GST_CLOCK_TIME_IS_VALID (gap_start)) {
+        gap_end =
+            gap_start + (GST_CLOCK_TIME_IS_VALID (duration) ? duration : 0);
+
+        gst_audio_rate_fill_to_time (audiorate, gap_start, gap_end);
       }
       res = TRUE;
       break;
@@ -426,7 +519,6 @@ gst_audio_rate_convert (GstAudioRate * audiorate,
   return gst_audio_info_convert (&audiorate->info, src_fmt, src_val, dest_fmt,
       (gint64 *) dest_val);
 }
-
 
 static gboolean
 gst_audio_rate_convert_segments (GstAudioRate * audiorate)
@@ -471,55 +563,26 @@ gst_audio_rate_notify_add (GstAudioRate * audiorate)
 static GstFlowReturn
 gst_audio_rate_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 {
-  GstAudioRate *audiorate;
+  GstAudioRate *audiorate = GST_AUDIO_RATE (parent);
   GstClockTime in_time;
   guint64 in_offset, in_offset_end, in_samples;
   guint in_size;
   GstFlowReturn ret = GST_FLOW_OK;
   GstClockTimeDiff diff;
-  gint rate, bpf;
   GstAudioMeta *meta;
-
-  audiorate = GST_AUDIO_RATE (parent);
-
-  rate = GST_AUDIO_INFO_RATE (&audiorate->info);
-  bpf = GST_AUDIO_INFO_BPF (&audiorate->info);
-
-  /* need to be negotiated now */
-  if (bpf == 0)
-    goto not_negotiated;
+  gint bpf = GST_AUDIO_INFO_BPF (&audiorate->info);
+  gint rate = GST_AUDIO_INFO_RATE (&audiorate->info);
 
   if (audiorate->next_offset == -1) {
-    gint64 pos;
-
-    /* first buffer, or previous buffer's position was outside of new segment,
-     * calculate the current expected offsets based on the segment.start, which
-     * is the first media time of the segment and should match the media time of
-     * the first buffer in that segment, which is the offset expressed in
-     * DEFAULT units.
-     */
-    /* convert first timestamp of segment to sample position */
-    pos = gst_util_uint64_scale_int_round (audiorate->src_segment.start,
-        GST_AUDIO_INFO_RATE (&audiorate->info), GST_SECOND);
-
-    GST_DEBUG_OBJECT (audiorate, "resync to offset %" G_GINT64_FORMAT, pos);
-
-    /* resyncing is a discont */
-    audiorate->discont = TRUE;
-
-    audiorate->next_offset = pos;
-    audiorate->next_ts =
-        gst_util_uint64_scale_int_round (audiorate->next_offset, GST_SECOND,
-        GST_AUDIO_INFO_RATE (&audiorate->info));
-
-    if (audiorate->skip_to_first && GST_BUFFER_TIMESTAMP_IS_VALID (buf)) {
-      GST_DEBUG_OBJECT (audiorate, "but skipping to first buffer instead");
-      pos = gst_util_uint64_scale_int_round (GST_BUFFER_TIMESTAMP (buf),
-          GST_AUDIO_INFO_RATE (&audiorate->info), GST_SECOND);
-      GST_DEBUG_OBJECT (audiorate, "so resync to offset %" G_GINT64_FORMAT,
-          pos);
-      audiorate->next_offset = pos;
-      audiorate->next_ts = GST_BUFFER_TIMESTAMP (buf);
+    switch (gst_audio_rate_calculate_next_ts (audiorate, GST_BUFFER_PTS (buf))) {
+      case GST_FLOW_NOT_NEGOTIATED:
+        goto not_negotiated;
+      case GST_FLOW_OK:
+        /* next_ts is now valid */
+        break;
+      default:
+        g_assert_not_reached ();
+        return GST_FLOW_ERROR;
     }
   }
 
@@ -540,9 +603,11 @@ gst_audio_rate_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
   GST_LOG_OBJECT (audiorate,
       "in_time:%" GST_TIME_FORMAT ", in_duration:%" GST_TIME_FORMAT
-      ", in_size:%u, in_offset:%" G_GUINT64_FORMAT ", in_offset_end:%"
-      G_GUINT64_FORMAT ", ->next_offset:%" G_GUINT64_FORMAT ", ->next_ts:%"
-      GST_TIME_FORMAT, GST_TIME_ARGS (in_time),
+      ", in_size:%u, in_offset:%" G_GUINT64_FORMAT
+      ", in_offset_end:%" G_GUINT64_FORMAT
+      ", ->next_offset:%" G_GUINT64_FORMAT
+      ", ->next_ts:%" GST_TIME_FORMAT,
+      GST_TIME_ARGS (in_time),
       GST_TIME_ARGS (GST_FRAMES_TO_CLOCK_TIME (in_samples, rate)),
       in_size, in_offset, in_offset_end, audiorate->next_offset,
       GST_TIME_ARGS (audiorate->next_ts));
@@ -598,8 +663,8 @@ gst_audio_rate_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
       audiorate->next_offset += cursamples;
       GST_BUFFER_OFFSET_END (fill) = audiorate->next_offset;
 
-      /* Use next timestamp, then calculate following timestamp based on 
-       * offset to get duration. Necessary complexity to get 'perfect' 
+      /* Use next timestamp, then calculate following timestamp based on
+       * offset to get duration. Necessary complexity to get 'perfect'
        * streams */
       GST_BUFFER_TIMESTAMP (fill) = audiorate->next_ts;
       audiorate->next_ts =
@@ -610,7 +675,7 @@ gst_audio_rate_chain (GstPad * pad, GstObject * parent, GstBuffer * buf)
 
       /* we created this buffer to fill a gap */
       GST_BUFFER_FLAG_SET (fill, GST_BUFFER_FLAG_GAP);
-      /* set discont if it's pending, this is mostly done for the first buffer 
+      /* set discont if it's pending, this is mostly done for the first buffer
        * and after a flushing seek */
       if (audiorate->discont) {
         GST_BUFFER_FLAG_SET (fill, GST_BUFFER_FLAG_DISCONT);

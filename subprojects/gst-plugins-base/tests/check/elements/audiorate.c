@@ -677,6 +677,161 @@ GST_START_TEST (test_segment_update)
 
 GST_END_TEST;
 
+GST_START_TEST (test_gap_event_no_buffers)
+{
+  GstElement *audiorate;
+  GstCaps *caps;
+  GstPad *srcpad, *sinkpad;
+  GstEvent *gap_event;
+  GstClockTime gap_start, gap_duration;
+
+  audiorate = gst_check_setup_element ("audiorate");
+  caps = gst_caps_new_simple ("audio/x-raw",
+      "format", G_TYPE_STRING, GST_AUDIO_NE (F32),
+      "layout", G_TYPE_STRING, "interleaved",
+      "channels", G_TYPE_INT, 1, "rate", G_TYPE_INT, 44100, NULL);
+
+  srcpad = gst_check_setup_src_pad (audiorate, &srctemplate);
+  sinkpad = gst_check_setup_sink_pad (audiorate, &sinktemplate);
+
+  gst_pad_set_active (srcpad, TRUE);
+  gst_check_setup_events (srcpad, audiorate, caps, GST_FORMAT_TIME);
+  gst_pad_set_active (sinkpad, TRUE);
+
+  fail_unless (gst_element_set_state (audiorate,
+          GST_STATE_PLAYING) == GST_STATE_CHANGE_SUCCESS,
+      "failed to set audiorate playing");
+
+  /* Push a GAP event with NO preceding buffers to test gap filling */
+  gap_start = 0;
+  gap_duration = GST_SECOND;
+  gap_event = gst_event_new_gap (gap_start, gap_duration);
+
+  gst_pad_push_event (srcpad, gap_event);
+
+  /* Should produce silence buffers filling the gap */
+  fail_unless (g_list_length (buffers) > 0,
+      "No buffers produced for GAP event without preceding buffers");
+
+  /* Verify the first buffer starts at gap_start and contains silence */
+  GstBuffer *first_buf = GST_BUFFER (buffers->data);
+  fail_unless_equals_uint64 (GST_BUFFER_TIMESTAMP (first_buf), gap_start);
+  fail_unless (GST_BUFFER_FLAG_IS_SET (first_buf, GST_BUFFER_FLAG_GAP));
+
+  /* Verify total duration of output buffers covers the gap */
+  GstClockTime total_duration = 0;
+  GList *l;
+  for (l = buffers; l != NULL; l = l->next) {
+    GstBuffer *buf = GST_BUFFER (l->data);
+    total_duration += GST_BUFFER_DURATION (buf);
+  }
+
+  /* Allow some tolerance for frame alignment */
+  fail_unless (total_duration >= gap_duration - GST_MSECOND,
+      "Gap not fully filled: expected >= %" GST_TIME_FORMAT ", got %"
+      GST_TIME_FORMAT, GST_TIME_ARGS (gap_duration - GST_MSECOND),
+      GST_TIME_ARGS (total_duration));
+
+  statistics_check (audiorate);
+
+  gst_element_set_state (audiorate, GST_STATE_NULL);
+  gst_caps_unref (caps);
+
+  gst_check_drop_buffers ();
+  gst_check_teardown_sink_pad (audiorate);
+  gst_check_teardown_src_pad (audiorate);
+
+  gst_object_unref (audiorate);
+}
+
+GST_END_TEST;
+
+GST_START_TEST (test_eos_segment_fill_no_buffers)
+{
+  GstElement *audiorate;
+  GstCaps *caps;
+  GstPad *srcpad, *sinkpad;
+  GstSegment segment;
+  GstEvent *segment_event, *eos_event;
+
+  audiorate = gst_check_setup_element ("audiorate");
+  caps = gst_caps_new_simple ("audio/x-raw",
+      "format", G_TYPE_STRING, GST_AUDIO_NE (F32),
+      "layout", G_TYPE_STRING, "interleaved",
+      "channels", G_TYPE_INT, 1, "rate", G_TYPE_INT, 44100, NULL);
+
+  srcpad = gst_check_setup_src_pad (audiorate, &srctemplate);
+  sinkpad = gst_check_setup_sink_pad (audiorate, &sinktemplate);
+
+  gst_pad_set_active (srcpad, TRUE);
+  gst_pad_set_active (sinkpad, TRUE);
+
+  fail_unless (gst_element_set_state (audiorate,
+          GST_STATE_PLAYING) == GST_STATE_CHANGE_SUCCESS,
+      "failed to set audiorate playing");
+
+  /* Send stream-start and caps events first */
+  gst_pad_push_event (srcpad, gst_event_new_stream_start ("test"));
+  gst_pad_push_event (srcpad, gst_event_new_caps (caps));
+
+  /* Create a segment with a specific stop time */
+  gst_segment_init (&segment, GST_FORMAT_TIME);
+  segment.start = 0;
+  segment.stop = 2 * GST_SECOND;        /* 2 second segment */
+  segment.time = 0;
+  segment_event = gst_event_new_segment (&segment);
+  gst_pad_push_event (srcpad, segment_event);
+
+  /* Send EOS WITHOUT any buffers to test segment filling */
+  eos_event = gst_event_new_eos ();
+  gst_pad_push_event (srcpad, eos_event);
+
+  /* Should produce silence buffers filling the entire segment */
+  fail_unless (g_list_length (buffers) > 0,
+      "No buffers produced when EOS without any input buffers");
+
+  /* Verify the first buffer starts at segment start */
+  GstBuffer *first_buf = GST_BUFFER (buffers->data);
+  fail_unless_equals_uint64 (GST_BUFFER_TIMESTAMP (first_buf), segment.start);
+
+  /* Verify total duration covers the segment */
+  GstClockTime total_duration = 0;
+  GstClockTime last_end_time = 0;
+  GList *l;
+  for (l = buffers; l != NULL; l = l->next) {
+    GstBuffer *buf = GST_BUFFER (l->data);
+    total_duration += GST_BUFFER_DURATION (buf);
+    last_end_time = GST_BUFFER_TIMESTAMP (buf) + GST_BUFFER_DURATION (buf);
+    /* All buffers should be marked as GAP since they're silence */
+    fail_unless (GST_BUFFER_FLAG_IS_SET (buf, GST_BUFFER_FLAG_GAP));
+  }
+
+  /* Verify we filled up to the segment stop time */
+  fail_unless (last_end_time <= segment.stop,
+      "Output extends beyond segment stop: %" GST_TIME_FORMAT " > %"
+      GST_TIME_FORMAT, GST_TIME_ARGS (last_end_time),
+      GST_TIME_ARGS (segment.stop));
+
+  /* Allow some tolerance for frame alignment */
+  fail_unless (last_end_time >= segment.stop - GST_MSECOND,
+      "Segment not fully filled: expected >= %" GST_TIME_FORMAT ", got %"
+      GST_TIME_FORMAT, GST_TIME_ARGS (segment.stop - GST_MSECOND),
+      GST_TIME_ARGS (last_end_time));
+
+  statistics_check (audiorate);
+
+  gst_element_set_state (audiorate, GST_STATE_NULL);
+  gst_caps_unref (caps);
+
+  gst_check_drop_buffers ();
+  gst_check_teardown_sink_pad (audiorate);
+  gst_check_teardown_src_pad (audiorate);
+
+  gst_object_unref (audiorate);
+}
+
+GST_END_TEST;
+
 static Suite *
 audiorate_suite (void)
 {
@@ -695,6 +850,8 @@ audiorate_suite (void)
   tcase_add_test (tc_chain, test_large_discont);
   tcase_add_test (tc_chain, test_rate_change_down);
   tcase_add_test (tc_chain, test_segment_update);
+  tcase_add_test (tc_chain, test_gap_event_no_buffers);
+  tcase_add_test (tc_chain, test_eos_segment_fill_no_buffers);
 
   return s;
 }
