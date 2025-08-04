@@ -2533,7 +2533,7 @@ gst_audio_decoder_sink_eventfunc (GstAudioDecoder * dec, GstEvent * event)
               ("No valid frames decoded before end of stream"),
               ("no valid frames found"));
         } else {
-          GST_ELEMENT_ERROR (dec, STREAM, DECODE,
+          GST_ELEMENT_WARNING (dec, STREAM, DECODE,
               ("No valid frames decoded before end of stream"),
               ("no valid frames found"));
         }
