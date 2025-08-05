@@ -5051,8 +5051,12 @@ gst_matroska_demux_parse_blockgroup_or_simpleblock (GstMatroskaDemux * demux,
          * but only terminate if we hit the next keyframe,
          * to make sure that all frames potentially inside the segment
          * are available to the decoder for decoding / reordering.*/
+        /* We reuse set_discont here to track whether we've pushed any data
+         * after a seek (indicated by segment having a stop value). If we haven't
+         * pushed data yet, don't send EOS even if this keyframe is past segment
+         * boundaries so downstream elements can decide what to do with the stream. */
         if (!delta_unit && GST_CLOCK_TIME_IS_VALID (demux->common.segment.stop)
-            && lace_time >= demux->common.segment.stop) {
+            && lace_time >= demux->common.segment.stop && !stream->set_discont) {
           GST_DEBUG_OBJECT (demux,
               "Stream %d lace time: %" GST_TIME_FORMAT " after segment stop: %"
               GST_TIME_FORMAT, stream->index, GST_TIME_ARGS (lace_time),
@@ -5060,6 +5064,7 @@ gst_matroska_demux_parse_blockgroup_or_simpleblock (GstMatroskaDemux * demux,
           gst_buffer_unref (sub);
           goto eos;
         }
+
         if (offset >= stream->to_offset
             || (GST_CLOCK_TIME_IS_VALID (demux->to_time)
                 && lace_time > demux->to_time)) {
