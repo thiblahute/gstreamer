@@ -1118,7 +1118,7 @@ gst_queue_handle_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
       break;
   }
   if (ret == FALSE) {
-    GST_ERROR_OBJECT (queue, "Failed to push event");
+    GST_WARNING_OBJECT (queue, "Failed to push event");
     return GST_FLOW_ERROR;
   }
   return GST_FLOW_OK;
