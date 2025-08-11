@@ -60,6 +60,8 @@
 
 #include <gst/gst.h>
 #include "gstqueue.h"
+#include "gst/gstevent.h"
+#include "gst/gstpad.h"
 #include "gstcoreelementselements.h"
 
 #include <glib/gi18n-lib.h>
@@ -1000,13 +1002,14 @@ gst_queue_handle_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
 {
   gboolean ret = TRUE;
   GstQueue *queue;
+  GstEventType event_type = GST_EVENT_TYPE (event);
 
   queue = GST_QUEUE (parent);
 
   GST_CAT_LOG_OBJECT (queue_dataflow, queue, "Received event '%s'",
       GST_EVENT_TYPE_NAME (event));
 
-  switch (GST_EVENT_TYPE (event)) {
+  switch (event_type) {
     case GST_EVENT_FLUSH_START:
       /* forward event */
       ret = gst_pad_push_event (queue->srcpad, event);
@@ -1118,7 +1121,19 @@ gst_queue_handle_sink_event (GstPad * pad, GstObject * parent, GstEvent * event)
       break;
   }
   if (ret == FALSE) {
-    GST_ERROR_OBJECT (queue, "Failed to push event");
+#ifndef GST_DISABLE_GST_DEBUG
+    /* Flush events are "fire-and-forget" and can legitimately return FALSE
+     * when downstream elements have unlinked pads, so don't treat as errors */
+    if (event_type == GST_EVENT_FLUSH_STOP ||
+        event_type == GST_EVENT_FLUSH_START) {
+      GST_DEBUG_OBJECT (queue, "Failed to push event %s",
+          gst_event_type_get_name (event_type));
+    } else {
+      GST_ERROR_OBJECT (queue, "Failed to push event %s",
+          gst_event_type_get_name (event_type));
+    }
+#endif
+
     return GST_FLOW_ERROR;
   }
   return GST_FLOW_OK;
