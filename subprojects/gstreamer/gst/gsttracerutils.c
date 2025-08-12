@@ -39,10 +39,6 @@
 
 #ifndef GST_DISABLE_GST_TRACER_HOOKS
 
-GST_DEBUG_CATEGORY_STATIC (tracerutils);
-#undef GST_CAT_DEFAULT
-#define GST_CAT_DEFAULT tracerutils
-
 /* tracer quarks */
 
 /* These strings must match order and number declared in the GstTracerQuarkId
@@ -64,9 +60,12 @@ static const gchar *_quark_strings[] = {
   "pad-chain-list-post", "pad-send-event-pre", "pad-send-event-post",
   "memory-init", "memory-free-pre", "memory-free-post",
   "pool-buffer-queued", "pool-buffer-dequeued",
+
+
+  "none",                       /* This is a special quark for no hook - should always be LAST */
 };
 
-GQuark _priv_gst_tracer_quark_table[GST_TRACER_QUARK_MAX];
+GQuark _priv_gst_tracer_quark_table[GST_TRACER_QUARK_MAX + 1];
 
 /* tracing helpers */
 
@@ -135,10 +134,11 @@ gst_tracer_utils_create_tracer (GstTracerFactory * factory, const gchar * name,
 {
   gchar *available_props = NULL;
   GObjectClass *gobject_class = g_type_class_ref (factory->type);
-  GstTracer *tracer;
+  GstTracer *tracer = NULL;
   const gchar **names = NULL;
   GValue *values = NULL;
   gint n_properties = 1;
+  GstStructure *structure = NULL;
 
   if (gst_tracer_class_uses_structure_params (GST_TRACER_CLASS (gobject_class))) {
     GST_DEBUG ("Use structure parameters for %s", params);
@@ -149,7 +149,7 @@ gst_tracer_utils_create_tracer (GstTracerFactory * factory, const gchar * name,
     }
 
     gchar *struct_str = g_strdup_printf ("%s,%s", name, params);
-    GstStructure *structure = gst_structure_from_string (struct_str, NULL);
+    structure = gst_structure_from_string (struct_str, NULL);
     g_free (struct_str);
 
     if (!structure) {
@@ -203,8 +203,6 @@ gst_tracer_utils_create_tracer (GstTracerFactory * factory, const gchar * name,
         goto done;
       }
     }
-
-    g_type_class_unref (gobject_class);
   } else {
     names = g_new0 (const gchar *, n_properties);
     names[0] = (const gchar *) "params";
@@ -220,20 +218,58 @@ create:
       GST_TRACER (g_object_new_with_properties (factory->type,
           n_properties, names, values));
 
-  for (gint j = 0; j < n_properties; j++) {
-    g_value_unset (&values[j]);
+done:
+  g_free (available_props);
+
+  if (structure)
+    gst_structure_free (structure);
+
+  if (values) {
+    for (gint j = 0; j < n_properties; j++) {
+      if (G_VALUE_TYPE (&values[j]) != G_TYPE_INVALID)
+        g_value_unset (&values[j]);
+    }
   }
+
   g_free (names);
   g_free (values);
 
-  /* Clear floating flag */
-  gst_object_ref_sink (tracer);
+  if (tracer) {
+    /* Clear floating flag */
+    gst_object_ref_sink (tracer);
 
-  /* tracers register them self to the hooks */
-  gst_object_unref (tracer);
 
-done:
-  g_free (available_props);
+    /* Check if the tracer has registered to any hook by looking through all hooks */
+    gboolean tracer_registered = FALSE;
+    if (_priv_tracers) {
+      GList *h_list = g_hash_table_get_values (_priv_tracers);
+      for (GList * h_node = h_list; h_node && !tracer_registered;
+          h_node = g_list_next (h_node)) {
+        for (GList * t_node = h_node->data; t_node;
+            t_node = g_list_next (t_node)) {
+          GstTracerHook *hook = (GstTracerHook *) t_node->data;
+          if (G_OBJECT (hook->tracer) == G_OBJECT (tracer)) {
+            tracer_registered = TRUE;
+            break;
+          }
+        }
+      }
+      g_list_free (h_list);
+    }
+
+    /* If the tracer has not registered to any hook, register it to the "none" hook
+     * to keep it alive until the end of the program */
+    if (!tracer_registered) {
+      GST_DEBUG_OBJECT (tracer,
+          "Tracer has not registered to any hook, registering to 'none' hook");
+      gst_tracing_register_hook (tracer, "none", NULL);
+    }
+
+    gst_object_unref (tracer);
+
+  }
+
+  g_type_class_unref (gobject_class);
 }
 
 /* Initialize the tracing system */
@@ -243,20 +279,18 @@ _priv_gst_tracing_init (void)
   gint i = 0;
   const gchar *env = g_getenv ("GST_TRACERS");
 
-  GST_DEBUG_CATEGORY_INIT (tracerutils, "tracerutils",
-      GST_DEBUG_FG_BLUE, "Tracer utils");
-
   /* We initialize the tracer sub system even if the end
    * user did not activate it through the env variable
    * so that external tools can use it anyway */
   GST_DEBUG ("Initializing GstTracer");
   _priv_tracers = g_hash_table_new (NULL, NULL);
 
-  if (G_N_ELEMENTS (_quark_strings) != GST_TRACER_QUARK_MAX)
+
+  if (G_N_ELEMENTS (_quark_strings) + 1 != GST_TRACER_QUARK_MAX)
     g_warning ("the quark table is not consistent! %d != %d",
         (gint) G_N_ELEMENTS (_quark_strings), GST_TRACER_QUARK_MAX);
 
-  for (i = 0; i < GST_TRACER_QUARK_MAX; i++) {
+  for (i = 0; i <= GST_TRACER_QUARK_MAX; i++) {
     _priv_gst_tracer_quark_table[i] =
         g_quark_from_static_string (_quark_strings[i]);
   }
@@ -302,10 +336,12 @@ _priv_gst_tracing_init (void)
         factory = GST_TRACER_FACTORY (gst_plugin_feature_load (feature));
         if (factory) {
           gst_tracer_utils_create_tracer (factory, t[i], params);
+          gst_object_unref (factory);
         } else {
           g_warning ("loading plugin containing feature %s failed!", t[i]);
         }
-      } else {
+        gst_object_unref (feature);
+      } else if (t[i][0] != '\0') {
         g_warning ("no tracer named '%s'", t[i]);
       }
       i++;
