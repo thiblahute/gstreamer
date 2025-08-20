@@ -68,7 +68,8 @@ apt-get install -y --no-install-recommends \
     fontconfig \
     alien \
     fonts-noto-cjk \
-    fonts-noto
+    fonts-noto \
+    fonts-noto-extra
 
 if [ "${ENABLE_GPU}" = "true" ] || [ "${ENABLE_GPU}" = "1" ]; then
     echo "Installing GPU dependencies..."
@@ -91,7 +92,7 @@ if [ "${ENABLE_GPU}" = "true" ] || [ "${ENABLE_GPU}" = "1" ]; then
     # wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
     # dpkg -i cuda-keyring_1.1-1_all.deb
     # apt-get update
-    # apt-get install -y cuda-driver-dev-12-4 
+    # apt-get install -y cuda-driver-dev-12-4
 else
     echo "Skipping GPU dependencies (ENABLE_GPU != 'true')"
 fi
