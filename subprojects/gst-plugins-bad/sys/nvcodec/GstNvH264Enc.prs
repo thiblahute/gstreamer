@@ -1,0 +1,10 @@
+[_presets_]
+version=0.10
+element-name=GstNvH264Enc
+
+[Profile YouTube]
+_meta/comment=YouTube recommended settings (https://support.google.com/youtube/answer/1722171)
+rc-mode=vbr
+cabac=true
+bframes=2
+tune=high-quality

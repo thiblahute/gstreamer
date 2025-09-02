@@ -189,7 +189,7 @@ typedef struct _GstNvH264Encoder
   gint qp_const_i;
   gint qp_const_p;
   gint qp_const_b;
-  guint bitrate;
+  /* bitrate is stored in base class via gst_video_encoder_set/get_bitrate */
   guint max_bitrate;
   guint vbv_buffer_size;
   guint rc_lookahead;
@@ -672,6 +672,9 @@ gst_nv_h264_encoder_class_init (GstNvH264EncoderClass * klass, gpointer data)
   memcpy (klass->adapter_luid_list, cdata->adapter_luid_list,
       sizeof (klass->adapter_luid_list));
 
+  /* Enable bitrate preset management with default bitrate */
+  videoenc_class->ABI.abi.default_bitrate = DEFAULT_BITRATE;
+
   gst_nv_encoder_class_data_unref (cdata);
 }
 
@@ -696,7 +699,6 @@ gst_nv_h264_encoder_init (GstNvH264Encoder * self)
   self->qp_const_i = DEFAULT_QP;
   self->qp_const_p = DEFAULT_QP;
   self->qp_const_b = DEFAULT_QP;
-  self->bitrate = DEFAULT_BITRATE;
   self->max_bitrate = DEFAULT_MAX_BITRATE;
   self->vbv_buffer_size = DEFAULT_VBV_BUFFER_SIZE;
   self->rc_lookahead = DEFAULT_RC_LOOKAHEAD;
@@ -937,7 +939,10 @@ gst_nv_h264_encoder_set_property (GObject * object, guint prop_id,
       update_int (self, &self->qp_const_b, value, UPDATE_RC_PARAM);
       break;
     case PROP_BITRATE:
-      update_uint (self, &self->bitrate, value, UPDATE_BITRATE);
+      if (gst_video_encoder_set_bitrate (GST_VIDEO_ENCODER (self),
+              g_value_get_uint (value))) {
+        self->bitrate_updated = TRUE;
+      }
       break;
     case PROP_MAX_BITRATE:
       update_uint (self, &self->max_bitrate, value, UPDATE_BITRATE);
@@ -1065,7 +1070,8 @@ gst_nv_h264_encoder_get_property (GObject * object, guint prop_id,
       g_value_set_int (value, self->qp_const_b);
       break;
     case PROP_BITRATE:
-      g_value_set_uint (value, self->bitrate);
+      g_value_set_uint (value,
+          gst_video_encoder_get_bitrate (GST_VIDEO_ENCODER (self)));
       break;
     case PROP_MAX_BITRATE:
       g_value_set_uint (value, self->max_bitrate);
@@ -1510,8 +1516,9 @@ gst_nv_h264_encoder_set_format (GstNvEncoder * encoder,
   rc_params->rateControlMode = out_opt.rc_mode;
   rc_params->multiPass = out_opt.multi_pass;
 
-  if (self->bitrate)
-    rc_params->averageBitRate = self->bitrate * 1024;
+  guint bitrate = gst_video_encoder_get_bitrate (GST_VIDEO_ENCODER (self));
+  if (bitrate)
+    rc_params->averageBitRate = bitrate * 1024;
   if (self->max_bitrate)
     rc_params->maxBitRate = self->max_bitrate * 1024;
   if (self->vbv_buffer_size)
@@ -2020,7 +2027,8 @@ gst_nv_h264_encoder_check_reconfigure (GstNvEncoder * encoder,
   if (self->bitrate_updated) {
     GstNvH264EncoderClass *klass = GST_NV_H264_ENCODER_GET_CLASS (self);
     if (klass->device_caps.dyn_bitrate_change > 0) {
-      config->rcParams.averageBitRate = self->bitrate * 1024;
+      guint bitrate = gst_video_encoder_get_bitrate (GST_VIDEO_ENCODER (self));
+      config->rcParams.averageBitRate = bitrate * 1024;
       config->rcParams.maxBitRate = self->max_bitrate * 1024;
       reconfig = GST_NV_ENCODER_RECONFIGURE_BITRATE;
     } else {

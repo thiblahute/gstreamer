@@ -143,3 +143,8 @@ gstnvcodec = library('gstnvcodec',
   install_dir : plugins_install_dir,
 )
 plugins += [gstnvcodec]
+
+install_data(sources: 'GstNvH264Enc.prs', install_dir: presetdir)
+env = environment()
+env.prepend('GST_PRESET_PATH', meson.current_source_dir())
+meson.add_devenv(env)
