@@ -1,7 +1,7 @@
 /* GStreamer
  * Copyright (C) 2019 Thibault Saunier <tsaunier@igalia.com>
  *
- * gstencoderbitrateprofilemanager.c
+ * gstvideoencoderbitrateprofilemanager.c
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -22,19 +22,19 @@
 #include "config.h"
 #endif
 
-#include "gstencoderbitrateprofilemanager.h"
+#include "gstvideoencoderprofilemanager-private.h"
 
-GST_DEBUG_CATEGORY_STATIC (encoderbitratemanager_debug);
-#define GST_CAT_DEFAULT encoderbitratemanager_debug
+GST_DEBUG_CATEGORY_STATIC (videoencoderbitratemanager_debug);
+#define GST_CAT_DEFAULT videoencoderbitratemanager_debug
 
 typedef struct
 {
   gchar *name;
   gsize n_vals;
-  GstEncoderBitrateTargetForPixelsMap *map;
-} GstEncoderBitrateProfile;
+  GstVideoEncoderProfileConfigMap *map;
+} GstVideoEncoderBitrateProfile;
 
-struct _GstEncoderBitrateProfileManager
+struct _GstVideoEncoderProfileManager
 {
   GList *profiles;
   gchar *preset;
@@ -46,7 +46,7 @@ struct _GstEncoderBitrateProfileManager
 
 /* *INDENT-OFF* */
 /* Copied from https://support.google.com/youtube/answer/1722171?hl=en */
-static const GstEncoderBitrateTargetForPixelsMap youtube_bitrate_profiles[] = {
+static const GstVideoEncoderProfileConfigMap youtube_bitrate_profiles[] = {
   {
         .n_pixels = 3840 * 2160,
         .low_framerate_bitrate = 40000,
@@ -86,7 +86,7 @@ static const GstEncoderBitrateTargetForPixelsMap youtube_bitrate_profiles[] = {
 /* *INDENT-ON* */
 
 static void
-gst_encoder_bitrate_profile_free (GstEncoderBitrateProfile * profile)
+gst_video_encoder_profile_free (GstVideoEncoderBitrateProfile * profile)
 {
   g_free (profile->name);
   g_free (profile->map);
@@ -94,36 +94,36 @@ gst_encoder_bitrate_profile_free (GstEncoderBitrateProfile * profile)
 }
 
 void
-gst_encoder_bitrate_profile_manager_add_profile (GstEncoderBitrateProfileManager
-    * self, const gchar * profile_name,
-    const GstEncoderBitrateTargetForPixelsMap * map)
+gst_video_encoder_profile_manager_add_profile (GstVideoEncoderProfileManager *
+    self, const gchar * profile_name,
+    const GstVideoEncoderProfileConfigMap * map)
 {
   guint n_vals;
-  GstEncoderBitrateProfile *profile;
+  GstVideoEncoderBitrateProfile *profile;
 
   for (n_vals = 0;
       map[n_vals].low_framerate_bitrate != 0
       && map[n_vals].high_framerate_bitrate != 0; n_vals++);
   n_vals++;
 
-  profile = g_new0 (GstEncoderBitrateProfile, 1);
+  profile = g_new0 (GstVideoEncoderBitrateProfile, 1);
   profile->name = g_strdup (profile_name);
   profile->n_vals = n_vals;
   profile->map
-      = g_memdup2 (map, sizeof (GstEncoderBitrateTargetForPixelsMap) * n_vals);
+      = g_memdup2 (map, sizeof (GstVideoEncoderProfileConfigMap) * n_vals);
   self->profiles = g_list_prepend (self->profiles, profile);
 }
 
 guint
-gst_encoder_bitrate_profile_manager_get_bitrate (GstEncoderBitrateProfileManager
-    * self, GstVideoInfo * info)
+gst_video_encoder_profile_manager_get_bitrate (GstVideoEncoderProfileManager *
+    self, GstVideoInfo * info)
 {
   gint i;
   gboolean high_fps;
   guint num_pix;
   GList *tmp;
 
-  GstEncoderBitrateProfile *profile = NULL;
+  GstVideoEncoderBitrateProfile *profile = NULL;
 
   g_return_val_if_fail (self != NULL, -1);
 
@@ -140,7 +140,7 @@ gst_encoder_bitrate_profile_manager_get_bitrate (GstEncoderBitrateProfileManager
   }
 
   for (tmp = self->profiles; tmp; tmp = tmp->next) {
-    GstEncoderBitrateProfile *tmpprof = tmp->data;
+    GstVideoEncoderBitrateProfile *tmpprof = tmp->data;
     if (!g_strcmp0 (tmpprof->name, self->preset)) {
       profile = tmpprof;
       break;
@@ -156,7 +156,7 @@ gst_encoder_bitrate_profile_manager_get_bitrate (GstEncoderBitrateProfileManager
   high_fps = GST_VIDEO_INFO_FPS_N (info) / GST_VIDEO_INFO_FPS_D (info) > 30.0;
   num_pix = GST_VIDEO_INFO_WIDTH (info) * GST_VIDEO_INFO_HEIGHT (info);
   for (i = 0; i < profile->n_vals; i++) {
-    GstEncoderBitrateTargetForPixelsMap *bitrate_values = &profile->map[i];
+    GstVideoEncoderProfileConfigMap *bitrate_values = &profile->map[i];
 
     if (num_pix < bitrate_values->n_pixels)
       continue;
@@ -171,53 +171,59 @@ gst_encoder_bitrate_profile_manager_get_bitrate (GstEncoderBitrateProfileManager
   return -1;
 }
 
-void gst_encoder_bitrate_profile_manager_start_loading_preset
-    (GstEncoderBitrateProfileManager * self)
+void gst_video_encoder_profile_manager_start_loading_preset
+    (GstVideoEncoderProfileManager * self)
 {
   self->setting_preset = TRUE;
 }
 
-void gst_encoder_bitrate_profile_manager_end_loading_preset
-    (GstEncoderBitrateProfileManager * self, const gchar * preset)
+void gst_video_encoder_profile_manager_end_loading_preset
+    (GstVideoEncoderProfileManager * self, const gchar * preset)
 {
   self->setting_preset = FALSE;
   g_free (self->preset);
   self->preset = g_strdup (preset);
 }
 
-void
-gst_encoder_bitrate_profile_manager_set_bitrate (GstEncoderBitrateProfileManager
-    * self, guint bitrate)
+gboolean
+gst_video_encoder_profile_manager_set_bitrate (GstVideoEncoderProfileManager *
+    self, guint bitrate)
 {
+  if (self->bitrate == bitrate)
+    return FALSE;
+
   self->bitrate = bitrate;
   self->user_bitrate = !self->setting_preset;
+
+  GST_ERROR ("Setting%s bitrate %d", self->setting_preset ? " preset" : "",
+      self->bitrate);
+  return TRUE;
 }
 
 void
-gst_encoder_bitrate_profile_manager_free (GstEncoderBitrateProfileManager *
-    self)
+gst_video_encoder_profile_manager_free (GstVideoEncoderProfileManager * self)
 {
   g_free (self->preset);
   g_list_free_full (self->profiles,
-      (GDestroyNotify) gst_encoder_bitrate_profile_free);
+      (GDestroyNotify) gst_video_encoder_profile_free);
   g_free (self);
 }
 
-GstEncoderBitrateProfileManager *
-gst_encoder_bitrate_profile_manager_new (guint default_bitrate)
+GstVideoEncoderProfileManager *
+gst_video_encoder_profile_manager_new (guint default_bitrate)
 {
-  GstEncoderBitrateProfileManager *self =
-      g_new0 (GstEncoderBitrateProfileManager, 1);
+  GstVideoEncoderProfileManager *self =
+      g_new0 (GstVideoEncoderProfileManager, 1);
   static gsize _init = 0;
 
   if (g_once_init_enter (&_init)) {
-    GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "encoderbitratemanager", 0,
-        "Encoder bitrate manager");
+    GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "videoencoderbitratemanager", 0,
+        "Video encoder bitrate manager");
     g_once_init_leave (&_init, 1);
   }
 
   self->bitrate = default_bitrate;
-  gst_encoder_bitrate_profile_manager_add_profile (self,
+  gst_video_encoder_profile_manager_add_profile (self,
       "Profile YouTube", youtube_bitrate_profiles);
 
   return self;

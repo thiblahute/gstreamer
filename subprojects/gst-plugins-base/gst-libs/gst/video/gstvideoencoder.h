@@ -296,7 +296,27 @@ struct _GstVideoEncoderClass
                                    GstMeta * meta);
 
   /*< private >*/
-  gpointer       _gst_reserved[GST_PADDING_LARGE-4];
+  union {
+    struct {
+      /**
+       * GstVideoEncoderClass.ABI.abi.default_bitrate:
+       *
+       * Default bitrate in kbps to use for automatic bitrate preset management.
+       * When set to a value >= 0, the encoder will automatically adjust bitrate
+       * based on resolution and framerate when specific presets are loaded
+       * (e.g. "Profile YouTube" preset will use YouTube's recommended bitrates).
+       * Set to -1 to disable automatic bitrate preset management (default).
+       *
+       * This is particularly useful for handling platform-specific encoding
+       * presets that have recommended bitrate guidelines based on content
+       * resolution and framerate.
+       *
+       * Since: 1.28
+       */
+      gint default_bitrate;
+    } abi;
+    gpointer _gst_reserved[GST_PADDING_LARGE-4];
+  } ABI;
 };
 
 GST_VIDEO_API
@@ -392,6 +412,12 @@ void                 gst_video_encoder_release_frame (GstVideoEncoder *encoder, 
 
 GST_VIDEO_API
 void                 gst_video_encoder_drop_frame (GstVideoEncoder *encoder, GstVideoCodecFrame *frame);
+
+GST_VIDEO_API
+guint                gst_video_encoder_get_bitrate (GstVideoEncoder *encoder);
+
+GST_VIDEO_API
+gboolean             gst_video_encoder_set_bitrate (GstVideoEncoder *encoder, guint bitrate);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GstVideoEncoder, gst_object_unref)
 

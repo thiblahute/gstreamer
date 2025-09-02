@@ -101,6 +101,7 @@
 #include "gstvideoencoder.h"
 #include "gstvideoutils.h"
 #include "gstvideoutilsprivate.h"
+#include "gstvideoencoderprofilemanager-private.h"
 
 #include <gst/video/gstvideometa.h>
 #include <gst/video/gstvideopool.h>
@@ -187,6 +188,9 @@ struct _GstVideoEncoderPrivate
   /* qos messages: frames dropped/processed */
   guint dropped;
   guint processed;
+
+  GMutex bitrate_profile_manager_lock;
+  GstVideoEncoderProfileManager *bitrate_profile_manager;
 };
 
 typedef struct _ForcedKeyUnitEvent ForcedKeyUnitEvent;
@@ -298,6 +302,44 @@ static gboolean gst_video_encoder_src_query_default (GstVideoEncoder * encoder,
 static gboolean gst_video_encoder_transform_meta_default (GstVideoEncoder *
     encoder, GstVideoCodecFrame * frame, GstMeta * meta);
 
+typedef gboolean (*LoadPresetFunc) (GstPreset * preset, const gchar * name);
+
+static LoadPresetFunc parent_load_preset = NULL;
+
+static gboolean
+gst_video_encoder_load_preset (GstPreset * preset, const gchar * name)
+{
+  GstVideoEncoder *encoder = GST_VIDEO_ENCODER (preset);
+  gboolean result = FALSE;
+
+  g_mutex_lock (&encoder->priv->bitrate_profile_manager_lock);
+  if (encoder->priv->bitrate_profile_manager) {
+    gst_video_encoder_profile_manager_start_loading_preset
+        (encoder->priv->bitrate_profile_manager);
+  }
+  g_mutex_unlock (&encoder->priv->bitrate_profile_manager_lock);
+
+  /* Call the parent's preset loading mechanism */
+  result = parent_load_preset (preset, name);
+
+  g_mutex_lock (&encoder->priv->bitrate_profile_manager_lock);
+  if (encoder->priv->bitrate_profile_manager) {
+    gst_video_encoder_profile_manager_end_loading_preset
+        (encoder->priv->bitrate_profile_manager, result ? name : NULL);
+  }
+  g_mutex_unlock (&encoder->priv->bitrate_profile_manager_lock);
+
+  return result;
+}
+
+static void
+gst_video_encoder_preset_interface_init (GstPresetInterface * iface)
+{
+  parent_load_preset = iface->load_preset;
+  g_assert (parent_load_preset);
+  iface->load_preset = gst_video_encoder_load_preset;
+}
+
 /* we can't use G_DEFINE_ABSTRACT_TYPE because we need the klass in the _init
  * method to get to the padtemplates */
 GType
@@ -319,7 +361,7 @@ gst_video_encoder_get_type (void)
       (GInstanceInitFunc) gst_video_encoder_init,
     };
     const GInterfaceInfo preset_interface_info = {
-      NULL,                     /* interface_init */
+      (GInterfaceInitFunc) gst_video_encoder_preset_interface_init,
       NULL,                     /* interface_finalize */
       NULL                      /* interface_data */
     };
@@ -434,6 +476,9 @@ gst_video_encoder_class_init (GstVideoEncoderClass * klass)
           "Minimum interval between force-keyunit requests in nanoseconds", 0,
           G_MAXUINT64, DEFAULT_MIN_FORCE_KEY_UNIT_INTERVAL,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  /* Initialize bitrate preset management as disabled by default */
+  klass->ABI.abi.default_bitrate = -1;
 
   meta_tag_video_quark = g_quark_from_static_string (GST_META_TAG_VIDEO_STR);
 }
@@ -612,6 +657,14 @@ gst_video_encoder_init (GstVideoEncoder * encoder, GstVideoEncoderClass * klass)
   priv->max_latency = 0;
   priv->min_pts = GST_CLOCK_TIME_NONE;
   priv->time_adjustment = GST_CLOCK_TIME_NONE;
+
+  /* Initialize bitrate profile manager if enabled by the encoder class */
+  if (klass->ABI.abi.default_bitrate >= 0) {
+    priv->bitrate_profile_manager =
+        gst_video_encoder_profile_manager_new (klass->ABI.abi.default_bitrate);
+  } else {
+    priv->bitrate_profile_manager = NULL;
+  }
 
   gst_video_encoder_reset (encoder, TRUE);
 }
@@ -1024,6 +1077,12 @@ gst_video_encoder_finalize (GObject * object)
   if (encoder->priv->allocator) {
     gst_object_unref (encoder->priv->allocator);
     encoder->priv->allocator = NULL;
+  }
+
+  if (encoder->priv->bitrate_profile_manager) {
+    gst_video_encoder_profile_manager_free (encoder->
+        priv->bitrate_profile_manager);
+    encoder->priv->bitrate_profile_manager = NULL;
   }
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
@@ -3319,4 +3378,74 @@ gst_video_encoder_get_min_force_key_unit_interval (GstVideoEncoder * encoder)
   GST_OBJECT_UNLOCK (encoder);
 
   return interval;
+}
+
+/**
+ * gst_video_encoder_get_bitrate:
+ * @encoder: a #GstVideoEncoder
+ *
+ * Gets the current bitrate in kbps. This function should only be used
+ * by encoders that have enabled preset management by setting
+ * default_bitrate_for_preset_management >= 0 in their class.
+ *
+ * Returns: the current bitrate in kbps, or 0 if preset management is not enabled
+ *
+ * Since: 1.28
+ */
+guint
+gst_video_encoder_get_bitrate (GstVideoEncoder * encoder)
+{
+  guint bitrate = 0;
+
+  g_return_val_if_fail (GST_IS_VIDEO_ENCODER (encoder), 0);
+
+  g_mutex_lock (&encoder->priv->bitrate_profile_manager_lock);
+  if (encoder->priv->bitrate_profile_manager) {
+    bitrate =
+        gst_video_encoder_profile_manager_get_bitrate (encoder->
+        priv->bitrate_profile_manager,
+        encoder->priv->input_state ? &encoder->priv->input_state->info : NULL);
+  } else {
+    GST_WARNING_OBJECT (encoder,
+        "gst_video_encoder_get_bitrate() called on encoder "
+        "that has not enabled preset management");
+  }
+  g_mutex_unlock (&encoder->priv->bitrate_profile_manager_lock);
+
+  return bitrate;
+}
+
+/**
+ * gst_video_encoder_set_bitrate:
+ * @encoder: a #GstVideoEncoder
+ * @bitrate: the bitrate in kbps
+ *
+ * Sets the bitrate. This function should only be used by encoders
+ * that have enabled preset management by setting
+ * default_bitrate_for_preset_management >= 0 in their class.
+ *
+ * Returns: %TRUE if the bitrate was changed, %FALSE if it was already set to this value
+ *
+ * Since: 1.28
+ */
+gboolean
+gst_video_encoder_set_bitrate (GstVideoEncoder * encoder, guint bitrate)
+{
+  gboolean changed = FALSE;
+
+  g_return_val_if_fail (GST_IS_VIDEO_ENCODER (encoder), FALSE);
+
+  g_mutex_lock (&encoder->priv->bitrate_profile_manager_lock);
+  if (encoder->priv->bitrate_profile_manager) {
+    changed =
+        gst_video_encoder_profile_manager_set_bitrate (encoder->
+        priv->bitrate_profile_manager, bitrate);
+  } else {
+    GST_WARNING_OBJECT (encoder,
+        "gst_video_encoder_set_bitrate() called on encoder "
+        "that has not enabled preset management");
+  }
+  g_mutex_unlock (&encoder->priv->bitrate_profile_manager_lock);
+
+  return changed;
 }

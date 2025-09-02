@@ -773,36 +773,9 @@ static void gst_x264_enc_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec);
 static gboolean x264_element_init (GstPlugin * plugin);
 
-typedef gboolean (*LoadPresetFunc) (GstPreset * preset, const gchar * name);
-
-LoadPresetFunc parent_load_preset = NULL;
-
-static gboolean
-gst_x264_enc_load_preset (GstPreset * preset, const gchar * name)
-{
-  GstX264Enc *enc = GST_X264_ENC (preset);
-  gboolean res;
-
-  gst_encoder_bitrate_profile_manager_start_loading_preset
-      (enc->bitrate_manager);
-  res = parent_load_preset (preset, name);
-  gst_encoder_bitrate_profile_manager_end_loading_preset (enc->bitrate_manager,
-      res ? name : NULL);
-
-  return res;
-}
-
-static void
-gst_x264_enc_preset_interface_init (GstPresetInterface * iface)
-{
-  parent_load_preset = iface->load_preset;
-  iface->load_preset = gst_x264_enc_load_preset;
-}
 
 #define gst_x264_enc_parent_class parent_class
-G_DEFINE_TYPE_WITH_CODE (GstX264Enc, gst_x264_enc, GST_TYPE_VIDEO_ENCODER,
-    G_IMPLEMENT_INTERFACE (GST_TYPE_PRESET,
-        gst_x264_enc_preset_interface_init));
+G_DEFINE_TYPE (GstX264Enc, gst_x264_enc, GST_TYPE_VIDEO_ENCODER);
 GST_ELEMENT_REGISTER_DEFINE_CUSTOM (x264enc, x264_element_init)
 /* don't forget to free the string after use */
      static const gchar *gst_x264_enc_build_partitions (gint analyse)
@@ -1285,6 +1258,9 @@ gst_x264_enc_class_init (GstX264EncClass * klass)
   gst_type_mark_as_plugin_api (GST_X264_ENC_SPEED_PRESET_TYPE, 0);
   gst_type_mark_as_plugin_api (GST_X264_ENC_TUNE_TYPE, 0);
   gst_type_mark_as_plugin_api (GST_X264_ENC_NAL_HRD_TYPE, 0);
+
+  /* Enable bitrate preset management with default bitrate */
+  gstencoder_class->ABI.abi.default_bitrate = ARG_BITRATE_DEFAULT;
 }
 
 /* *INDENT-OFF* */
@@ -1383,9 +1359,6 @@ gst_x264_enc_init (GstX264Enc * encoder)
   encoder->frame_packing = ARG_FRAME_PACKING_DEFAULT;
   encoder->insert_vui = ARG_INSERT_VUI_DEFAULT;
   encoder->nal_hrd = ARG_NAL_HRD_DEFAULT;
-
-  encoder->bitrate_manager =
-      gst_encoder_bitrate_profile_manager_new (ARG_BITRATE_DEFAULT);
 }
 
 typedef struct
@@ -1510,7 +1483,6 @@ gst_x264_enc_finalize (GObject * object)
   FREE_STRING (encoder->tunings);
   FREE_STRING (encoder->option_string);
   FREE_STRING (encoder->option_string_prop);
-  gst_encoder_bitrate_profile_manager_free (encoder->bitrate_manager);
 
 #undef FREE_STRING
 
@@ -1793,9 +1765,7 @@ skip_vui_parameters:
 
   encoder->x264param.analyse.b_psnr = 0;
 
-  bitrate =
-      gst_encoder_bitrate_profile_manager_get_bitrate (encoder->bitrate_manager,
-      encoder->input_state ? &encoder->input_state->info : NULL);
+  bitrate = gst_video_encoder_get_bitrate (GST_VIDEO_ENCODER (encoder));
 
   /* FIXME 2.0 make configuration more sane and consistent with x264 cmdline:
    * + split pass property into a pass property (pass1/2/3 enum) and rc-method
@@ -2314,9 +2284,7 @@ gst_x264_enc_set_src_caps (GstX264Enc * encoder, GstCaps * caps)
   GstStructure *structure;
   GstVideoCodecState *state;
   GstTagList *tags;
-  guint bitrate =
-      gst_encoder_bitrate_profile_manager_get_bitrate (encoder->bitrate_manager,
-      encoder->input_state ? &encoder->input_state->info : NULL);
+  guint bitrate = gst_video_encoder_get_bitrate (GST_VIDEO_ENCODER (encoder));
 
   outcaps = gst_caps_new_empty_simple ("video/x-h264");
   structure = gst_caps_get_structure (outcaps, 0);
@@ -2847,9 +2815,7 @@ gst_x264_enc_reconfig (GstX264Enc * encoder)
   if (!encoder->vtable)
     return;
 
-  bitrate =
-      gst_encoder_bitrate_profile_manager_get_bitrate (encoder->bitrate_manager,
-      encoder->input_state ? &encoder->input_state->info : NULL);
+  bitrate = gst_video_encoder_get_bitrate (GST_VIDEO_ENCODER (encoder));
   switch (encoder->pass) {
     case GST_X264_ENC_PASS_QUAL:
       encoder->x264param.rc.f_rf_constant = encoder->quantizer;
@@ -2903,7 +2869,7 @@ gst_x264_enc_set_property (GObject * object, guint prop_id,
       gst_x264_enc_reconfig (encoder);
       break;
     case ARG_BITRATE:
-      gst_encoder_bitrate_profile_manager_set_bitrate (encoder->bitrate_manager,
+      gst_video_encoder_set_bitrate (GST_VIDEO_ENCODER (encoder),
           g_value_get_uint (value));
       gst_x264_enc_reconfig (encoder);
       break;
@@ -3127,8 +3093,7 @@ gst_x264_enc_get_property (GObject * object, guint prop_id,
       break;
     case ARG_BITRATE:
       g_value_set_uint (value,
-          gst_encoder_bitrate_profile_manager_get_bitrate
-          (encoder->bitrate_manager, NULL));
+          gst_video_encoder_get_bitrate (GST_VIDEO_ENCODER (encoder)));
       break;
     case ARG_INTRA_REFRESH:
       g_value_set_boolean (value, encoder->intra_refresh);

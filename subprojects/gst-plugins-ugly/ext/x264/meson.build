@@ -5,12 +5,10 @@ x264_opt = get_option('x264').require(gpl_allowed, error_message: '''
 
 x264_sources = [
   'gstx264enc.c',
-  'gstencoderbitrateprofilemanager.c',
 ]
 
 x264_headers = [
   'gstx264enc.h',
-  'gstencoderbitrateprofilemanager.h',
 ]
 
 doc_sources = []

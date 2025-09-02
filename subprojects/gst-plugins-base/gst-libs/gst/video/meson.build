@@ -7,6 +7,7 @@ video_sources = files([
   'gstvideoaggregator.c',
   'gstvideodecoder.c',
   'gstvideoencoder.c',
+  'gstvideoencoderprofilemanager.c',
   'gstvideofilter.c',
   'gstvideometa.c',
   'gstvideopool.c',
