@@ -412,7 +412,10 @@ gst_cuda_memory_copy_ensure_gl_context (GstCudaMemoryCopy * self)
 
   if (!gst_gl_context_check_gl_version (context,
           (GstGLAPI) (GST_GL_API_OPENGL | GST_GL_API_OPENGL3), 3, 0)) {
-    GST_WARNING_OBJECT (self, "OpenGL context could not support PBO download");
+
+    GST_WARNING_OBJECT (self,
+        "OpenGL context could not support PBO download, got %s",
+        gst_gl_api_to_string (gst_gl_context_get_gl_api (context)));
     return FALSE;
   }
 
