@@ -1133,7 +1133,34 @@ _link_track (GESPipeline * self, GESTrack * track)
       GST_INFO_OBJECT (track, "Linked to %" GST_PTR_FORMAT, sinkpad);
     }
 
-    tmppad = gst_element_request_pad_simple (chain->tee, "src_%u");
+    switch (ges_converter_type ()) {
+      case GES_CONVERTER_GL:
+        /* In GL mode we need to insert a GLDownload in case the encoder is a
+         * software encoder */
+      {
+        GstElement *gldownload;
+
+        gldownload = gst_element_factory_make ("gldownload", NULL);
+        if (G_UNLIKELY (gldownload == NULL)) {
+          GST_ERROR_OBJECT (self, "Could not create gldownload element");
+          goto error;
+        }
+        gst_bin_add (GST_BIN_CAST (self), gldownload);
+        gst_element_sync_state_with_parent (gldownload);
+        if (G_UNLIKELY (gst_element_link (chain->tee, gldownload) != TRUE)) {
+          GST_ERROR_OBJECT (self, "Could not link gldownload");
+          gst_bin_remove (GST_BIN_CAST (self), gldownload);
+          goto error;
+        }
+
+        tmppad = gst_element_get_static_pad (gldownload, "src");
+        g_assert (tmppad != NULL);
+        break;
+      }
+      default:
+        tmppad = gst_element_request_pad_simple (chain->tee, "src_%u");
+        break;
+    }
     if (G_UNLIKELY (gst_pad_link_full (tmppad, chain->encodebinpad,
                 GST_PAD_LINK_CHECK_NOTHING) != GST_PAD_LINK_OK)) {
       GST_ERROR_OBJECT (self, "Couldn't link track pad to encodebin");

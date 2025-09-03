@@ -405,20 +405,6 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
       }
     } else {
       if (ges_converter_type () == GES_CONVERTER_GL) {
-        // if (gst_registry_find_feature (gst_registry_get (), "nvh265dec",
-        //         GST_TYPE_ELEMENT_FACTORY)
-        //     && gst_registry_find_feature (gst_registry_get (), "cudaconvert",
-        //         GST_TYPE_ELEMENT_FACTORY)) {
-        //   GstCaps *scaps = gst_discoverer_stream_info_get_caps (sinfo);
-        //   GstCaps *h26x_caps =
-        //       gst_caps_from_string ("video/x-h264;video/x-h265");
-        //
-        //   if (scaps && gst_caps_can_intersect (scaps, h26x_caps)) {
-        //     filter =
-        //         "cudaconvert ! cudadownload ! gldownload ! capsfilter caps=\"video/x-raw(memory:GLMemory),format=RGBA\" ! segmentclipper";
-        //   }
-        // }
-        //
         if (!filter) {
           filter =
               "glupload ! glcolorconvert ! capsfilter caps=\"video/x-raw(memory:GLMemory),format=RGBA\" ! segmentclipper";

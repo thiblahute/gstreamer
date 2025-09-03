@@ -516,7 +516,7 @@ ges_videoconvert_bin_desc (void)
     case GES_CONVERTER_AUTO:
       return "autovideoconvert";
     case GES_CONVERTER_GL:
-      return "glupload ! glcolorconvert ! gldownload";
+      return "glcolorconvert";
     default:
       g_assert_not_reached ();
   }
