@@ -6,6 +6,7 @@
 ###############################################################################
 FROM ubuntu:22.04 AS build-deps
 COPY ci/docker/tella/install-build-deps.sh /install-build-deps.sh
+ENV ENABLE_GPU=true
 RUN /install-build-deps.sh
 
 
@@ -81,6 +82,7 @@ COPY --from=build-deps-toolchain-gstreamer /compiled-binaries /
 # This stage contains ONLY the prod dependencies.                             #
 ###############################################################################
 FROM ubuntu:22.04 AS release-deps
+ENV ENABLE_GPU=true
 COPY --from=build-deps-ffmpeg /opt/ffmpeg /usr
 # Copy dav1d shared libraries necessary for AV1 decoding
 RUN --mount=from=build-deps-ffmpeg,source=/usr/local/lib,target=/tmp/src_lib \
