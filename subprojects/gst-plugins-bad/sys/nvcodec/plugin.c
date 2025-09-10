@@ -165,7 +165,8 @@ plugin_init (GstPlugin * plugin)
 #endif
 
   cuda_ret = CuInit (0);
-  if (cuda_ret != CUDA_SUCCESS) {
+  if (cuda_ret == CUDA_ERROR_INVALID_VALUE
+      || cuda_ret == CUDA_ERROR_INVALID_DEVICE) {
     CuGetErrorName (cuda_ret, &err_name);
     CuGetErrorString (cuda_ret, &err_desc);
     GST_ERROR ("Failed to init cuda, cuInit ret: 0x%x: %s: %s",
