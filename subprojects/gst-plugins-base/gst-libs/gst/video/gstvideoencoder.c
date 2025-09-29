@@ -820,15 +820,20 @@ gst_video_encoder_setcaps (GstVideoEncoder * encoder, GstCaps * caps)
   }
 
   /* and subclass should be ready to configure format at any time around */
+  GstVideoCodecState *old_state = encoder->priv->input_state;
+
+  encoder->priv->input_state = state;
   if (encoder_class->set_format != NULL)
     ret = encoder_class->set_format (encoder, state);
 
   if (ret) {
-    if (encoder->priv->input_state)
-      gst_video_codec_state_unref (encoder->priv->input_state);
+    if (old_state)
+      gst_video_codec_state_unref (old_state);
     encoder->priv->input_state = state;
   } else {
     gst_video_codec_state_unref (state);
+    /* Revert to the old state as setting new state actually failed */
+    encoder->priv->input_state = old_state;
   }
 
   GST_VIDEO_ENCODER_STREAM_UNLOCK (encoder);
