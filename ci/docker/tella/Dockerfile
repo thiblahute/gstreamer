@@ -105,14 +105,6 @@ RUN mkdir -p /etc/gstreamer
 RUN gst-inspect-1.0
 RUN gst-inspect-1.0 --version
 RUN chmod a+r /etc/gstreamer/registry-1.0.bin
-# Preventing registry updates becomes a problem when using plugins with
-# runtime dependencies which are not available at build time. For example,
-# we install basic NVIDIA drivers at build time so that we have the required
-# headers for nvcodec to compile, but most of the NVIDIA runtime libraries are
-# injected at runtime.
-# When we want to start using nvcodec, we will need to find a way to
-# conditionally enable registry updates.
-ENV GST_REGISTRY_UPDATE=no
-ENV GST_REGISTRY_FORK=no
 
-ENTRYPOINT []
+COPY ci/docker/tella/entrypoint.sh /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
