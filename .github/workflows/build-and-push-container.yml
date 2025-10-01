@@ -37,6 +37,9 @@ jobs:
           docker pull $ECR_REPOSITORY:arm64-$BRANCH_NAME || true
           docker pull $ECR_REPOSITORY:arm64-$BRANCH_NAME-build || true
 
+          docker build . -f ci/docker/tella/Dockerfile --platform linux/arm64/v8 --cache-from $ECR_REPOSITORY:arm64-$BRANCH_NAME-build -t $ECR_REPOSITORY:arm64-$GITHUB_SHA-build-deps-ffmpeg --target build-deps-ffmpeg
+          docker tag $ECR_REPOSITORY:arm64-$GITHUB_SHA-build-deps-ffmpeg $ECR_REPOSITORY:arm64-$BRANCH_NAME-build-deps-ffmpeg
+
           docker build . -f ci/docker/tella/Dockerfile --platform linux/arm64/v8 --cache-from $ECR_REPOSITORY:arm64-$BRANCH_NAME-build -t $ECR_REPOSITORY:arm64-$GITHUB_SHA-build --target build-deps-gstreamer
           docker tag $ECR_REPOSITORY:arm64-$GITHUB_SHA-build $ECR_REPOSITORY:arm64-$BRANCH_NAME-build
 
@@ -45,6 +48,9 @@ jobs:
 
           docker push $ECR_REPOSITORY:arm64-$GITHUB_SHA
           docker push $ECR_REPOSITORY:arm64-$BRANCH_NAME
+
+          docker push $ECR_REPOSITORY:arm64-$GITHUB_SHA-build-deps-ffmpeg
+          docker push $ECR_REPOSITORY:arm64-$BRANCH_NAME-build-deps-ffmpeg
 
           docker push $ECR_REPOSITORY:arm64-$GITHUB_SHA-build
           docker push $ECR_REPOSITORY:arm64-$BRANCH_NAME-build
@@ -75,6 +81,9 @@ jobs:
           docker pull $ECR_REPOSITORY:amd64-$BRANCH_NAME || true
           docker pull $ECR_REPOSITORY:amd64-$BRANCH_NAME-build || true
 
+          docker build . -f ci/docker/tella/Dockerfile --platform linux/amd64 --cache-from $ECR_REPOSITORY:amd64-$BRANCH_NAME-build -t $ECR_REPOSITORY:amd64-$GITHUB_SHA-build-deps-ffmpeg --target build-deps-ffmpeg
+          docker tag $ECR_REPOSITORY:amd64-$GITHUB_SHA-build-deps-ffmpeg $ECR_REPOSITORY:amd64-$BRANCH_NAME-build-deps-ffmpeg
+
           docker build . -f ci/docker/tella/Dockerfile --platform linux/amd64 --cache-from $ECR_REPOSITORY:amd64-$BRANCH_NAME-build -t $ECR_REPOSITORY:amd64-$GITHUB_SHA-build --target build-deps-gstreamer
           docker tag $ECR_REPOSITORY:amd64-$GITHUB_SHA-build $ECR_REPOSITORY:amd64-$BRANCH_NAME-build
 
@@ -84,6 +93,9 @@ jobs:
           docker push $ECR_REPOSITORY:amd64-$GITHUB_SHA
           docker push $ECR_REPOSITORY:amd64-$BRANCH_NAME
 
+          docker push $ECR_REPOSITORY:amd64-$GITHUB_SHA-build-deps-ffmpeg
+          docker push $ECR_REPOSITORY:amd64-$BRANCH_NAME-build-deps-ffmpeg
+          
           docker push $ECR_REPOSITORY:amd64-$GITHUB_SHA-build
           docker push $ECR_REPOSITORY:amd64-$BRANCH_NAME-build
       - name: Run gst-inspect-1.0
@@ -133,6 +145,12 @@ jobs:
 
       - name: Create and push manifest images
         run: |
+          docker manifest create $ECR_REPOSITORY:$GITHUB_SHA-build-deps-ffmpeg $ECR_REPOSITORY:arm64-$GITHUB_SHA-build-deps-ffmpeg $ECR_REPOSITORY:amd64-$GITHUB_SHA-build-deps-ffmpeg
+          docker manifest push $ECR_REPOSITORY:$GITHUB_SHA-build-deps-ffmpeg
+          
+          docker manifest create $ECR_REPOSITORY:$BRANCH_NAME-build-deps-ffmpeg $ECR_REPOSITORY:arm64-$BRANCH_NAME-build-deps-ffmpeg $ECR_REPOSITORY:amd64-$BRANCH_NAME-build-deps-ffmpeg
+          docker manifest push $ECR_REPOSITORY:$BRANCH_NAME-build-deps-ffmpeg
+
           docker manifest create $ECR_REPOSITORY:$GITHUB_SHA-build $ECR_REPOSITORY:arm64-$GITHUB_SHA-build $ECR_REPOSITORY:amd64-$GITHUB_SHA-build
           docker manifest push $ECR_REPOSITORY:$GITHUB_SHA-build
 
