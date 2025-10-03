@@ -82,17 +82,11 @@ if [ "${ENABLE_GPU}" = "true" ] || [ "${ENABLE_GPU}" = "1" ]; then
         libegl1-mesa-dev \
         libglx-dev
 
-    # Install nvidia driver
-    apt-get install -y software-properties-common
-    add-apt-repository ppa:graphics-drivers/ppa -y
-    apt-get update
-    apt-get install -y nvidia-driver-550-server
-
-    # CUDA is not strictly required but may be useful in the future
-    # wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
-    # dpkg -i cuda-keyring_1.1-1_all.deb
-    # apt-get update
-    # apt-get install -y cuda-driver-dev-12-4
+    # Install latest nv-codec-headers from source
+    cd /tmp
+    git clone https://github.com/FFmpeg/nv-codec-headers.git
+    cd nv-codec-headers
+    make && make install
 else
     echo "Skipping GPU dependencies (ENABLE_GPU != 'true')"
 fi
