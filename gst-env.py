@@ -54,6 +54,7 @@ BASH_COMPLETION_PATHS += [SCRIPTDIR + '/subprojects/gst-devtools/validate/data/b
 
 UPDATED_ENV = dict()
 
+
 def str_to_bool(value: Any) -> bool:
     """Return whether the provided string (or any value really) represents true. Otherwise false.
     Just like plugin server stringToBoolean.
@@ -83,7 +84,7 @@ def stringify(o):
 
 def set_env_var(env, var, value, options):
     if options.only_environment:
-       UPDATED_ENV[var] = value
+        UPDATED_ENV[var] = value
 
     env[var] = value
 
@@ -165,7 +166,7 @@ def is_library_target_and_not_plugin(target, filename):
     1. We don't need to
     2. It causes us to exceed the PATH length limit on Windows and Wine
     '''
-    if target['type'] != 'shared library':
+    if target["type"] != "shared library" and target["type"] != "custom":
         return False
     # Check if this output of that target is a shared library
     if not SHAREDLIB_REG.search(filename):
