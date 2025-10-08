@@ -405,6 +405,10 @@ def get_subprocess_env(options, gst_version):
                 prepend_env_var(env, lib_path_envvar,
                                 os.path.join(options.builddir, root),
                                 options)
+
+                if 'libskia' in filename:
+                    set_env_var(env, "SKIA_USE_PKG_CONFIG", "1", options)
+
             elif is_binary_target_and_in_path(target, filename, bindir):
                 paths.add(os.path.join(options.builddir, root))
             elif is_gio_module(target, filename, options.builddir):

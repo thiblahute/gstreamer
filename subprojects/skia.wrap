@@ -1,0 +1,8 @@
+[wrap-git]
+directory = skia
+url = https://github.com/thiblahute/skia.git
+revision = m141-0.88.0+meson
+depth = 1
+
+[provide]
+skia = skia_dep
