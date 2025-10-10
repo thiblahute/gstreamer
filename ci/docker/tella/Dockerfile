@@ -43,6 +43,7 @@ RUN /build-ffmpeg.sh --build
 # in /compiled-binaries.                                                      #
 ###############################################################################
 FROM build-deps-toolchain AS build-deps-toolchain-gstreamer
+ENV SKIA_USE_PKG_CONFIG=1
 
 # Copy FFmpeg to /usr so GStreamer build can pick it up
 COPY --from=build-deps-ffmpeg /opt/ffmpeg /usr
@@ -73,6 +74,7 @@ ENTRYPOINT []
 # /compiled-binaries but NO toolchain.                                        #
 ###############################################################################
 FROM build-deps AS build-deps-gstreamer
+ENV SKIA_USE_PKG_CONFIG=1
 COPY --from=build-deps-ffmpeg /opt/ffmpeg /usr
 COPY --from=build-deps-toolchain-gstreamer /compiled-binaries /
 
@@ -82,6 +84,7 @@ COPY --from=build-deps-toolchain-gstreamer /compiled-binaries /
 # This stage contains ONLY the prod dependencies.                             #
 ###############################################################################
 FROM ubuntu:22.04 AS release-deps
+ENV SKIA_USE_PKG_CONFIG=1
 ENV ENABLE_GPU=true
 COPY --from=build-deps-ffmpeg /opt/ffmpeg /usr
 # Copy dav1d shared libraries necessary for AV1 decoding
