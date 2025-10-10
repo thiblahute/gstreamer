@@ -22,6 +22,7 @@ apt-get install -y --no-install-recommends \
     curl \
     flex \
     gcc \
+    g++ \
     autoconf \
     automake \
     libtool \
@@ -45,6 +46,7 @@ apt-get install -y --no-install-recommends \
     libopus-dev \
     liborc-0.4-dev \
     libpng-dev \
+    libstdc++-12-dev \
     libsoup2.4-dev \
     libssl-dev \
     libunwind-dev \
