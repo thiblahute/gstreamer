@@ -27,4 +27,6 @@ void gst_cuda_ipc_client_deinit (void);
 
 gboolean gst_nvcodec_is_windows_10_or_greater (void);
 
+gboolean gst_nvcodec_codec_is_enabled (const gchar * codec_name);
+
 G_END_DECLS

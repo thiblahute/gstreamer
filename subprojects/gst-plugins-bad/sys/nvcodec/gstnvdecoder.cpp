@@ -1311,6 +1311,12 @@ gst_nv_decoder_check_device_caps (GstCudaContext * context,
     return FALSE;
   }
 
+  if (!gst_nvcodec_codec_is_enabled (codec_map->codec_name)) {
+    GST_INFO ("Codec %s is disabled via GST_NVCODEC_DISABLE_CODECS",
+        codec_map->codec_name);
+    return FALSE;
+  }
+
   if (!gst_cuvid_can_get_decoder_caps ()) {
     GST_INFO ("Too old nvidia driver to query decoder capability");
 
