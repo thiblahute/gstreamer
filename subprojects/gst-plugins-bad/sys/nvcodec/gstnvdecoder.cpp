@@ -1045,20 +1045,6 @@ gst_nv_decoder_output_picture (GstNvDecoder * decoder,
         goto error;
     }
 
-    /* FIXME: This is the case where OpenGL context of downstream glbufferpool
-     * belongs to non-nvidia (or different device).
-     * There should be enhancement to ensure nvdec has compatible OpenGL context
-     */
-    if (ret != GST_FLOW_OK &&
-        decoder->output_type == GST_NV_DECODER_OUTPUT_TYPE_GL) {
-      GST_WARNING_OBJECT (videodec,
-          "Couldn't copy frame to GL memory, fallback to system memory");
-      decoder->output_type = GST_NV_DECODER_OUTPUT_TYPE_SYSTEM;
-
-      ret = gst_nv_decoder_copy_frame_to_system (decoder, surface,
-          frame->output_buffer);
-    }
-
     if (need_unmap)
       gst_nv_dec_object_unmap_surface (decoder->object, surface);
     gst_cuda_context_pop (nullptr);
