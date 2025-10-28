@@ -84,19 +84,39 @@ GST_DEBUG_CATEGORY (gst_nv_decoder_debug);
 #define NVRTC_LIBNAME "libnvrtc.so"
 #endif /* G_OS_WIN32 */
 
-static gchar **disabled_codecs = NULL;
+static gchar **disabled_decoder_codecs = NULL;
+static gchar **disabled_encoder_codecs = NULL;
 
 gboolean
-gst_nvcodec_codec_is_enabled (const gchar * codec_name)
+gst_nvcodec_decoder_is_enabled (const gchar * codec_name)
 {
   gchar **walk;
 
-  if (!disabled_codecs)
+  if (!disabled_decoder_codecs)
     return TRUE;
 
-  for (walk = disabled_codecs; *walk; walk++) {
+  for (walk = disabled_decoder_codecs; *walk; walk++) {
     if (g_ascii_strcasecmp (*walk, codec_name) == 0) {
-      GST_INFO ("Codec '%s' is disabled via GST_NVCODEC_DISABLE_CODECS",
+      GST_INFO ("Decoder '%s' is disabled via GST_NVCODEC_DISABLE_DECODER_CODECS",
+          codec_name);
+      return FALSE;
+    }
+  }
+
+  return TRUE;
+}
+
+gboolean
+gst_nvcodec_encoder_is_enabled (const gchar * codec_name)
+{
+  gchar **walk;
+
+  if (!disabled_encoder_codecs)
+    return TRUE;
+
+  for (walk = disabled_encoder_codecs; *walk; walk++) {
+    if (g_ascii_strcasecmp (*walk, codec_name) == 0) {
+      GST_INFO ("Encoder '%s' is disabled via GST_NVCODEC_DISABLE_ENCODER_CODECS",
           codec_name);
       return FALSE;
     }
@@ -110,9 +130,14 @@ plugin_deinit (gpointer data)
 {
   gst_cuda_ipc_client_deinit ();
 
-  if (disabled_codecs) {
-    g_strfreev (disabled_codecs);
-    disabled_codecs = NULL;
+  if (disabled_decoder_codecs) {
+    g_strfreev (disabled_decoder_codecs);
+    disabled_decoder_codecs = NULL;
+  }
+
+  if (disabled_encoder_codecs) {
+    g_strfreev (disabled_encoder_codecs);
+    disabled_encoder_codecs = NULL;
   }
 }
 
@@ -163,12 +188,21 @@ plugin_init (GstPlugin * plugin)
   GST_DEBUG_CATEGORY_INIT (gst_nvenc_debug, "nvenc", 0, "nvenc");
   GST_DEBUG_CATEGORY_INIT (gst_nv_decoder_debug, "nvdecoder", 0, "nvdecoder");
 
-  /* Parse GST_NVCODEC_DISABLE_CODECS environment variable */
+  /* Parse GST_NVCODEC_DISABLE_DECODER_CODECS environment variable */
   {
-    const gchar *env = g_getenv ("GST_NVCODEC_DISABLE_CODECS");
+    const gchar *env = g_getenv ("GST_NVCODEC_DISABLE_DECODER_CODECS");
     if (env && *env) {
-      disabled_codecs = g_strsplit (env, ",", -1);
-      GST_INFO ("Disabled codecs: %s", env);
+      disabled_decoder_codecs = g_strsplit (env, ",", -1);
+      GST_INFO ("Disabled decoder codecs: %s", env);
+    }
+  }
+
+  /* Parse GST_NVCODEC_DISABLE_ENCODER_CODECS environment variable */
+  {
+    const gchar *env = g_getenv ("GST_NVCODEC_DISABLE_ENCODER_CODECS");
+    if (env && *env) {
+      disabled_encoder_codecs = g_strsplit (env, ",", -1);
+      GST_INFO ("Disabled encoder codecs: %s", env);
     }
   }
 
@@ -279,33 +313,33 @@ plugin_init (GstPlugin * plugin)
           switch (codec) {
             case cudaVideoCodec_H264:
               /* higher than avdec_h264 */
-              if (gst_nvcodec_codec_is_enabled ("h264")) {
+              if (gst_nvcodec_decoder_is_enabled ("h264")) {
                 gst_nv_h264_dec_register (plugin, i, adapter_luid,
                     GST_RANK_PRIMARY + 1, sink_template, src_template);
               }
               break;
             case cudaVideoCodec_HEVC:
               /* higher than avdec_h265 */
-              if (gst_nvcodec_codec_is_enabled ("h265")) {
+              if (gst_nvcodec_decoder_is_enabled ("h265")) {
                 gst_nv_h265_dec_register (plugin, i, adapter_luid,
                     GST_RANK_PRIMARY + 1, sink_template, src_template);
               }
               break;
             case cudaVideoCodec_VP8:
-              if (gst_nvcodec_codec_is_enabled ("vp8")) {
+              if (gst_nvcodec_decoder_is_enabled ("vp8")) {
                 gst_nv_vp8_dec_register (plugin, i, adapter_luid,
                     GST_RANK_PRIMARY, sink_template, src_template);
               }
               break;
             case cudaVideoCodec_VP9:
-              if (gst_nvcodec_codec_is_enabled ("vp9")) {
+              if (gst_nvcodec_decoder_is_enabled ("vp9")) {
                 gst_nv_vp9_dec_register (plugin, i, adapter_luid,
                     GST_RANK_PRIMARY, sink_template, src_template);
               }
               break;
             case cudaVideoCodec_AV1:
               /* rust dav1ddec has "primary" rank */
-              if (gst_nvcodec_codec_is_enabled ("av1")) {
+              if (gst_nvcodec_decoder_is_enabled ("av1")) {
                 gst_nv_av1_dec_register (plugin, i, adapter_luid,
                     GST_RANK_PRIMARY + 1, sink_template, src_template);
               }
@@ -338,21 +372,21 @@ plugin_init (GstPlugin * plugin)
         if (!d3d11_device) {
           GST_WARNING ("Failed to d3d11 create device");
         } else {
-          if (gst_nvcodec_codec_is_enabled ("h264")) {
+          if (gst_nvcodec_encoder_is_enabled ("h264")) {
             cdata = gst_nv_h264_encoder_register_d3d11 (plugin,
                 d3d11_device, GST_RANK_NONE);
             if (cdata)
               h264_enc_cdata = g_list_append (h264_enc_cdata, cdata);
           }
 
-          if (gst_nvcodec_codec_is_enabled ("h265")) {
+          if (gst_nvcodec_encoder_is_enabled ("h265")) {
             cdata = gst_nv_h265_encoder_register_d3d11 (plugin,
                 d3d11_device, GST_RANK_NONE);
             if (cdata)
               h265_enc_cdata = g_list_append (h265_enc_cdata, cdata);
           }
 
-          if (gst_nvcodec_codec_is_enabled ("av1")) {
+          if (gst_nvcodec_encoder_is_enabled ("av1")) {
             cdata = gst_nv_av1_encoder_register_d3d11 (plugin,
                 d3d11_device, GST_RANK_NONE);
             if (cdata)
@@ -363,21 +397,21 @@ plugin_init (GstPlugin * plugin)
         }
       }
 #endif
-      if (gst_nvcodec_codec_is_enabled ("h264")) {
+      if (gst_nvcodec_encoder_is_enabled ("h264")) {
         cdata = gst_nv_h264_encoder_register_cuda (plugin,
             context, GST_RANK_PRIMARY + 1);
         if (cdata)
           h264_enc_cdata = g_list_append (h264_enc_cdata, cdata);
       }
 
-      if (gst_nvcodec_codec_is_enabled ("h265")) {
+      if (gst_nvcodec_encoder_is_enabled ("h265")) {
         cdata = gst_nv_h265_encoder_register_cuda (plugin,
             context, GST_RANK_PRIMARY + 1);
         if (cdata)
           h265_enc_cdata = g_list_append (h265_enc_cdata, cdata);
       }
 
-      if (gst_nvcodec_codec_is_enabled ("av1")) {
+      if (gst_nvcodec_encoder_is_enabled ("av1")) {
         cdata = gst_nv_av1_encoder_register_cuda (plugin,
             context, GST_RANK_PRIMARY + 1);
         if (cdata)
@@ -385,7 +419,7 @@ plugin_init (GstPlugin * plugin)
       }
     }
 
-    if (gst_nvcodec_codec_is_enabled ("jpeg")) {
+    if (gst_nvcodec_encoder_is_enabled ("jpeg")) {
       gst_nv_jpeg_enc_register (plugin, context, GST_RANK_NONE, have_nvrtc);
     }
 

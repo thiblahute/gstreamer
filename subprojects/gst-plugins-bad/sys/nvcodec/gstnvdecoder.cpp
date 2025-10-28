@@ -1311,8 +1311,8 @@ gst_nv_decoder_check_device_caps (GstCudaContext * context,
     return FALSE;
   }
 
-  if (!gst_nvcodec_codec_is_enabled (codec_map->codec_name)) {
-    GST_INFO ("Codec %s is disabled via GST_NVCODEC_DISABLE_CODECS",
+  if (!gst_nvcodec_decoder_is_enabled (codec_map->codec_name)) {
+    GST_INFO ("Decoder %s is disabled via GST_NVCODEC_DISABLE_DECODER_CODECS",
         codec_map->codec_name);
     return FALSE;
   }
