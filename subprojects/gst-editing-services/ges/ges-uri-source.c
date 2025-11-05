@@ -414,7 +414,8 @@ ges_uri_source_create_uridecodepoolsrc (GESUriSource * self)
             "Using `%s` as filter at end of underlying pipeline", filter);
 
       } else {
-        filter = "segmentclipper";
+        filter =
+            "rsvideoconvert ! capsfilter caps=\"video/x-raw,format=RGBA\" ! segmentclipper";
       }
     }
     GST_DEBUG ("Using caps: %" GST_PTR_FORMAT " for uridecodepoolsrc", caps);
