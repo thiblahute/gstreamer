@@ -1847,7 +1847,10 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
       }
       /* 4-tap scaling and black borders */
       g_object_set (scale, "method", 2, "add-borders", TRUE, NULL);
-      cspace2 = gst_element_factory_make ("videoconvert", NULL);
+      // TELLA: FIXME: this makes sure we use rsvideoconvert in the encodebin at
+      // the end of the main pipeline. If we don't it will end up with incorrect
+      // colors on cpu.
+      cspace2 = gst_element_factory_make ("rsvideoconvert", NULL);
 
       if (!cspace || !cspace2) {
         missing_element_name = "videoconvert";

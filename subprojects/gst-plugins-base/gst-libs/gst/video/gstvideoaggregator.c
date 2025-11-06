@@ -1305,9 +1305,12 @@ gst_video_aggregator_default_update_caps (GstVideoAggregator * vagg,
   if (chroma_site != NULL)
     gst_caps_set_simple_static_str (best_format_caps, "chroma-site",
         G_TYPE_STRING, chroma_site, NULL);
-  if (color_name != NULL)
+
+  // TELLA: FIXME: Do not set colorimetry after compositor, this causes
+  // downstream converters to either crash or incorrectly convert the colors.
+  /*if (color_name != NULL)
     gst_caps_set_simple_static_str (best_format_caps, "colorimetry",
-        G_TYPE_STRING, color_name, NULL);
+        G_TYPE_STRING, color_name, NULL);*/
 
   g_free (color_name);
   g_free (chroma_site);
