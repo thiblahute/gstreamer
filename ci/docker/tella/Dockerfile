@@ -28,11 +28,15 @@ RUN /install-toolchain.sh
 ###############################################################################
 FROM build-deps-toolchain as build-deps-ffmpeg
 # Install dav1d for AV1 decoding
-RUN git clone --depth 1 --branch 1.5.0 https://code.videolan.org/videolan/dav1d.git /opt/dav1d && \
+# Download tarball instead of git clone to avoid TLS/HTTP2 issues with code.videolan.org
+RUN curl -L --retry 3 --retry-delay 5 -o /tmp/dav1d-1.5.0.tar.xz https://download.videolan.org/pub/videolan/dav1d/1.5.0/dav1d-1.5.0.tar.xz && \
+  tar -xf /tmp/dav1d-1.5.0.tar.xz -C /opt && \
+  mv /opt/dav1d-1.5.0 /opt/dav1d && \
   cd /opt/dav1d && \
   meson build --buildtype release && \
   ninja -C build install && \
-  ldconfig
+  ldconfig && \
+  rm /tmp/dav1d-1.5.0.tar.xz
 COPY ci/docker/tella/build-ffmpeg.sh /build-ffmpeg.sh
 RUN /build-ffmpeg.sh --build
 
@@ -49,12 +53,14 @@ ENV SKIA_USE_PKG_CONFIG=1
 COPY --from=build-deps-ffmpeg /opt/ffmpeg /usr
 
 COPY ci/fuzzing  /gstreamer/ci/fuzzing
+COPY ci/meson /gstreamer/ci/meson
+COPY ci/scripts /gstreamer/ci/scripts
+COPY ci/docker/tella/native.ini /gstreamer/ci/docker/tella/native.ini
 COPY data /gstreamer/data
 COPY girs /gstreamer/girs
 COPY scripts /gstreamer/scripts
 COPY subprojects /gstreamer/subprojects
 COPY tests /gstreamer/tests
-COPY ci /gstreamer/ci
 COPY gst-env.py meson.build meson_options.txt /gstreamer/
 
 # Configure, build and install GStreamer
@@ -66,17 +72,6 @@ RUN meson builddir \
 RUN DESTDIR=/compiled-binaries ninja -C builddir install && rm -rf builddir
 
 ENTRYPOINT []
-
-###############################################################################
-# build-deps-gstreamer                                                        #
-#                                                                             #
-# This stage contains the dev dependencies and compiled GStreamer in          #
-# /compiled-binaries but NO toolchain.                                        #
-###############################################################################
-FROM build-deps AS build-deps-gstreamer
-ENV SKIA_USE_PKG_CONFIG=1
-COPY --from=build-deps-ffmpeg /opt/ffmpeg /usr
-COPY --from=build-deps-toolchain-gstreamer /compiled-binaries /
 
 ###############################################################################
 # release-deps                                                                #
@@ -111,3 +106,30 @@ RUN chmod a+r /etc/gstreamer/registry-1.0.bin
 
 COPY ci/docker/tella/entrypoint.sh /entrypoint.sh
 ENTRYPOINT ["/entrypoint.sh"]
+
+###############################################################################
+# rust-build-deps                                                              #
+#                                                                             #
+# This stage contains the minimal dependencies needed to build Rust crates     #
+# that use GStreamer (temporal, video_renderer). It includes the compiled     #
+# GStreamer binaries (with headers and pkg-config files), the system dev       #
+# packages needed for Rust bindings compilation, and the Rust toolchain.      #
+###############################################################################
+FROM release-deps-gstreamer AS rust-build-deps
+ENV SKIA_USE_PKG_CONFIG=1
+
+# Set PKG_CONFIG_PATH so pkg-config can find GStreamer .pc files
+# GStreamer is installed to /usr, so pkg-config files are in /usr/lib/pkgconfig
+# and potentially in architecture-specific paths
+ENV PKG_CONFIG_PATH="/usr/lib/aarch64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
+
+# Install only the minimal dev packages needed for Rust GStreamer bindings
+COPY ci/docker/tella/install-rust-crate-build-deps.sh /install-rust-crate-build-deps.sh
+RUN /install-rust-crate-build-deps.sh
+
+# Install Rust toolchain (rust-only mode: minimal profile, cargo-c, cargo-chef)
+COPY ci/docker/tella/install-toolchain.sh /install-toolchain.sh
+RUN RUST_ONLY=true /install-toolchain.sh && \
+    rm -rf /root/.cargo/registry/src && \
+    rm -rf /root/.cargo/registry/cache
+ENV PATH="/root/.cargo/bin:/usr/local/cargo/bin:${PATH}"
