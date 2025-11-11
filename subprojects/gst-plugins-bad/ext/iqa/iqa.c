@@ -88,6 +88,7 @@ enum
   PROP_0,
   PROP_DO_SSIM,
   PROP_SSIM_ERROR_THRESHOLD,
+  PROP_DO_CHECKSUM,
   PROP_MODE,
   PROP_LAST,
 };
@@ -319,8 +320,45 @@ cleanup_return:
 #endif
 
 static gboolean
-compare_frames (GstIqa * self, GstVideoFrame * ref, GstVideoFrame * cmp,
+do_checksum (GstIqa * self, const gchar * ref_sum, GstVideoFrame * cmp,
     GstBuffer * outbuf, GstStructure * msg_structure, gchar * padname)
+{
+  GstMapInfo cmp_info;
+  GChecksum *cmp_checksum;
+  const gchar *cmp_sum;
+  gboolean ret = TRUE;
+
+  gst_buffer_map (cmp->buffer, &cmp_info, GST_MAP_READ);
+
+  cmp_checksum = g_checksum_new (G_CHECKSUM_SHA256);
+  g_checksum_update (cmp_checksum, cmp_info.data, cmp_info.size);
+  cmp_sum = g_checksum_get_string (cmp_checksum);
+
+  if (g_strcmp0 (ref_sum, cmp_sum)) {
+    GST_OBJECT_UNLOCK (self);
+
+    GST_ELEMENT_ERROR (self, STREAM, FAILED,
+        ("Checksum mismatch on %s at %"
+            GST_TIME_FORMAT,
+            padname,
+            GST_TIME_ARGS (GST_AGGREGATOR_PAD (GST_AGGREGATOR (self)->
+                    srcpad)->segment.position)),
+        ("Reference checksum: %s, compared checksum: %s", ref_sum, cmp_sum));
+
+    GST_OBJECT_LOCK (self);
+    ret = FALSE;
+  }
+
+  gst_buffer_unmap (cmp->buffer, &cmp_info);
+  g_checksum_free (cmp_checksum);
+
+  return ret;
+}
+
+static gboolean
+compare_frames (GstIqa * self, GstVideoFrame * ref, GstVideoFrame * cmp,
+    GstBuffer * outbuf, GstStructure * msg_structure, gchar * padname,
+    const gchar * ref_checksum)
 {
 #ifdef HAVE_DSSIM
   if (self->do_dssim) {
@@ -328,6 +366,11 @@ compare_frames (GstIqa * self, GstVideoFrame * ref, GstVideoFrame * cmp,
       return FALSE;
   }
 #endif
+
+  if (self->do_checksum) {
+    if (!do_checksum (self, ref_checksum, cmp, outbuf, msg_structure, padname))
+      return FALSE;
+  }
 
   return TRUE;
 }
@@ -341,6 +384,8 @@ gst_iqa_aggregate_frames (GstVideoAggregator * vagg, GstBuffer * outbuf)
   GstStructure *msg_structure = gst_structure_new_empty ("IQA");
   GstMessage *m = gst_message_new_element (GST_OBJECT (self), msg_structure);
   GstAggregator *agg = GST_AGGREGATOR (vagg);
+  GChecksum *ref_checksum = NULL;
+  const gchar *ref_checksum_str = NULL;
 
   if (self->do_dssim) {
     gst_structure_set (msg_structure, "dssim", GST_TYPE_STRUCTURE,
@@ -357,13 +402,23 @@ gst_iqa_aggregate_frames (GstVideoAggregator * vagg, GstBuffer * outbuf)
     if (prepared_frame != NULL) {
       if (!ref_frame) {
         ref_frame = prepared_frame;
+
+        /* Compute reference checksum once if checksum mode is enabled */
+        if (self->do_checksum) {
+          GstMapInfo ref_info;
+          gst_buffer_map (ref_frame->buffer, &ref_info, GST_MAP_READ);
+          ref_checksum = g_checksum_new (G_CHECKSUM_SHA256);
+          g_checksum_update (ref_checksum, ref_info.data, ref_info.size);
+          ref_checksum_str = g_checksum_get_string (ref_checksum);
+          gst_buffer_unmap (ref_frame->buffer, &ref_info);
+        }
       } else {
         gboolean res;
         gchar *padname = gst_pad_get_name (pad);
         GstVideoFrame *cmp_frame = prepared_frame;
 
         res = compare_frames (self, ref_frame, cmp_frame, outbuf, msg_structure,
-            padname);
+            padname, ref_checksum_str);
         g_free (padname);
 
         if (!res)
@@ -384,6 +439,9 @@ gst_iqa_aggregate_frames (GstVideoAggregator * vagg, GstBuffer * outbuf)
 
   GST_OBJECT_UNLOCK (vagg);
 
+  if (ref_checksum)
+    g_checksum_free (ref_checksum);
+
   /* We only post the message here, because we can't post it while the object
    * is locked.
    */
@@ -394,6 +452,9 @@ gst_iqa_aggregate_frames (GstVideoAggregator * vagg, GstBuffer * outbuf)
 
 failed:
   GST_OBJECT_UNLOCK (vagg);
+
+  if (ref_checksum)
+    g_checksum_free (ref_checksum);
 
   return GST_FLOW_ERROR;
 }
@@ -413,6 +474,11 @@ _set_property (GObject * object, guint prop_id, const GValue * value,
     case PROP_SSIM_ERROR_THRESHOLD:
       GST_OBJECT_LOCK (self);
       self->ssim_threshold = g_value_get_double (value);
+      GST_OBJECT_UNLOCK (self);
+      break;
+    case PROP_DO_CHECKSUM:
+      GST_OBJECT_LOCK (self);
+      self->do_checksum = g_value_get_boolean (value);
       GST_OBJECT_UNLOCK (self);
       break;
     case PROP_MODE:
@@ -441,6 +507,11 @@ _get_property (GObject * object,
     case PROP_SSIM_ERROR_THRESHOLD:
       GST_OBJECT_LOCK (self);
       g_value_set_double (value, self->ssim_threshold);
+      GST_OBJECT_UNLOCK (self);
+      break;
+    case PROP_DO_CHECKSUM:
+      GST_OBJECT_LOCK (self);
+      g_value_set_boolean (value, self->do_checksum);
       GST_OBJECT_UNLOCK (self);
       break;
     case PROP_MODE:
@@ -484,6 +555,11 @@ gst_iqa_class_init (GstIqaClass * klass)
           " A value < 0.0 means 'disabled'.",
           -1.0, G_MAXDOUBLE, DEFAULT_DSSIM_ERROR_THRESHOLD, G_PARAM_READWRITE));
 #endif
+
+  g_object_class_install_property (gobject_class, PROP_DO_CHECKSUM,
+      g_param_spec_boolean ("do-checksum", "do-checksum",
+          "Run checksum comparison checks", FALSE,
+          G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   /**
    * iqa:mode:

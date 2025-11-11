@@ -51,6 +51,7 @@ struct _GstIqa
   gboolean do_dssim;
   gdouble ssim_threshold;
   gdouble max_dssim;
+  gboolean do_checksum;
   gint mode;
 };
 
