@@ -398,6 +398,23 @@ gst_encode_base_bin_class_init (GstEncodeBaseBinClass * klass)
   gst_type_mark_as_plugin_api (GST_TYPE_ENCODE_BASE_BIN, 0);
 }
 
+/* TELLA: Helper to check GES_CONVERTER_TYPE environment variable once per
+ * process */
+static gboolean
+should_use_gl_converter (void)
+{
+  static gsize initialized = 0;
+  static gboolean use_gl = FALSE;
+
+  if (g_once_init_enter (&initialized)) {
+    const gchar *converter_type = g_getenv ("GES_CONVERTER_TYPE");
+    use_gl = (g_strcmp0 (converter_type, "gl") == 0);
+    g_once_init_leave (&initialized, 1);
+  }
+
+  return use_gl;
+}
+
 static void
 gst_encode_base_bin_dispose (GObject * object)
 {
@@ -1839,18 +1856,27 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
     GST_LOG ("Adding conversion elements for video stream");
 
     if (!native_video) {
-      cspace = gst_element_factory_make ("videoconvert", NULL);
-      scale = gst_element_factory_make ("videoscale", NULL);
-      if (!scale) {
-        missing_element_name = "videoscale";
-        goto missing_element;
+      // TELLA: Use glcolorconvert when GES_CONVERTER_TYPE=gl, otherwise
+      // rsvideoconvert to avoid incorrect colors on CPU.
+      if (should_use_gl_converter ()) {
+        cspace = gst_element_factory_make ("glcolorconvert", NULL);
+        scale = gst_element_factory_make ("glcolorscale", NULL);
+        if (!scale) {
+          missing_element_name = "glcolorscale";
+          goto missing_element;
+        }
+        cspace2 = gst_element_factory_make ("glcolorconvert", NULL);
+      } else {
+        cspace = gst_element_factory_make ("videoconvert", NULL);
+        scale = gst_element_factory_make ("videoscale", NULL);
+        if (!scale) {
+          missing_element_name = "videoscale";
+          goto missing_element;
+        }
+        /* 4-tap scaling and black borders */
+        g_object_set (scale, "method", 2, "add-borders", TRUE, NULL);
+        cspace2 = gst_element_factory_make ("rsvideoconvert", NULL);
       }
-      /* 4-tap scaling and black borders */
-      g_object_set (scale, "method", 2, "add-borders", TRUE, NULL);
-      // TELLA: FIXME: this makes sure we use rsvideoconvert in the encodebin at
-      // the end of the main pipeline. If we don't it will end up with incorrect
-      // colors on cpu.
-      cspace2 = gst_element_factory_make ("rsvideoconvert", NULL);
 
       if (!cspace || !cspace2) {
         missing_element_name = "videoconvert";
