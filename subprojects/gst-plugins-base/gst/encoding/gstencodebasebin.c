@@ -1851,7 +1851,7 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
   if (GST_IS_ENCODING_VIDEO_PROFILE (sprof)) {
     const gboolean native_video =
         !!(ebin->flags & GST_ENCODEBIN_FLAG_NO_VIDEO_CONVERSION);
-    GstElement *cspace = NULL, *scale, *vrate, *cspace2 = NULL;
+    GstElement *cspace = NULL, *scale, *vrate, *last_conv = NULL;
 
     GST_LOG ("Adding conversion elements for video stream");
 
@@ -1859,6 +1859,8 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
       // TELLA: Use glcolorconvert when GES_CONVERTER_TYPE=gl, otherwise
       // rsvideoconvert to avoid incorrect colors on CPU.
       if (should_use_gl_converter ()) {
+        GstElement *cspace2;
+
         cspace = gst_element_factory_make ("glcolorconvert", NULL);
         scale = gst_element_factory_make ("glcolorscale", NULL);
         if (!scale) {
@@ -1866,6 +1868,32 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
           goto missing_element;
         }
         cspace2 = gst_element_factory_make ("glcolorconvert", NULL);
+        last_conv = gst_element_factory_make ("gldownload", NULL);
+        if (!last_conv) {
+          missing_element_name = "gldownload";
+          goto missing_element;
+        }
+
+        if (!cspace || !cspace2) {
+          missing_element_name = "glcolorconvert";
+          goto missing_element;
+        }
+
+        gst_bin_add_many ((GstBin *) ebin, cspace, scale, cspace2, last_conv, NULL);
+        tosync = g_list_append (tosync, cspace);
+        tosync = g_list_append (tosync, scale);
+        tosync = g_list_append (tosync, cspace2);
+        tosync = g_list_append (tosync, last_conv);
+
+        sgroup->converters = g_list_prepend (sgroup->converters, cspace);
+        sgroup->converters = g_list_prepend (sgroup->converters, scale);
+        sgroup->converters = g_list_prepend (sgroup->converters, cspace2);
+        sgroup->converters = g_list_prepend (sgroup->converters, last_conv);
+
+        if (!fast_element_link (cspace, scale) ||
+            !fast_element_link (scale, cspace2) ||
+            !fast_element_link (cspace2, last_conv))
+          goto converter_link_failure;
       } else {
         cspace = gst_element_factory_make ("rsvideoconvert", NULL);
         scale = gst_element_factory_make ("videoscale", NULL);
@@ -1875,26 +1903,26 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
         }
         /* 4-tap scaling and black borders */
         g_object_set (scale, "method", 2, "add-borders", TRUE, NULL);
-        cspace2 = gst_element_factory_make ("rsvideoconvert", NULL);
+        last_conv = gst_element_factory_make ("rsvideoconvert", NULL);
+
+        if (!cspace || !last_conv) {
+          missing_element_name = "rsvideoconvert";
+          goto missing_element;
+        }
+
+        gst_bin_add_many ((GstBin *) ebin, cspace, scale, last_conv, NULL);
+        tosync = g_list_append (tosync, cspace);
+        tosync = g_list_append (tosync, scale);
+        tosync = g_list_append (tosync, last_conv);
+
+        sgroup->converters = g_list_prepend (sgroup->converters, cspace);
+        sgroup->converters = g_list_prepend (sgroup->converters, scale);
+        sgroup->converters = g_list_prepend (sgroup->converters, last_conv);
+
+        if (!fast_element_link (cspace, scale) ||
+            !fast_element_link (scale, last_conv))
+          goto converter_link_failure;
       }
-
-      if (!cspace || !cspace2) {
-        missing_element_name = "rsvideoconvert";
-        goto missing_element;
-      }
-
-      gst_bin_add_many ((GstBin *) ebin, cspace, scale, cspace2, NULL);
-      tosync = g_list_append (tosync, cspace);
-      tosync = g_list_append (tosync, scale);
-      tosync = g_list_append (tosync, cspace2);
-
-      sgroup->converters = g_list_prepend (sgroup->converters, cspace);
-      sgroup->converters = g_list_prepend (sgroup->converters, scale);
-      sgroup->converters = g_list_prepend (sgroup->converters, cspace2);
-
-      if (!fast_element_link (cspace, scale) ||
-          !fast_element_link (scale, cspace2))
-        goto converter_link_failure;
     }
 
     if (!gst_encoding_video_profile_get_variableframerate
@@ -1910,7 +1938,7 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
       tosync = g_list_prepend (tosync, vrate);
       sgroup->converters = g_list_prepend (sgroup->converters, vrate);
 
-      if ((!native_video && !fast_element_link (cspace2, vrate))
+      if ((!native_video && !fast_element_link (last_conv, vrate))
           || !fast_element_link (vrate, last))
         goto converter_link_failure;
 
@@ -1919,7 +1947,7 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
       else
         last = vrate;
     } else if (!native_video) {
-      if (!fast_element_link (cspace2, last))
+      if (!fast_element_link (last_conv, last))
         goto converter_link_failure;
       last = cspace;
     }
