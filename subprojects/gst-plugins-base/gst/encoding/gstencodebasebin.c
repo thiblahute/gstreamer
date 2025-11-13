@@ -1867,7 +1867,7 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
         }
         cspace2 = gst_element_factory_make ("glcolorconvert", NULL);
       } else {
-        cspace = gst_element_factory_make ("videoconvert", NULL);
+        cspace = gst_element_factory_make ("rsvideoconvert", NULL);
         scale = gst_element_factory_make ("videoscale", NULL);
         if (!scale) {
           missing_element_name = "videoscale";
@@ -1879,7 +1879,7 @@ _create_stream_group (GstEncodeBaseBin * ebin, GstEncodingProfile * sprof,
       }
 
       if (!cspace || !cspace2) {
-        missing_element_name = "videoconvert";
+        missing_element_name = "rsvideoconvert";
         goto missing_element;
       }
 
