@@ -2030,6 +2030,10 @@ gst_ffmpegviddec_video_frame (GstFFMpegVidDec * ffmpegdec,
   GST_DEBUG_OBJECT (ffmpegdec, "corrupted frame: %d",
       !!(ffmpegdec->picture->flags & AV_FRAME_FLAG_CORRUPT));
 
+  /* Capture picture dimensions early to avoid race with other threads */
+  gint picture_width = ffmpegdec->picture->width;
+  gint picture_height = ffmpegdec->picture->height;
+
   if (!gst_ffmpegviddec_negotiate (ffmpegdec, ffmpegdec->context,
           ffmpegdec->picture, GST_BUFFER_FLAGS (output_frame->input_buffer)))
     goto negotiation_error;
@@ -2042,22 +2046,18 @@ gst_ffmpegviddec_video_frame (GstFFMpegVidDec * ffmpegdec,
     output_frame->output_buffer = NULL;
     *ret = get_output_buffer (ffmpegdec, output_frame);
     gst_buffer_unref (tmp);
-  }
-#ifndef G_DISABLE_ASSERT
-  else {
+  } else {
+    /* Check if buffer dimensions match current picture dimensions */
     GstVideoMeta *vmeta =
         gst_buffer_get_video_meta (output_frame->output_buffer);
-    if (vmeta) {
-      GstVideoInfo *info = &ffmpegdec->output_state->info;
-      if (vmeta->width != GST_VIDEO_INFO_WIDTH (info) ||
-          vmeta->height != GST_VIDEO_INFO_HEIGHT (info)) {
-        g_error ("video meta uses %dx%d instead of %dx%d",
-            vmeta->width, vmeta->height, GST_VIDEO_INFO_WIDTH (info),
-            GST_VIDEO_INFO_HEIGHT (info));
-      }
+    if (vmeta && (vmeta->width != (guint) picture_width
+            || vmeta->height != (guint) picture_height)) {
+      GstBuffer *tmp = output_frame->output_buffer;
+      output_frame->output_buffer = NULL;
+      *ret = get_output_buffer (ffmpegdec, output_frame);
+      gst_buffer_unref (tmp);
     }
   }
-#endif
   gst_object_unref (pool);
 
   if (G_UNLIKELY (*ret != GST_FLOW_OK))
