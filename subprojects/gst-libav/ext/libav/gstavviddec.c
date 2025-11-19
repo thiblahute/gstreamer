@@ -926,20 +926,11 @@ gst_ffmpegviddec_ensure_internal_pool (GstFFMpegVidDec * ffmpegdec,
 
   format = gst_ffmpeg_pixfmt_to_videoformat (picture->format);
 
-  gint width = picture->width - picture->crop_right - picture->crop_left;
-  gint height = picture->height - picture->crop_bottom - picture->crop_top;
-
-  if (width != picture->width || height != picture->height) {
-    GST_LOG_OBJECT (ffmpegdec,
-        "Applying cropping l:%lu r:%lu t:%lu b:%lu to size %dx%d -> %dx%d",
-        picture->crop_left, picture->crop_right, picture->crop_top,
-        picture->crop_bottom, picture->width, picture->height, width, height);
-  }
   if (interlace_mode == GST_VIDEO_INTERLACE_MODE_ALTERNATE) {
     gst_video_info_set_interlaced_format (&info, format, interlace_mode,
-        width, 2 * height);
+        picture->width, 2 * picture->height);
   } else {
-    gst_video_info_set_format (&info, format, width, height);
+    gst_video_info_set_format (&info, format, picture->width, picture->height);
   }
 
   /* If we have not yet been negotiated, a NONE format here would
